@@ -1,24 +1,24 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StudentForm } from '@/components/Student/StudentForm'
 import { useAppStore } from '@/store/appStore'
-import { studentDb } from '@/db'
-import type { Student } from '@/types'
+import type { Student, StudentType } from '@/types'
 
 export function StudentNew() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { createStudent } = useAppStore()
+  
+  // 从URL参数判断是否为体验生
+  const isTrial = searchParams.get('trial') === 'true'
+  const [defaultType] = useState<StudentType>(isTrial ? 'trial' : 'formal')
 
   const handleSubmit = async (data: Omit<Student, 'id' | 'created_at' | 'updated_at'>) => {
-    // 如果没有学号，自动生成
-    if (!data.student_no) {
-      const nextNo = await studentDb.getNextStudentNo()
-      data.student_no = nextNo
-    }
-    
     await createStudent(data)
-    navigate('/')
+    // 如果是体验生，跳转回体验生列表
+    navigate(data.student_type === 'trial' ? '/trial' : '/')
   }
 
   return (
@@ -35,6 +35,7 @@ export function StudentNew() {
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-2xl mx-auto bg-card rounded-lg border p-6">
           <StudentForm
+            defaultType={defaultType}
             onSubmit={handleSubmit}
             onCancel={() => navigate(-1)}
           />

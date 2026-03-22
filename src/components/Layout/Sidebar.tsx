@@ -33,8 +33,8 @@ interface SidebarProps {
 export function Sidebar({ onQuickAction }: SidebarProps) {
   return (
     <aside className="w-56 h-screen bg-card border-r flex flex-col">
-      {/* Logo区域 */}
-      <div className="h-16 flex items-center px-4 border-b">
+      {/* Logo区域 - 添加左边距避开macOS窗口控制按钮 */}
+      <div className="h-16 flex items-center px-4 border-b" style={{ paddingLeft: '80px' }}>
         <h1 className="text-lg font-semibold text-primary">EduManager</h1>
         <span className="ml-2 text-xs text-muted-foreground">Pro</span>
       </div>

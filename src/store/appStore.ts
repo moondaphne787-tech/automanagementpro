@@ -7,6 +7,8 @@ import type {
   StudentWordbankProgress,
   ClassRecord,
   LessonPlan,
+  ExamScore,
+  LearningPhase,
   FilterOptions,
   SortOptions,
   LevelType,
@@ -14,7 +16,7 @@ import type {
   StudentType,
   TaskBlock
 } from '@/types'
-import { studentDb, billingDb, wordbankDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
+import { studentDb, billingDb, wordbankDb, progressDb, classRecordDb, lessonPlanDb, examScoreDb, learningPhaseDb, trialConversionDb } from '@/db'
 
 interface AppState {
   // 学员列表
@@ -122,6 +124,38 @@ interface AppState {
   updateLessonPlan: (id: string, data: Partial<LessonPlan>) => Promise<LessonPlan | undefined>
   deleteLessonPlan: (id: string) => Promise<void>
   
+  // 考试成绩操作
+  examScores: ExamScore[]
+  loadExamScores: (studentId: string) => Promise<void>
+  createExamScore: (data: {
+    student_id: string
+    exam_date: string
+    exam_name?: string
+    exam_type?: 'school_exam' | 'placement' | 'mock'
+    score?: number
+    full_score?: number
+    notes?: string
+  }) => Promise<ExamScore | undefined>
+  updateExamScore: (id: string, data: Partial<ExamScore>) => Promise<ExamScore | undefined>
+  deleteExamScore: (id: string) => Promise<void>
+  
+  // 学习阶段操作
+  learningPhases: LearningPhase[]
+  loadLearningPhases: (studentId: string) => Promise<void>
+  createLearningPhase: (data: {
+    student_id: string
+    phase_name?: string
+    phase_type?: 'semester' | 'summer' | 'winter'
+    start_date?: string
+    end_date?: string
+    goal?: string
+    vocab_start?: number
+    vocab_end?: number
+    summary?: string
+  }) => Promise<LearningPhase | undefined>
+  updateLearningPhase: (id: string, data: Partial<LearningPhase>) => Promise<LearningPhase | undefined>
+  deleteLearningPhase: (id: string) => Promise<void>
+  
   // UI操作
   toggleSidebar: () => void
   setTheme: (theme: 'light' | 'dark') => void
@@ -150,6 +184,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   theme: 'light',
   classRecords: [],
   lessonPlans: [],
+  examScores: [],
+  learningPhases: [],
   
   // 加载学员列表
   loadStudents: async () => {
@@ -181,6 +217,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 创建学员
   createStudent: async (studentData) => {
     const student = await studentDb.create(studentData)
+    
+    // 如果是体验生，自动创建trial_conversion记录
+    if (studentData.student_type === 'trial') {
+      await trialConversionDb.create({
+        student_id: student.id,
+        trial_date: studentData.enroll_date || new Date().toISOString().split('T')[0],
+        converted: false
+      })
+    }
+    
     await get().loadStudents()
     return student
   },
@@ -436,6 +482,72 @@ export const useAppStore = create<AppState>((set, get) => ({
       await lessonPlanDb.delete(id)
       if (get().currentStudent?.id === plan.student_id) {
         await get().loadLessonPlans(plan.student_id)
+      }
+    }
+  },
+  
+  // 加载考试成绩
+  loadExamScores: async (studentId) => {
+    const scores = await examScoreDb.getByStudentId(studentId)
+    set({ examScores: scores })
+  },
+  
+  // 创建考试成绩
+  createExamScore: async (data) => {
+    const score = await examScoreDb.create(data)
+    await get().loadExamScores(data.student_id)
+    return score
+  },
+  
+  // 更新考试成绩
+  updateExamScore: async (id, data) => {
+    const score = await examScoreDb.update(id, data)
+    if (score && get().currentStudent?.id === score.student_id) {
+      await get().loadExamScores(score.student_id)
+    }
+    return score
+  },
+  
+  // 删除考试成绩
+  deleteExamScore: async (id) => {
+    const score = await examScoreDb.getById(id)
+    if (score) {
+      await examScoreDb.delete(id)
+      if (get().currentStudent?.id === score.student_id) {
+        await get().loadExamScores(score.student_id)
+      }
+    }
+  },
+  
+  // 加载学习阶段
+  loadLearningPhases: async (studentId) => {
+    const phases = await learningPhaseDb.getByStudentId(studentId)
+    set({ learningPhases: phases })
+  },
+  
+  // 创建学习阶段
+  createLearningPhase: async (data) => {
+    const phase = await learningPhaseDb.create(data)
+    await get().loadLearningPhases(data.student_id)
+    return phase
+  },
+  
+  // 更新学习阶段
+  updateLearningPhase: async (id, data) => {
+    const phase = await learningPhaseDb.update(id, data)
+    if (phase && get().currentStudent?.id === phase.student_id) {
+      await get().loadLearningPhases(phase.student_id)
+    }
+    return phase
+  },
+  
+  // 删除学习阶段
+  deleteLearningPhase: async (id) => {
+    const phase = await learningPhaseDb.getById(id)
+    if (phase) {
+      await learningPhaseDb.delete(id)
+      if (get().currentStudent?.id === phase.student_id) {
+        await get().loadLearningPhases(phase.student_id)
       }
     }
   },

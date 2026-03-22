@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Clock, Plus, Calendar, FileText } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Clock, Plus, Calendar, FileText, Sparkles, Download, Printer, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,13 @@ import { formatDate, formatHours, isHoursWarning, getLevelColor } from '@/lib/ut
 import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS, TASK_TYPE_LABELS } from '@/types'
 import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { ClassRecordForm } from '@/components/ClassRecord/ClassRecordForm'
-import type { Student, Billing, ClassRecord } from '@/types'
+import { GrowthPanel } from '@/components/Growth/GrowthPanel'
+import { StudentForm } from '@/components/Student/StudentForm'
+import { settingsDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
+import { sendAIRequestStream } from '@/ai/client'
+import { SYSTEM_PROMPT, buildUserInput, parseAIResponse } from '@/ai/prompts'
+import { exportLessonPlanPDF, printLessonPlan } from '@/utils/pdfExport'
+import type { Student, Billing, ClassRecord, LessonPlan, AIConfig, TaskBlock as TaskBlockType } from '@/types'
 import { cn } from '@/lib/utils'
 
 type TabType = 'info' | 'wordbank' | 'growth' | 'records' | 'plans'
@@ -34,7 +40,9 @@ export function StudentDetail() {
     deleteProgress,
     loadClassRecords,
     createClassRecord,
-    deleteClassRecord
+    deleteClassRecord,
+    createLessonPlan,
+    deleteLessonPlan
   } = useAppStore()
   
   const [tab, setTab] = useState<TabType>('info')
@@ -44,6 +52,14 @@ export function StudentDetail() {
     warning_threshold: '3'
   })
   const [showRecordForm, setShowRecordForm] = useState(false)
+  
+  // 课程计划相关状态
+  const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([])
+  const [generatingPlan, setGeneratingPlan] = useState(false)
+  const [streamContent, setStreamContent] = useState('')
+  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
+  const [extraInstruction, setExtraInstruction] = useState('')
+  const [showPlanGenerator, setShowPlanGenerator] = useState(false)
   
   // Prompt dialog state
   const [promptState, setPromptState] = useState<{
@@ -62,8 +78,33 @@ export function StudentDetail() {
       selectStudent(id)
       loadWordbanks()
       loadClassRecords(id)
+      loadLessonPlans(id)
+      loadAIConfig()
     }
   }, [id])
+  
+  const loadLessonPlans = async (studentId: string) => {
+    const plans = await lessonPlanDb.getByStudentId(studentId)
+    setLessonPlans(plans)
+  }
+  
+  const loadAIConfig = async () => {
+    const url = await settingsDb.get('ai_api_url')
+    const key = await settingsDb.get('ai_api_key')
+    const model = await settingsDb.get('ai_model')
+    const temp = await settingsDb.get('ai_temperature')
+    const tokens = await settingsDb.get('ai_max_tokens')
+    
+    if (key) {
+      setAiConfig({
+        api_url: url || 'https://api.deepseek.com/v1',
+        api_key: key,
+        model: model || 'deepseek-chat',
+        temperature: parseFloat(temp || '0.7'),
+        max_tokens: parseInt(tokens || '2048')
+      })
+    }
+  }
 
   useEffect(() => {
     if (currentBilling) {
@@ -91,6 +132,65 @@ export function StudentDetail() {
   const handleCreateRecord = async (data: any) => {
     await createClassRecord(data)
     setShowRecordForm(false)
+  }
+  
+  // AI 生成课程计划（流式输出）
+  const handleGeneratePlan = async () => {
+    if (!aiConfig || !id) return
+    
+    setGeneratingPlan(true)
+    setStreamContent('')
+    
+    try {
+      // 获取学员数据
+      const progress = await progressDb.getByStudentId(id)
+      const recentRecords = await classRecordDb.getByStudentId(id, 3)
+      const lastPlanSummary = await lessonPlanDb.getLastPlanSummary(id)
+      
+      // 构建用户输入
+      const userInput = buildUserInput({
+        student: currentStudent!,
+        wordbankProgress: progress,
+        wordbanks,
+        recentRecords,
+        lastPlanSummary,
+        extraInstruction
+      })
+      
+      // 流式调用 AI
+      let fullContent = ''
+      for await (const chunk of sendAIRequestStream(aiConfig, SYSTEM_PROMPT, userInput)) {
+        fullContent += chunk
+        setStreamContent(fullContent)
+      }
+      
+      // 解析响应
+      const parsed = parseAIResponse(fullContent)
+      
+      if (parsed) {
+        // 保存课程计划
+        await createLessonPlan({
+          student_id: id,
+          plan_date: new Date().toISOString().split('T')[0],
+          tasks: parsed.tasks,
+          notes: parsed.notes,
+          ai_reason: parsed.reason,
+          generated_by_ai: true
+        })
+        
+        // 刷新列表
+        await loadLessonPlans(id)
+        setShowPlanGenerator(false)
+        setStreamContent('')
+        setExtraInstruction('')
+      } else {
+        alert('AI 响应格式错误，请重试')
+      }
+    } catch (error) {
+      alert('生成失败：' + (error as Error).message)
+    }
+    
+    setGeneratingPlan(false)
   }
   
   // 获取词库的总关数
@@ -172,7 +272,23 @@ export function StudentDetail() {
 
       {/* 内容区域 */}
       <div className="flex-1 overflow-auto p-6">
-        {tab === 'info' && (
+        {editing ? (
+          <Card className="max-w-2xl mx-auto">
+            <CardHeader>
+              <CardTitle>编辑学员信息</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <StudentForm
+                student={currentStudent}
+                onSubmit={async (data) => {
+                  await updateStudent(id!, data)
+                  setEditing(false)
+                }}
+                onCancel={() => setEditing(false)}
+              />
+            </CardContent>
+          </Card>
+        ) : tab === 'info' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 基本信息 */}
             <Card>
@@ -417,9 +533,7 @@ export function StudentDetail() {
         )}
 
         {tab === 'growth' && (
-          <div className="text-center text-muted-foreground py-20">
-            成长档案功能将在 Phase 4 实现
-          </div>
+          <GrowthPanel studentId={id!} />
         )}
 
         {tab === 'records' && (
@@ -543,8 +657,195 @@ export function StudentDetail() {
         )}
 
         {tab === 'plans' && (
-          <div className="text-center text-muted-foreground py-20">
-            课程计划功能将在 Phase 3 实现
+          <div className="space-y-6">
+            {/* AI 生成计划区域 */}
+            {showPlanGenerator ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    AI 生成课程计划
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* 数据摘要 */}
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <h4 className="text-sm font-medium mb-2">学员数据摘要</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>年级: {currentStudent.grade || '-'}</div>
+                      <div>程度: {LEVEL_LABELS[currentStudent.level]}</div>
+                      <div>自然拼读: {currentStudent.phonics_completed ? '已完成' : currentStudent.phonics_progress || '未开始'}</div>
+                      <div>国际音标: {currentStudent.ipa_completed ? '已完成' : '未开始'}</div>
+                    </div>
+                    {currentProgress.length > 0 && (
+                      <div className="mt-3 pt-3 border-t">
+                        <div className="text-xs text-muted-foreground mb-1">词库进度:</div>
+                        {currentProgress.map(p => (
+                          <div key={p.id} className="text-sm">
+                            {p.wordbank_label}: 第 {p.current_level} 关
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* 大纲方向 */}
+                  <div>
+                    <label className="text-sm text-muted-foreground">大纲方向（可选）</label>
+                    <Input
+                      value={extraInstruction}
+                      onChange={(e) => setExtraInstruction(e.target.value)}
+                      placeholder="如：本周重点推进词库"
+                    />
+                  </div>
+                  
+                  {/* 流式输出内容 */}
+                  {streamContent && (
+                    <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-4">
+                      <div className="text-sm font-medium text-blue-700 mb-2">AI 正在生成...</div>
+                      <pre className="text-sm whitespace-pre-wrap font-mono">{streamContent}</pre>
+                    </div>
+                  )}
+                  
+                  {/* 操作按钮 */}
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={handleGeneratePlan}
+                      disabled={!aiConfig?.api_key || generatingPlan}
+                    >
+                      {generatingPlan ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          开始生成
+                        </>
+                      )}
+                    </Button>
+                    <Button variant="outline" onClick={() => {
+                      setShowPlanGenerator(false)
+                      setStreamContent('')
+                      setExtraInstruction('')
+                    }}>
+                      取消
+                    </Button>
+                  </div>
+                  
+                  {!aiConfig?.api_key && (
+                    <p className="text-sm text-yellow-600">
+                      请先在「设置」页面配置 AI API Key
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* 新建按钮 */}
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" onClick={() => setShowPlanGenerator(true)}>
+                    <Sparkles className="w-4 h-4 mr-1" />
+                    AI 生成计划
+                  </Button>
+                </div>
+                
+                {/* 课程计划列表 */}
+                {lessonPlans.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-12">
+                    <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>暂无课程计划</p>
+                    <p className="text-sm mt-1">点击「AI 生成计划」创建新计划</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {lessonPlans.map((plan) => (
+                      <Card key={plan.id}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-3 flex-1">
+                              {/* 日期和基本信息 */}
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                                  <span className="font-medium">{plan.plan_date || '未设定日期'}</span>
+                                </div>
+                                {plan.generated_by_ai && (
+                                  <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-600">
+                                    AI 生成
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {/* 任务块 */}
+                              <div className="flex flex-wrap gap-2">
+                                {plan.tasks.map((task, index) => (
+                                  <TaskBlock
+                                    key={index}
+                                    task={task}
+                                    index={index}
+                                  />
+                                ))}
+                              </div>
+                              
+                              {/* 助教提示 */}
+                              {plan.notes && (
+                                <div className="bg-yellow-500/5 border border-yellow-200 rounded p-2">
+                                  <span className="text-xs text-yellow-700">助教提示：</span>
+                                  <span className="text-sm">{plan.notes}</span>
+                                </div>
+                              )}
+                              
+                              {/* AI 说明 */}
+                              {plan.ai_reason && (
+                                <div className="bg-blue-500/5 border border-blue-200 rounded p-2">
+                                  <span className="text-xs text-blue-700">计划说明：</span>
+                                  <span className="text-sm">{plan.ai_reason}</span>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* 操作按钮 */}
+                            <div className="flex items-center gap-2 ml-4">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="导出 PDF"
+                                onClick={() => exportLessonPlanPDF(currentStudent, plan)}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="打印"
+                                onClick={() => printLessonPlan(currentStudent, plan)}
+                              >
+                                <Printer className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-muted-foreground hover:text-destructive"
+                                onClick={async () => {
+                                  if (confirm('确定删除此课程计划？')) {
+                                    await deleteLessonPlan(plan.id)
+                                    loadLessonPlans(id!)
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>

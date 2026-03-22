@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Save, TestTube } from 'lucide-react'
+import { Save, TestTube, Calendar, Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
+import { DateInput } from '@/components/ui/date-input'
 import { PromptDialog } from '@/components/ui/dialog'
 import { useAppStore } from '@/store/appStore'
 import { settingsDb } from '@/db'
@@ -20,9 +21,23 @@ export function Settings() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
+  
+  // 学期节点设置
+  const [semesterConfig, setSemesterConfig] = useState({
+    spring_start: '',
+    spring_end: '',
+    summer_start: '',
+    summer_end: '',
+    autumn_start: '',
+    autumn_end: '',
+    winter_start: '',
+    winter_end: ''
+  })
+  const [savingSemester, setSavingSemester] = useState(false)
 
   useEffect(() => {
     loadSettings()
+    loadSemesterSettings()
   }, [])
 
   const loadSettings = async () => {
@@ -38,6 +53,28 @@ export function Settings() {
       model: model || 'deepseek-chat',
       temperature: parseFloat(temp || '0.7'),
       max_tokens: parseInt(tokens || '2048')
+    })
+  }
+
+  const loadSemesterSettings = async () => {
+    const springStart = await settingsDb.get('semester_spring_start')
+    const springEnd = await settingsDb.get('semester_spring_end')
+    const summerStart = await settingsDb.get('semester_summer_start')
+    const summerEnd = await settingsDb.get('semester_summer_end')
+    const autumnStart = await settingsDb.get('semester_autumn_start')
+    const autumnEnd = await settingsDb.get('semester_autumn_end')
+    const winterStart = await settingsDb.get('semester_winter_start')
+    const winterEnd = await settingsDb.get('semester_winter_end')
+    
+    setSemesterConfig({
+      spring_start: springStart || '',
+      spring_end: springEnd || '',
+      summer_start: summerStart || '',
+      summer_end: summerEnd || '',
+      autumn_start: autumnStart || '',
+      autumn_end: autumnEnd || '',
+      winter_start: winterStart || '',
+      winter_end: winterEnd || ''
     })
   }
 
@@ -90,6 +127,41 @@ export function Settings() {
       setTestResult(`连接失败：${(error as Error).message}`)
     } finally {
       setTesting(false)
+    }
+  }
+
+  const handleSaveSemester = async () => {
+    setSavingSemester(true)
+    try {
+      await settingsDb.set('semester_spring_start', semesterConfig.spring_start)
+      await settingsDb.set('semester_spring_end', semesterConfig.spring_end)
+      await settingsDb.set('semester_summer_start', semesterConfig.summer_start)
+      await settingsDb.set('semester_summer_end', semesterConfig.summer_end)
+      await settingsDb.set('semester_autumn_start', semesterConfig.autumn_start)
+      await settingsDb.set('semester_autumn_end', semesterConfig.autumn_end)
+      await settingsDb.set('semester_winter_start', semesterConfig.winter_start)
+      await settingsDb.set('semester_winter_end', semesterConfig.winter_end)
+      alert('学期节点设置已保存！')
+    } catch (error) {
+      alert('保存失败：' + (error as Error).message)
+    } finally {
+      setSavingSemester(false)
+    }
+  }
+
+  const handleBackup = async () => {
+    try {
+      if (window.electronAPI) {
+        const dbPath = await window.electronAPI.dbGetPath()
+        const backupPath = `/Users/zoey/Downloads/edumanager_backup_${new Date().toISOString().split('T')[0]}.db`
+        await window.electronAPI.dbBackup(backupPath)
+        await settingsDb.set('last_backup_date', new Date().toISOString())
+        alert(`备份成功！文件已保存到：${backupPath}`)
+      } else {
+        alert('备份功能仅在桌面应用中可用')
+      }
+    } catch (error) {
+      alert('备份失败：' + (error as Error).message)
     }
   }
 
@@ -196,6 +268,130 @@ export function Settings() {
             </CardHeader>
             <CardContent>
               <WordbankManager />
+            </CardContent>
+          </Card>
+
+          {/* 学期节点设置 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                学期节点设置
+              </CardTitle>
+              <CardDescription>
+                设置各学期的起止日期，用于提醒和数据统计
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* 春季学期 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-green-600">春季学期</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-muted-foreground">开始日期</label>
+                    <DateInput
+                      value={semesterConfig.spring_start}
+                      onChange={(val) => setSemesterConfig({ ...semesterConfig, spring_start: val })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">结束日期</label>
+                    <DateInput
+                      value={semesterConfig.spring_end}
+                      onChange={(val) => setSemesterConfig({ ...semesterConfig, spring_end: val })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 暑假 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-orange-600">暑假</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-muted-foreground">开始日期</label>
+                    <DateInput
+                      value={semesterConfig.summer_start}
+                      onChange={(val) => setSemesterConfig({ ...semesterConfig, summer_start: val })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">结束日期</label>
+                    <DateInput
+                      value={semesterConfig.summer_end}
+                      onChange={(val) => setSemesterConfig({ ...semesterConfig, summer_end: val })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 秋季学期 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-blue-600">秋季学期</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-muted-foreground">开始日期</label>
+                    <DateInput
+                      value={semesterConfig.autumn_start}
+                      onChange={(val) => setSemesterConfig({ ...semesterConfig, autumn_start: val })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">结束日期</label>
+                    <DateInput
+                      value={semesterConfig.autumn_end}
+                      onChange={(val) => setSemesterConfig({ ...semesterConfig, autumn_end: val })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 寒假 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-cyan-600">寒假</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-muted-foreground">开始日期</label>
+                    <DateInput
+                      value={semesterConfig.winter_start}
+                      onChange={(val) => setSemesterConfig({ ...semesterConfig, winter_start: val })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">结束日期</label>
+                    <DateInput
+                      value={semesterConfig.winter_end}
+                      onChange={(val) => setSemesterConfig({ ...semesterConfig, winter_end: val })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Button onClick={handleSaveSemester} disabled={savingSemester}>
+                <Save className="w-4 h-4 mr-2" />
+                {savingSemester ? '保存中...' : '保存学期设置'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* 数据备份 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>数据管理</CardTitle>
+              <CardDescription>
+                备份和恢复学员数据
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={handleBackup}>
+                  <Download className="w-4 h-4 mr-2" />
+                  备份数据
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                备份文件将保存到下载目录，建议每周备份一次
+              </p>
             </CardContent>
           </Card>
         </div>

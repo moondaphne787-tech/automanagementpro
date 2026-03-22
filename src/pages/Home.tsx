@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { FileCabinet } from '@/components/FileCabinet/FileCabinet'
+import { SemesterReminder, CurrentSemesterBadge } from '@/components/Reminder/SemesterReminder'
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/lib/utils'
 import { GRADE_OPTIONS, LEVEL_LABELS, STATUS_LABELS } from '@/types'
@@ -86,6 +87,7 @@ export function Home() {
       <header className="h-16 border-b bg-card flex items-center justify-between px-6">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">学员档案</h1>
+          <CurrentSemesterBadge />
           {warningCount > 0 && (
             <motion.div
               initial={{ scale: 0 }}
@@ -103,6 +105,9 @@ export function Home() {
         </Button>
       </header>
 
+      {/* 学期提醒横幅 */}
+      <SemesterReminder />
+      
       {/* 筛选和排序栏 */}
       <div className="border-b bg-card/50 px-6 py-3">
         <div className="flex items-center gap-4 flex-wrap">

@@ -3,6 +3,7 @@ import { Plus, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { DateInput } from '@/components/ui/date-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskBlock, createEmptyTask } from '@/components/TaskBlock/TaskBlock'
 import { parseFeedback } from '@/utils/feedbackParser'
@@ -128,10 +129,9 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm text-muted-foreground mb-1 block">上课日期 *</label>
-            <Input
-              type="date"
+            <DateInput
               value={classDate}
-              onChange={(e) => setClassDate(e.target.value)}
+              onChange={(val) => setClassDate(val)}
             />
           </div>
           <div>

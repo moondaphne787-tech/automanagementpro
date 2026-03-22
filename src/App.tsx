@@ -2,10 +2,13 @@ import { useState } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { AppLayout } from '@/components/Layout/AppLayout'
 import { ImportRecordsDrawer } from '@/components/Drawers/ImportRecordsDrawer'
+import { GeneratePlansDrawer } from '@/components/Drawers/GeneratePlansDrawer'
 import { Home } from '@/pages/Home'
 import { StudentNew } from '@/pages/StudentNew'
 import { StudentDetail } from '@/pages/StudentDetail'
 import { Settings } from '@/pages/Settings'
+import { TrialList } from '@/pages/TrialList'
+import { TrialConversions } from '@/pages/TrialConversions'
 
 // 占位页面组件
 function PlaceholderPage({ title }: { title: string }) {
@@ -23,8 +26,7 @@ function PlaceholderPage({ title }: { title: string }) {
 
 function App() {
   const [importDrawerOpen, setImportDrawerOpen] = useState(false)
-  // Phase 3: 批量生成课程计划抽屉
-  // const [generateDrawerOpen, setGenerateDrawerOpen] = useState(false)
+  const [generateDrawerOpen, setGenerateDrawerOpen] = useState(false)
   
   // 处理快捷操作
   const handleQuickAction = (action: string) => {
@@ -32,10 +34,9 @@ function App() {
       case 'import':
         setImportDrawerOpen(true)
         break
-      // Phase 3: 取消注释以启用生成课程计划功能
-      // case 'generate':
-      //   setGenerateDrawerOpen(true)
-      //   break
+      case 'generate':
+        setGenerateDrawerOpen(true)
+        break
     }
   }
   
@@ -46,7 +47,8 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/students/new" element={<StudentNew />} />
           <Route path="/students/:id" element={<StudentDetail />} />
-          <Route path="/trial" element={<PlaceholderPage title="体验生" />} />
+          <Route path="/trial" element={<TrialList />} />
+          <Route path="/trial/conversions" element={<TrialConversions />} />
           <Route path="/schedule" element={<PlaceholderPage title="排课" />} />
           <Route path="/teachers" element={<PlaceholderPage title="助教" />} />
           <Route path="/phases" element={<PlaceholderPage title="学习阶段" />} />
@@ -60,11 +62,11 @@ function App() {
         onClose={() => setImportDrawerOpen(false)} 
       />
       
-      {/* 批量生成课程计划抽屉 - Phase 3 实现 */}
-      {/* <GeneratePlansDrawer 
+      {/* 批量生成课程计划抽屉 */}
+      <GeneratePlansDrawer 
         open={generateDrawerOpen} 
         onClose={() => setGenerateDrawerOpen(false)} 
-      /> */}
+      />
     </HashRouter>
   )
 }

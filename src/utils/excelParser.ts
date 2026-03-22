@@ -300,6 +300,8 @@ export interface ImportPreviewItem {
   task_completed: 'completed' | 'partial' | 'not_completed'
   detail_feedback?: string
   issues?: string
+  wordbank?: string  // 词库名称（如"初中考纲"、"2025初中考纲"）
+  level?: string     // 已学到第几关
 }
 
 /**
@@ -336,7 +338,9 @@ export function createImportPreview(
       attendance: row.attendance,
       task_completed: row.task_completed,
       detail_feedback: row.detail_feedback,
-      issues: issues.length > 0 ? issues.join('；') : undefined
+      issues: issues.length > 0 ? issues.join('；') : undefined,
+      wordbank: row.wordbank,
+      level: row.level
     }
   })
 }

@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { DateInput } from '@/components/ui/date-input'
 import { useAppStore } from '@/store/appStore'
 import { GRADE_OPTIONS, LEVEL_LABELS, STUDENT_TYPE_LABELS } from '@/types'
 import type { Student, StudentType, StudentStatus, LevelType } from '@/types'
 
 interface StudentFormProps {
   student?: Student
+  defaultType?: StudentType
   onSubmit: (data: Omit<Student, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   onCancel: () => void
 }
@@ -30,7 +32,7 @@ const levelOptions = Object.entries(LEVEL_LABELS).map(([value, label]) => ({
 
 const gradeOptions = GRADE_OPTIONS.map(g => ({ value: g, label: g }))
 
-export function StudentForm({ student, onSubmit, onCancel }: StudentFormProps) {
+export function StudentForm({ student, defaultType, onSubmit, onCancel }: StudentFormProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     student_no: student?.student_no || '',
@@ -39,7 +41,7 @@ export function StudentForm({ student, onSubmit, onCancel }: StudentFormProps) {
     grade: student?.grade || '',
     account: student?.account || '',
     enroll_date: student?.enroll_date || '',
-    student_type: (student?.student_type || 'formal') as StudentType,
+    student_type: (student?.student_type || defaultType || 'formal') as StudentType,
     status: (student?.status || 'active') as StudentStatus,
     level: (student?.level || 'medium') as LevelType,
     initial_score: student?.initial_score?.toString() || '',
@@ -96,7 +98,7 @@ export function StudentForm({ student, onSubmit, onCancel }: StudentFormProps) {
             <Input
               value={formData.student_no}
               onChange={(e) => setFormData({ ...formData, student_no: e.target.value })}
-              placeholder="自动生成或手动输入"
+              placeholder="请输入学号"
             />
           </div>
           <div className="space-y-2">
@@ -149,10 +151,9 @@ export function StudentForm({ student, onSubmit, onCancel }: StudentFormProps) {
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">入学日期</label>
-            <Input
-              type="date"
+            <DateInput
               value={formData.enroll_date}
-              onChange={(e) => setFormData({ ...formData, enroll_date: e.target.value })}
+              onChange={(val) => setFormData({ ...formData, enroll_date: val })}
             />
           </div>
           <div className="space-y-2">

@@ -4,6 +4,7 @@ import { X, Upload, FileSpreadsheet, Check, AlertCircle, Loader2 } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
+import { DateInput } from '@/components/ui/date-input'
 import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { useAppStore } from '@/store/appStore'
 import { parseExcelFile, createImportPreview, type ImportPreviewItem } from '@/utils/excelParser'
@@ -302,13 +303,16 @@ export function ImportRecordsDrawer({ open, onClose }: ImportRecordsDrawerProps)
               {step === 'preview' && (
                 <div className="space-y-6">
                   {/* 日期选择 */}
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">上课日期</label>
-                    <input
-                      type="date"
+                  <div className="bg-blue-500/10 border border-blue-200 rounded-lg p-4">
+                    <label className="text-sm font-medium mb-2 block text-blue-700">
+                      📅 选择课堂记录日期
+                    </label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      请选择实际上课日期，所有导入的记录都将使用此日期
+                    </p>
+                    <DateInput
                       value={classDate}
-                      onChange={(e) => setClassDate(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg"
+                      onChange={(val) => setClassDate(val)}
                     />
                   </div>
                   
@@ -367,6 +371,18 @@ export function ImportRecordsDrawer({ open, onClose }: ImportRecordsDrawerProps)
                               <span className="text-sm text-muted-foreground">无任务数据</span>
                             )}
                           </div>
+                          
+                          {/* 词库信息 */}
+                          {item.wordbank && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="px-2 py-0.5 bg-blue-500/10 text-blue-600 rounded">
+                                {item.wordbank}
+                              </span>
+                              {item.level && (
+                                <span className="text-muted-foreground">第{item.level}关</span>
+                              )}
+                            </div>
+                          )}
                           
                           {/* 其他信息 */}
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
