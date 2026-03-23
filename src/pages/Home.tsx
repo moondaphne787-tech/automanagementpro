@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, ArrowUpDown, AlertTriangle } from 'lucide-react'
+import { Plus, Search, ArrowUpDown, AlertTriangle, Upload } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { FileCabinet } from '@/components/FileCabinet/FileCabinet'
 import { SemesterReminder, CurrentSemesterBadge } from '@/components/Reminder/SemesterReminder'
+import { ImportStudentsDrawer } from '@/components/Drawers/ImportStudentsDrawer'
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/lib/utils'
 import { GRADE_OPTIONS, LEVEL_LABELS, STATUS_LABELS } from '@/types'
@@ -59,6 +60,7 @@ export function Home() {
   
   const [searchValue, setSearchValue] = useState(filters.search)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(sort.direction)
+  const [importDrawerOpen, setImportDrawerOpen] = useState(false)
 
   useEffect(() => {
     loadStudents()
@@ -99,10 +101,16 @@ export function Home() {
             </motion.div>
           )}
         </div>
-        <Button onClick={() => navigate('/students/new')}>
-          <Plus className="w-4 h-4 mr-1" />
-          新增学员
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportDrawerOpen(true)}>
+            <Upload className="w-4 h-4 mr-1" />
+            批量导入
+          </Button>
+          <Button onClick={() => navigate('/students/new')}>
+            <Plus className="w-4 h-4 mr-1" />
+            新增学员
+          </Button>
+        </div>
       </header>
 
       {/* 学期提醒横幅 */}
@@ -181,6 +189,12 @@ export function Home() {
       <div className="flex-1 overflow-auto p-6">
         <FileCabinet students={students} loading={studentsLoading} />
       </div>
+      
+      {/* 学员导入抽屉 */}
+      <ImportStudentsDrawer 
+        open={importDrawerOpen} 
+        onClose={() => setImportDrawerOpen(false)} 
+      />
     </div>
   )
 }

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Save, X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Save, X, Link, Unlink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -7,7 +7,8 @@ import { DateInput } from '@/components/ui/date-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskBlock, createEmptyTask } from '@/components/TaskBlock/TaskBlock'
 import { parseFeedback } from '@/utils/feedbackParser'
-import type { TaskBlock as TaskBlockType, AttendanceType, PerformanceType, TaskCompletedType, Wordbank } from '@/types'
+import { lessonPlanDb } from '@/db'
+import type { TaskBlock as TaskBlockType, AttendanceType, PerformanceType, TaskCompletedType, Wordbank, LessonPlan } from '@/types'
 
 interface ClassRecordFormProps {
   studentId: string
@@ -26,6 +27,7 @@ interface ClassRecordFormProps {
     highlights?: string
     issues?: string
     checkin_completed?: boolean
+    plan_id?: string
   }) => Promise<void>
   onCancel: () => void
   initialDate?: string
@@ -44,6 +46,52 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
   const [highlights, setHighlights] = useState('')
   const [issues, setIssues] = useState('')
   const [saving, setSaving] = useState(false)
+  
+  // 关联计划相关状态
+  const [availablePlans, setAvailablePlans] = useState<LessonPlan[]>([])
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('')
+  const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null)
+  
+  // 加载指定日期的课程计划
+  useEffect(() => {
+    if (classDate) {
+      loadPlansForDate(classDate)
+    }
+  }, [classDate, studentId])
+  
+  const loadPlansForDate = async (date: string) => {
+    const plans = await lessonPlanDb.getByStudentId(studentId)
+    const datePlans = plans.filter(p => p.plan_date === date)
+    setAvailablePlans(datePlans)
+    
+    // 如果只有一个计划，自动选中
+    if (datePlans.length === 1) {
+      setSelectedPlanId(datePlans[0].id)
+      setSelectedPlan(datePlans[0])
+    } else {
+      setSelectedPlanId('')
+      setSelectedPlan(null)
+    }
+  }
+  
+  const handlePlanSelect = (planId: string) => {
+    if (!planId) {
+      setSelectedPlanId('')
+      setSelectedPlan(null)
+      return
+    }
+    
+    const plan = availablePlans.find(p => p.id === planId)
+    setSelectedPlanId(planId)
+    setSelectedPlan(plan || null)
+  }
+  
+  // 从计划复制任务
+  const handleCopyTasksFromPlan = () => {
+    if (selectedPlan && selectedPlan.tasks.length > 0) {
+      setTasks(selectedPlan.tasks.map(t => ({ ...t })))
+    }
+  }
   
   // 从学情反馈解析任务
   const handleParseFeedback = () => {
@@ -107,7 +155,8 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
         performance,
         detail_feedback: detailFeedback || undefined,
         highlights: highlights || undefined,
-        issues: issues || undefined
+        issues: issues || undefined,
+        plan_id: selectedPlanId || undefined
       })
     } finally {
       setSaving(false)
@@ -166,6 +215,55 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
             />
           </div>
         </div>
+        
+        {/* 关联课程计划 */}
+        {availablePlans.length > 0 && (
+          <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-blue-700">
+                <Link className="w-4 h-4" />
+                <span className="text-sm font-medium">关联课程计划</span>
+              </div>
+              {selectedPlan && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCopyTasksFromPlan}
+                  className="text-blue-600 hover:text-blue-700"
+                >
+                  复制计划任务
+                </Button>
+              )}
+            </div>
+            <Select
+              value={selectedPlanId}
+              onChange={(e) => handlePlanSelect(e.target.value)}
+              options={[
+                { value: '', label: '不关联计划' },
+                ...availablePlans.map(p => ({
+                  value: p.id,
+                  label: p.tasks.map(t => t.wordbank_label || t.content || t.type).slice(0, 2).join(' + ') + (p.tasks.length > 2 ? '...' : '')
+                }))
+              ]}
+              placeholder="选择要关联的课程计划"
+            />
+            
+            {/* 显示计划详情 */}
+            {selectedPlan && (
+              <div className="mt-3 pt-3 border-t border-blue-200">
+                <div className="text-xs text-blue-600 mb-2">计划任务预览：</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedPlan.tasks.map((task, idx) => (
+                    <span key={idx} className="text-xs bg-white border border-blue-200 px-2 py-1 rounded">
+                      {task.wordbank_label || task.content || task.type}
+                      {task.level_from && task.level_to && ` 第${task.level_from}-${task.level_to}关`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         
         {/* 任务列表 */}
         <div>

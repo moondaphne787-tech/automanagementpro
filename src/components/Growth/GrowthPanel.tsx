@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { DateInput } from '@/components/ui/date-input'
-import { Plus, Trash2, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, TrendingDown, Minus, CheckCircle, XCircle, Calendar } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatDate, cn } from '@/lib/utils'
-import type { ExamScore, StudentWordbankProgress, ClassRecord, LearningPhase, TaskBlock } from '@/types'
+import { classRecordDb, settingsDb, examScoreDb } from '@/db'
+import type { ExamScore, StudentWordbankProgress, ClassRecord, PhaseType } from '@/types'
 import { ExamType } from '@/types'
 
 // 考试类型标签
@@ -15,6 +16,89 @@ const EXAM_TYPE_LABELS: Record<ExamType, string> = {
   school_exam: '学校考试',
   placement: '分班考试',
   mock: '模拟考试'
+}
+
+// 完成率趋势图组件
+function CompletionRateChart({ data }: { data: { date: string; total: number; completed: number; rate: number }[] }) {
+  if (data.length === 0) {
+    return (
+      <div className="text-center text-muted-foreground py-8">
+        暂无完成率数据
+      </div>
+    )
+  }
+
+  const maxRate = 100
+  
+  return (
+    <div className="space-y-3">
+      {/* 图例 */}
+      <div className="flex items-center gap-4 text-xs text-muted-foreground mb-2">
+        <div className="flex items-center gap-1">
+          <CheckCircle className="w-3 h-3 text-green-500" />
+          <span>完成率</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 bg-blue-500/30 rounded" />
+          <span>课次</span>
+        </div>
+      </div>
+      
+      {/* 图表 */}
+      <div className="flex items-end gap-1 h-32 pt-4">
+        {data.map((item, index) => {
+          const height = (item.rate / maxRate) * 100
+          return (
+            <div key={item.date} className="flex-1 flex flex-col items-center min-w-[40px]">
+              {/* 柱子 */}
+              <div className="w-full relative flex flex-col justify-end h-24">
+                {/* 背景条（总课次） */}
+                <div 
+                  className="w-full bg-blue-500/20 rounded-t"
+                  style={{ height: `${Math.min(item.total * 20, 96)}px` }}
+                />
+                {/* 完成率条 */}
+                <div 
+                  className={cn(
+                    "absolute bottom-0 w-full rounded-t transition-all",
+                    item.rate >= 80 ? "bg-green-500" :
+                    item.rate >= 60 ? "bg-blue-500" :
+                    item.rate >= 40 ? "bg-yellow-500" : "bg-red-500"
+                  )}
+                  style={{ height: `${height}%` }}
+                />
+              </div>
+              {/* 标签 */}
+              <div className="text-xs text-muted-foreground mt-1 text-center">
+                <div className="font-medium">{item.rate}%</div>
+                <div className="text-[10px]">
+                  {new Date(item.date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      
+      {/* 汇总 */}
+      <div className="grid grid-cols-3 gap-2 pt-2 border-t">
+        <div className="text-center">
+          <div className="text-lg font-semibold">{data.reduce((sum, d) => sum + d.total, 0)}</div>
+          <div className="text-xs text-muted-foreground">总课次</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-semibold">{data.reduce((sum, d) => sum + d.completed, 0)}</div>
+          <div className="text-xs text-muted-foreground">完成课次</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-semibold">
+            {Math.round(data.reduce((sum, d) => sum + d.rate, 0) / data.length)}%
+          </div>
+          <div className="text-xs text-muted-foreground">平均完成率</div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // 成绩趋势图组件（简化版，使用条形图）
@@ -313,6 +397,29 @@ function ExamScoreForm({
   )
 }
 
+// 学期配置接口
+interface SemesterConfig {
+  spring_start: string
+  spring_end: string
+  summer_start: string
+  summer_end: string
+  autumn_start: string
+  autumn_end: string
+  winter_start: string
+  winter_end: string
+}
+
+// 自动学习阶段接口
+interface AutoPhase {
+  id: string
+  name: string
+  type: PhaseType
+  startDate: string
+  endDate: string
+  isActive: boolean
+  isCompleted: boolean
+}
+
 // 主组件
 export function GrowthPanel({ studentId }: { studentId: string }) {
   const { 
@@ -322,22 +429,137 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
     updateExamScore, 
     deleteExamScore,
     currentProgress,
-    classRecords,
-    learningPhases,
-    loadLearningPhases,
-    createLearningPhase,
-    updateLearningPhase,
-    deleteLearningPhase
+    classRecords
   } = useAppStore()
 
   const [showExamForm, setShowExamForm] = useState(false)
   const [editingExam, setEditingExam] = useState<ExamScore | null>(null)
   const [activeSection, setActiveSection] = useState<'overview' | 'exams' | 'phases'>('overview')
+  
+  // 完成率趋势数据
+  const [completionRateData, setCompletionRateData] = useState<{ date: string; total: number; completed: number; rate: number }[]>([])
+  
+  // 学期配置
+  const [semesterConfig, setSemesterConfig] = useState<SemesterConfig>({
+    spring_start: '',
+    spring_end: '',
+    summer_start: '',
+    summer_end: '',
+    autumn_start: '',
+    autumn_end: '',
+    winter_start: '',
+    winter_end: ''
+  })
 
   useEffect(() => {
     loadExamScores(studentId)
-    loadLearningPhases(studentId)
+    loadCompletionRateData(studentId)
+    loadSemesterConfig()
   }, [studentId])
+  
+  const loadCompletionRateData = async (studentId: string) => {
+    const data = await classRecordDb.getCompletionRateStats(studentId, 12) // 最近12周
+    setCompletionRateData(data)
+  }
+  
+  const loadSemesterConfig = async () => {
+    const springStart = await settingsDb.get('semester_spring_start')
+    const springEnd = await settingsDb.get('semester_spring_end')
+    const summerStart = await settingsDb.get('semester_summer_start')
+    const summerEnd = await settingsDb.get('semester_summer_end')
+    const autumnStart = await settingsDb.get('semester_autumn_start')
+    const autumnEnd = await settingsDb.get('semester_autumn_end')
+    const winterStart = await settingsDb.get('semester_winter_start')
+    const winterEnd = await settingsDb.get('semester_winter_end')
+    
+    setSemesterConfig({
+      spring_start: springStart || '',
+      spring_end: springEnd || '',
+      summer_start: summerStart || '',
+      summer_end: summerEnd || '',
+      autumn_start: autumnStart || '',
+      autumn_end: autumnEnd || '',
+      winter_start: winterStart || '',
+      winter_end: winterEnd || ''
+    })
+  }
+
+  // 获取自动计算的学习阶段列表
+  const getAutoPhases = (): AutoPhase[] => {
+    const phases: AutoPhase[] = []
+    const today = new Date().toISOString().split('T')[0]
+    const currentYear = new Date().getFullYear()
+    
+    // 辅助函数：判断日期是否在范围内
+    const isInRange = (date: string, start: string, end: string): boolean => {
+      return date >= start && date <= end
+    }
+    
+    // 辅助函数：判断阶段状态
+    const getPhaseStatus = (start: string, end: string) => {
+      const isActive = start <= today && (!end || end >= today)
+      const isCompleted = !!end && end < today
+      return { isActive, isCompleted }
+    }
+    
+    // 春季学期
+    if (semesterConfig.spring_start && semesterConfig.spring_end) {
+      const { isActive, isCompleted } = getPhaseStatus(semesterConfig.spring_start, semesterConfig.spring_end)
+      phases.push({
+        id: 'spring',
+        name: `${currentYear}年春季学期`,
+        type: 'semester',
+        startDate: semesterConfig.spring_start,
+        endDate: semesterConfig.spring_end,
+        isActive,
+        isCompleted
+      })
+    }
+    
+    // 暑假
+    if (semesterConfig.summer_start && semesterConfig.summer_end) {
+      const { isActive, isCompleted } = getPhaseStatus(semesterConfig.summer_start, semesterConfig.summer_end)
+      phases.push({
+        id: 'summer',
+        name: `${currentYear}年暑假`,
+        type: 'summer',
+        startDate: semesterConfig.summer_start,
+        endDate: semesterConfig.summer_end,
+        isActive,
+        isCompleted
+      })
+    }
+    
+    // 秋季学期
+    if (semesterConfig.autumn_start && semesterConfig.autumn_end) {
+      const { isActive, isCompleted } = getPhaseStatus(semesterConfig.autumn_start, semesterConfig.autumn_end)
+      phases.push({
+        id: 'autumn',
+        name: `${currentYear}年秋季学期`,
+        type: 'semester',
+        startDate: semesterConfig.autumn_start,
+        endDate: semesterConfig.autumn_end,
+        isActive,
+        isCompleted
+      })
+    }
+    
+    // 寒假
+    if (semesterConfig.winter_start && semesterConfig.winter_end) {
+      const { isActive, isCompleted } = getPhaseStatus(semesterConfig.winter_start, semesterConfig.winter_end)
+      phases.push({
+        id: 'winter',
+        name: `${currentYear}年寒假`,
+        type: 'winter',
+        startDate: semesterConfig.winter_start,
+        endDate: semesterConfig.winter_end,
+        isActive,
+        isCompleted
+      })
+    }
+    
+    return phases
+  }
 
   const handleSaveExam = async (data: any) => {
     if (editingExam) {
@@ -458,6 +680,16 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
             </CardContent>
           </Card>
 
+          {/* 完成率趋势 */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">任务完成率趋势（近12周）</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CompletionRateChart data={completionRateData} />
+            </CardContent>
+          </Card>
+
           {/* 成绩趋势 */}
           <Card className="lg:col-span-2">
             <CardHeader>
@@ -572,108 +804,45 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
       )}
 
       {activeSection === 'phases' && (
-        <LearningPhasesPanel studentId={studentId} />
+        <AutoLearningPhasesPanel 
+          studentId={studentId}
+          classRecords={classRecords}
+          examScores={examScores}
+          phases={getAutoPhases()}
+        />
       )}
     </div>
   )
 }
 
-// 学习阶段面板
-function LearningPhasesPanel({ studentId }: { studentId: string }) {
-  const { 
-    learningPhases, 
-    createLearningPhase, 
-    updateLearningPhase, 
-    deleteLearningPhase,
-    classRecords,
-    currentProgress,
-    examScores
-  } = useAppStore()
-
-  const [showForm, setShowForm] = useState(false)
-  const [editingPhase, setEditingPhase] = useState<LearningPhase | null>(null)
-  const [form, setForm] = useState({
-    phase_name: '',
-    phase_type: 'semester' as 'semester' | 'summer' | 'winter',
-    start_date: '',
-    end_date: '',
-    goal: '',
-    vocab_start: '',
-    vocab_end: '',
-    summary: ''
-  })
-
-  const resetForm = () => {
-    setForm({
-      phase_name: '',
-      phase_type: 'semester',
-      start_date: '',
-      end_date: '',
-      goal: '',
-      vocab_start: '',
-      vocab_end: '',
-      summary: ''
-    })
-    setEditingPhase(null)
-  }
-
-  const handleSave = async () => {
-    const data = {
-      student_id: studentId,
-      phase_name: form.phase_name || undefined,
-      phase_type: form.phase_type,
-      start_date: form.start_date || undefined,
-      end_date: form.end_date || undefined,
-      goal: form.goal || undefined,
-      vocab_start: form.vocab_start ? parseInt(form.vocab_start) : undefined,
-      vocab_end: form.vocab_end ? parseInt(form.vocab_end) : undefined,
-      summary: form.summary || undefined
-    }
-
-    if (editingPhase) {
-      await updateLearningPhase(editingPhase.id, data)
-    } else {
-      await createLearningPhase(data)
-    }
-
-    setShowForm(false)
-    resetForm()
-  }
-
-  const handleEdit = (phase: LearningPhase) => {
-    setEditingPhase(phase)
-    setForm({
-      phase_name: phase.phase_name || '',
-      phase_type: phase.phase_type || 'semester',
-      start_date: phase.start_date || '',
-      end_date: phase.end_date || '',
-      goal: phase.goal || '',
-      vocab_start: phase.vocab_start?.toString() || '',
-      vocab_end: phase.vocab_end?.toString() || '',
-      summary: phase.summary || ''
-    })
-    setShowForm(true)
-  }
-
-  const phaseTypeLabels: Record<string, string> = {
+// 自动学习阶段面板（从设置读取日期）
+function AutoLearningPhasesPanel({ 
+  studentId, 
+  classRecords, 
+  examScores,
+  phases 
+}: { 
+  studentId: string
+  classRecords: ClassRecord[]
+  examScores: ExamScore[]
+  phases: AutoPhase[]
+}) {
+  const phaseTypeLabels: Record<PhaseType, string> = {
     semester: '学期',
     summer: '暑假',
     winter: '寒假'
   }
 
   // 计算阶段内的统计数据
-  const getPhaseStats = (phase: LearningPhase) => {
-    const startDate = phase.start_date || '2000-01-01'
-    const endDate = phase.end_date || new Date().toISOString().split('T')[0]
-
+  const getPhaseStats = (phase: AutoPhase) => {
     // 筛选阶段内的课堂记录
     const phaseRecords = classRecords.filter(r => 
-      r.class_date >= startDate && r.class_date <= endDate
+      r.class_date >= phase.startDate && r.class_date <= phase.endDate
     )
 
     // 筛选阶段内的考试成绩
     const phaseScores = examScores.filter(s =>
-      s.exam_date >= startDate && s.exam_date <= endDate
+      s.exam_date >= phase.startDate && s.exam_date <= phase.endDate
     )
 
     return {
@@ -682,211 +851,122 @@ function LearningPhasesPanel({ studentId }: { studentId: string }) {
       scoreCount: phaseScores.length,
       avgScore: phaseScores.length > 0 && phaseScores.some(s => s.score != null)
         ? Math.round(phaseScores.filter(s => s.score != null).reduce((sum, s) => sum + (s.score || 0), 0) / phaseScores.filter(s => s.score != null).length)
-        : null
+        : null,
+      records: phaseRecords
     }
+  }
+
+  if (phases.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="font-semibold">学习阶段</h3>
+        </div>
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>暂未配置学习阶段</p>
+            <p className="text-sm mt-1">请在「设置」页面配置学期日期</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="font-semibold">学习阶段</h3>
-        <Button onClick={() => { setShowForm(true); resetForm() }}>
-          <Plus className="w-4 h-4 mr-1" />
-          新建阶段
-        </Button>
+        <p className="text-xs text-muted-foreground">
+          阶段日期由「设置」页面统一配置
+        </p>
       </div>
 
-      {showForm && (
-        <Card>
-          <CardContent className="p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">阶段名称</label>
-                <Input
-                  value={form.phase_name}
-                  onChange={(e) => setForm({ ...form, phase_name: e.target.value })}
-                  placeholder="如：2025年春季学期"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">阶段类型</label>
-                <Select
-                  value={form.phase_type}
-                  onChange={(e) => setForm({ ...form, phase_type: e.target.value as any })}
-                  options={[
-                    { value: 'semester', label: '学期' },
-                    { value: 'summer', label: '暑假' },
-                    { value: 'winter', label: '寒假' }
-                  ]}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">开始日期</label>
-                <DateInput
-                  value={form.start_date}
-                  onChange={(val) => setForm({ ...form, start_date: val })}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">结束日期</label>
-                <DateInput
-                  value={form.end_date}
-                  onChange={(val) => setForm({ ...form, end_date: val })}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">阶段目标</label>
-              <Input
-                value={form.goal}
-                onChange={(e) => setForm({ ...form, goal: e.target.value })}
-                placeholder="如：完成初中考纲、词汇量达到1600"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">起始词汇量</label>
-                <Input
-                  type="number"
-                  value={form.vocab_start}
-                  onChange={(e) => setForm({ ...form, vocab_start: e.target.value })}
-                  placeholder="可选"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">结束词汇量</label>
-                <Input
-                  type="number"
-                  value={form.vocab_end}
-                  onChange={(e) => setForm({ ...form, vocab_end: e.target.value })}
-                  placeholder="可选"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">阶段总结</label>
-              <Input
-                value={form.summary}
-                onChange={(e) => setForm({ ...form, summary: e.target.value })}
-                placeholder="阶段结束后的总结"
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => { setShowForm(false); resetForm() }}>
-                取消
-              </Button>
-              <Button onClick={handleSave}>
-                {editingPhase ? '更新' : '创建'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <div className="space-y-4">
+        {phases.map((phase) => {
+          const stats = getPhaseStats(phase)
 
-      {learningPhases.length === 0 ? (
-        <div className="text-center text-muted-foreground py-12">
-          暂无学习阶段记录
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {learningPhases.map((phase) => {
-            const stats = getPhaseStats(phase)
-
-            return (
-              <Card key={phase.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-2 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {phase.phase_name || '未命名阶段'}
-                        </span>
-                        <span className={cn(
-                          "text-xs px-2 py-0.5 rounded",
-                          phase.phase_type === 'semester' && "bg-blue-500/10 text-blue-600",
-                          phase.phase_type === 'summer' && "bg-orange-500/10 text-orange-600",
-                          phase.phase_type === 'winter' && "bg-cyan-500/10 text-cyan-600"
-                        )}>
-                          {phaseTypeLabels[phase.phase_type]}
-                        </span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {phase.start_date} ~ {phase.end_date || '进行中'}
-                      </div>
-                      
-                      {/* 阶段内统计 */}
-                      <div className="grid grid-cols-4 gap-3 mt-3">
-                        <div className="text-center p-2 bg-muted/50 rounded">
-                          <div className="font-semibold">{stats.classCount}</div>
-                          <div className="text-xs text-muted-foreground">课次</div>
-                        </div>
-                        <div className="text-center p-2 bg-muted/50 rounded">
-                          <div className="font-semibold">{stats.totalHours.toFixed(1)}h</div>
-                          <div className="text-xs text-muted-foreground">课时</div>
-                        </div>
-                        <div className="text-center p-2 bg-muted/50 rounded">
-                          <div className="font-semibold">{stats.scoreCount}</div>
-                          <div className="text-xs text-muted-foreground">考试</div>
-                        </div>
-                        <div className="text-center p-2 bg-muted/50 rounded">
-                          <div className="font-semibold">{stats.avgScore ?? '-'}</div>
-                          <div className="text-xs text-muted-foreground">平均分</div>
-                        </div>
-                      </div>
-
-                      {phase.goal && (
-                        <div className="mt-2">
-                          <span className="text-xs text-muted-foreground">目标：</span>
-                          <span className="text-sm">{phase.goal}</span>
-                        </div>
-                      )}
-
-                      {phase.vocab_start != null && phase.vocab_end != null && (
-                        <div className="mt-1 text-sm">
-                          词汇量：{phase.vocab_start} → {phase.vocab_end}
-                          <span className="text-green-600 ml-1">
-                            (+{phase.vocab_end - phase.vocab_start})
-                          </span>
-                        </div>
-                      )}
-
-                      {phase.summary && (
-                        <div className="mt-2 p-2 bg-muted/30 rounded text-sm">
-                          <span className="text-muted-foreground">总结：</span>
-                          {phase.summary}
-                        </div>
-                      )}
+          return (
+            <Card key={phase.id} className={cn(
+              phase.isActive && "border-green-300 bg-green-50/30",
+              phase.isCompleted && "opacity-70"
+            )}>
+              <CardContent className="p-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{phase.name}</span>
+                    <span className={cn(
+                      "text-xs px-2 py-0.5 rounded",
+                      phase.type === 'semester' && "bg-blue-500/10 text-blue-600",
+                      phase.type === 'summer' && "bg-orange-500/10 text-orange-600",
+                      phase.type === 'winter' && "bg-cyan-500/10 text-cyan-600"
+                    )}>
+                      {phaseTypeLabels[phase.type]}
+                    </span>
+                    {phase.isActive && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-green-500/10 text-green-600">
+                        进行中
+                      </span>
+                    )}
+                    {phase.isCompleted && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                        已结束
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Calendar className="w-4 h-4" />
+                    <span>{phase.startDate} ~ {phase.endDate}</span>
+                  </div>
+                  
+                  {/* 阶段内统计 */}
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="text-center p-2 bg-muted/50 rounded">
+                      <div className="font-semibold">{stats.classCount}</div>
+                      <div className="text-xs text-muted-foreground">课次</div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handleEdit(phase)}
-                      >
-                        编辑
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="text-destructive"
-                        onClick={async () => {
-                          if (confirm('确定删除此学习阶段？')) {
-                            await deleteLearningPhase(phase.id)
-                          }
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                    <div className="text-center p-2 bg-muted/50 rounded">
+                      <div className="font-semibold">{stats.totalHours.toFixed(1)}h</div>
+                      <div className="text-xs text-muted-foreground">课时</div>
+                    </div>
+                    <div className="text-center p-2 bg-muted/50 rounded">
+                      <div className="font-semibold">{stats.scoreCount}</div>
+                      <div className="text-xs text-muted-foreground">考试</div>
+                    </div>
+                    <div className="text-center p-2 bg-muted/50 rounded">
+                      <div className="font-semibold">{stats.avgScore ?? '-'}</div>
+                      <div className="text-xs text-muted-foreground">平均分</div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
+
+                  {/* 最近课堂记录 */}
+                  {stats.records.length > 0 && (
+                    <div className="pt-2 border-t">
+                      <div className="text-xs text-muted-foreground mb-2">最近课堂记录：</div>
+                      <div className="space-y-1">
+                        {stats.records.slice(0, 3).map(record => (
+                          <div key={record.id} className="flex items-center justify-between text-sm">
+                            <span>{record.class_date}</span>
+                            <span className="text-muted-foreground">
+                              {record.tasks.length}个任务 · {record.duration_hours}h
+                            </span>
+                          </div>
+                        ))}
+                        {stats.records.length > 3 && (
+                          <div className="text-xs text-muted-foreground text-center pt-1">
+                            还有 {stats.records.length - 3} 条记录
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }

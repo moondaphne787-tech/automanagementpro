@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getWasmPath: (filename: string) => 
     ipcRenderer.invoke('getWasmPath', filename),
 
+  // 打印课程计划
+  printLessonPlans: (htmlContent: string) => 
+    ipcRenderer.invoke('print-lesson-plans', htmlContent),
+
   // 平台信息
   platform: process.platform,
   
@@ -36,6 +40,7 @@ export interface ElectronAPI {
   dbTransaction: (statements: Array<{ sql: string; params: unknown[] }>) => Promise<{ success: boolean }>
   dbGetPath: () => Promise<string>
   dbBackup: (backupPath: string) => Promise<{ success: boolean }>
+  printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
   platform: string
   isElectron: boolean
 }

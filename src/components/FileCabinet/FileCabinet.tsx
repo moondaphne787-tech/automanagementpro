@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { FileFolder } from './FileFolder'
+import { useAppStore } from '@/store/appStore'
 import type { StudentWithBilling } from '@/types'
 
 interface FileCabinetProps {
@@ -8,6 +9,8 @@ interface FileCabinetProps {
 }
 
 export function FileCabinet({ students, loading }: FileCabinetProps) {
+  const expiredPlansMap = useAppStore(state => state.expiredPlansMap)
+  
   if (loading) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
@@ -42,7 +45,10 @@ export function FileCabinet({ students, loading }: FileCabinetProps) {
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2 }}
           >
-            <FileFolder student={student} />
+            <FileFolder 
+              student={student} 
+              expiredPlansCount={expiredPlansMap.get(student.id) || 0}
+            />
           </motion.div>
         ))}
       </AnimatePresence>

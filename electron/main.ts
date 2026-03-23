@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'path'
 import Database from 'better-sqlite3'
+import * as fs from 'fs'
 
 let mainWindow: BrowserWindow | null = null
 let db: Database.Database | null = null
@@ -160,11 +161,20 @@ function createTables() {
       issues TEXT,
       checkin_completed INTEGER DEFAULT 0,
       phase_id TEXT,
+      plan_id TEXT,
       imported_from_excel INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
     )
   `)
+  
+  // 为旧数据库 class_records 添加缺失的列
+  const classRecordsInfo = db.prepare('PRAGMA table_info(class_records)').all() as Array<{ name: string }>
+  const classRecordsColumns = classRecordsInfo.map(col => col.name)
+  
+  if (!classRecordsColumns.includes('plan_id')) {
+    db.exec(`ALTER TABLE class_records ADD COLUMN plan_id TEXT`)
+  }
 
   // 课程计划表
   db.exec(`
@@ -245,10 +255,31 @@ function createTables() {
       teaching_style TEXT,
       suitable_grades TEXT,
       suitable_levels TEXT,
+      training_stage TEXT DEFAULT 'probation',
+      teacher_types TEXT DEFAULT '[]',
+      total_teaching_hours REAL DEFAULT 0,
       notes TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  
+  // 为旧数据库 teachers 添加缺失的列
+  const teachersInfo = db.prepare('PRAGMA table_info(teachers)').all() as Array<{ name: string }>
+  const teachersColumns = teachersInfo.map(col => col.name)
+  
+  if (!teachersColumns.includes('training_stage')) {
+    db.exec(`ALTER TABLE teachers ADD COLUMN training_stage TEXT DEFAULT 'probation'`)
+  }
+  if (!teachersColumns.includes('teacher_types')) {
+    db.exec(`ALTER TABLE teachers ADD COLUMN teacher_types TEXT DEFAULT '[]'`)
+  }
+  if (!teachersColumns.includes('total_teaching_hours')) {
+    db.exec(`ALTER TABLE teachers ADD COLUMN total_teaching_hours REAL DEFAULT 0`)
+  }
+  // 为现有记录设置默认值
+  db.exec(`UPDATE teachers SET training_stage = 'probation' WHERE training_stage IS NULL`)
+  db.exec(`UPDATE teachers SET teacher_types = '[]' WHERE teacher_types IS NULL`)
+  db.exec(`UPDATE teachers SET total_teaching_hours = 0 WHERE total_teaching_hours IS NULL`)
 
   // 老师可用时段表
   db.exec(`
@@ -452,6 +483,50 @@ ipcMain.handle('db:backup', async (_event, backupPath: string) => {
   } catch (error) {
     console.error('Backup error:', error)
     throw error
+  }
+})
+
+// 打印课程计划
+ipcMain.handle('print-lesson-plans', async (_event, htmlContent: string) => {
+  try {
+    // 创建隐藏的打印窗口
+    const printWindow = new BrowserWindow({
+      width: 800,
+      height: 600,
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    })
+    
+    // 加载 HTML 内容
+    const tempPath = path.join(app.getPath('temp'), 'print-plans.html')
+    fs.writeFileSync(tempPath, htmlContent, 'utf-8')
+    
+    await printWindow.loadFile(tempPath)
+    
+    // 等待内容加载完成
+    await new Promise<void>((resolve) => {
+      printWindow.webContents.on('did-finish-load', () => resolve())
+    })
+    
+    // 调用打印对话框
+    await printWindow.webContents.print({
+      silent: false,
+      printBackground: true
+    })
+    
+    // 打印完成后销毁窗口
+    printWindow.close()
+    
+    // 删除临时文件
+    fs.unlinkSync(tempPath)
+    
+    return { success: true }
+  } catch (error) {
+    console.error('Print error:', error)
+    return { success: false, error: (error as Error).message }
   }
 })
 

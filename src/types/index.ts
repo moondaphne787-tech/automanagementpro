@@ -48,11 +48,20 @@ export type TeacherStatus = 'active' | 'inactive'
 // 口语水平
 export type OralLevel = 'basic' | 'intermediate' | 'advanced'
 
+// 助教培训阶段
+export type TrainingStage = 'probation' | 'intern' | 'formal'
+
+// 助教类型
+export type TeacherType = 'regular' | 'vacation'
+
 // 排课状态
 export type ScheduleStatus = 'scheduled' | 'completed' | 'cancelled' | 'rescheduled'
 
 // 星期
-export type DayOfWeek = 'saturday' | 'sunday'
+export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday'
+
+// 排课日期类型
+export type ScheduleDateType = 'regular_weekend' | 'friday_evening' | 'holiday' | 'custom'
 
 // 任务类型
 export type TaskType = 
@@ -156,6 +165,7 @@ export interface ClassRecord {
   issues: string | null
   checkin_completed: boolean
   phase_id: string | null
+  plan_id: string | null  // 关联的课程计划ID
   imported_from_excel: boolean
   created_at: string
 }
@@ -226,6 +236,9 @@ export interface Teacher {
   teaching_style: string | null
   suitable_grades: string | null
   suitable_levels: string[] | null
+  training_stage: TrainingStage
+  teacher_types: TeacherType[]
+  total_teaching_hours: number
   notes: string | null
   created_at: string
 }
@@ -282,6 +295,19 @@ export interface AIConfig {
   model: string
   temperature: number
   max_tokens: number
+}
+
+// 助教培训阶段显示名称
+export const TRAINING_STAGE_LABELS: Record<TrainingStage, string> = {
+  probation: '实训期',
+  intern: '实习期',
+  formal: '正式助教'
+}
+
+// 助教类型显示名称
+export const TEACHER_TYPE_LABELS: Record<TeacherType, string> = {
+  regular: '平时助教',
+  vacation: '寒暑假助教'
 }
 
 // 学员列表项（包含课时信息）
@@ -352,6 +378,7 @@ export interface ElectronAPI {
   dbGetPath: () => Promise<string>
   dbBackup: (backupPath: string) => Promise<{ success: boolean }>
   getWasmPath: (filename: string) => Promise<string>
+  printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
   platform: string
   isElectron: boolean
 }

@@ -1,4 +1,4 @@
-import type { Student, Billing, Wordbank, StudentWordbankProgress, ClassRecord, LessonPlan, ExamScore, LearningPhase, TrialConversion, FilterOptions, SortOptions } from '@/types'
+import type { Student, Billing, Wordbank, StudentWordbankProgress, ClassRecord, LessonPlan, ExamScore, LearningPhase, TrialConversion, FilterOptions, SortOptions, Teacher, TeacherAvailability, StudentSchedulePreference, ScheduledClass, DayOfWeek } from '@/types'
 
 // 初始化数据库 - 在 Electron 中由主进程处理
 export async function initDatabase(): Promise<void> {
@@ -342,14 +342,25 @@ export const classRecordDb = {
     issues?: string
     checkin_completed?: boolean
     phase_id?: string
+    plan_id?: string  // 关联的课程计划ID
     imported_from_excel?: boolean
   }): Promise<ClassRecord> {
     const id = generateId()
     const now = new Date().toISOString()
     
+    // 如果没有指定 plan_id，尝试自动关联同日期的计划
+    let planId = data.plan_id || null
+    if (!planId) {
+      const plan = await ipcQueryOne<{ id: string }>(
+        `SELECT id FROM lesson_plans WHERE student_id = ? AND plan_date = ? LIMIT 1`,
+        [data.student_id, data.class_date]
+      )
+      planId = plan?.id || null
+    }
+    
     await ipcQuery(
-      `INSERT INTO class_records (id, student_id, class_date, duration_hours, teacher_name, attendance, tasks, task_completed, incomplete_reason, performance, detail_feedback, highlights, issues, checkin_completed, phase_id, imported_from_excel, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO class_records (id, student_id, class_date, duration_hours, teacher_name, attendance, tasks, task_completed, incomplete_reason, performance, detail_feedback, highlights, issues, checkin_completed, phase_id, plan_id, imported_from_excel, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, 
         data.student_id, 
@@ -366,6 +377,7 @@ export const classRecordDb = {
         data.issues || null,
         data.checkin_completed ? 1 : 0,
         data.phase_id || null,
+        planId,
         data.imported_from_excel ? 1 : 0,
         now
       ]
@@ -382,6 +394,7 @@ export const classRecordDb = {
       record.tasks = JSON.parse(record.tasks || '[]')
       record.checkin_completed = !!record.checkin_completed
       record.imported_from_excel = !!record.imported_from_excel
+      record.plan_id = record.plan_id || null
     }
     return record as ClassRecord | undefined
   },
@@ -396,7 +409,61 @@ export const classRecordDb = {
       record.tasks = JSON.parse(record.tasks || '[]')
       record.checkin_completed = !!record.checkin_completed
       record.imported_from_excel = !!record.imported_from_excel
+      record.plan_id = record.plan_id || null
       return record as ClassRecord
+    })
+  },
+  
+  // 获取课堂记录及关联的计划信息
+  async getWithPlan(studentId: string, limit?: number): Promise<(ClassRecord & { plan?: LessonPlan })[]> {
+    let sql = `
+      SELECT cr.*, lp.id as plan_id_ref, lp.tasks as plan_tasks, lp.notes as plan_notes, lp.ai_reason as plan_ai_reason
+      FROM class_records cr
+      LEFT JOIN lesson_plans lp ON cr.plan_id = lp.id
+      WHERE cr.student_id = ?
+      ORDER BY cr.class_date DESC
+    `
+    if (limit) {
+      sql += ` LIMIT ${limit}`
+    }
+    const records = await ipcQuery<any[]>(sql, [studentId])
+    return records.map(record => {
+      const classRecord: ClassRecord & { plan?: LessonPlan } = {
+        id: record.id,
+        student_id: record.student_id,
+        class_date: record.class_date,
+        duration_hours: record.duration_hours,
+        teacher_name: record.teacher_name,
+        attendance: record.attendance,
+        tasks: JSON.parse(record.tasks || '[]'),
+        task_completed: record.task_completed,
+        incomplete_reason: record.incomplete_reason,
+        performance: record.performance,
+        detail_feedback: record.detail_feedback,
+        highlights: record.highlights,
+        issues: record.issues,
+        checkin_completed: !!record.checkin_completed,
+        phase_id: record.phase_id,
+        plan_id: record.plan_id || null,
+        imported_from_excel: !!record.imported_from_excel,
+        created_at: record.created_at
+      }
+      
+      if (record.plan_id_ref) {
+        classRecord.plan = {
+          id: record.plan_id_ref,
+          student_id: record.student_id,
+          phase_id: null,
+          plan_date: record.class_date,
+          tasks: JSON.parse(record.plan_tasks || '[]'),
+          notes: record.plan_notes,
+          ai_reason: record.plan_ai_reason,
+          generated_by_ai: false,
+          created_at: ''
+        }
+      }
+      
+      return classRecord
     })
   },
   
@@ -456,6 +523,7 @@ export const classRecordDb = {
     issues?: string
     checkin_completed?: boolean
     phase_id?: string
+    plan_id?: string
     imported_from_excel?: boolean
   }>): Promise<number> {
     let successCount = 0
@@ -468,11 +536,112 @@ export const classRecordDb = {
       }
     }
     return successCount
+  },
+  
+  // 获取完成率统计（用于成长档案趋势图）
+  async getCompletionRateStats(studentId: string, months: number = 6): Promise<{ date: string; total: number; completed: number; rate: number }[]> {
+    const startDate = new Date()
+    startDate.setMonth(startDate.getMonth() - months)
+    const startDateStr = startDate.toISOString().split('T')[0]
+    
+    const records = await ipcQuery<any[]>(
+      `SELECT class_date, task_completed FROM class_records 
+       WHERE student_id = ? AND class_date >= ? 
+       ORDER BY class_date ASC`,
+      [studentId, startDateStr]
+    )
+    
+    // 按周汇总
+    const weeklyStats = new Map<string, { total: number; completed: number }>()
+    
+    records.forEach(record => {
+      const date = new Date(record.class_date)
+      // 获取周起始日（周六）
+      const day = date.getDay()
+      const saturday = new Date(date)
+      if (day === 0) {
+        saturday.setDate(date.getDate() - 1)
+      } else if (day !== 6) {
+        saturday.setDate(date.getDate() + (6 - day))
+      }
+      const weekKey = saturday.toISOString().split('T')[0]
+      
+      const current = weeklyStats.get(weekKey) || { total: 0, completed: 0 }
+      current.total += 1
+      if (record.task_completed === 'completed') {
+        current.completed += 1
+      }
+      weeklyStats.set(weekKey, current)
+    })
+    
+    // 转换为数组并计算比率
+    const result: { date: string; total: number; completed: number; rate: number }[] = []
+    weeklyStats.forEach((stats, date) => {
+      result.push({
+        date,
+        total: stats.total,
+        completed: stats.completed,
+        rate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0
+      })
+    })
+    
+    return result.sort((a, b) => a.date.localeCompare(b.date))
   }
 }
 
 // 课程计划操作
 export const lessonPlanDb = {
+  // 获取过期未执行计划
+  async getExpiredPlans(studentId: string): Promise<LessonPlan[]> {
+    const today = new Date().toISOString().split('T')[0]
+    
+    // 查找过期且未被执行的计划（没有对应的课堂记录关联）
+    const plans = await ipcQuery<any[]>(
+      `SELECT lp.* FROM lesson_plans lp
+       WHERE lp.student_id = ? 
+       AND lp.plan_date IS NOT NULL 
+       AND lp.plan_date < ?
+       AND NOT EXISTS (
+         SELECT 1 FROM class_records cr WHERE cr.student_id = lp.student_id AND cr.class_date = lp.plan_date
+       )
+       ORDER BY lp.plan_date DESC`,
+      [studentId, today]
+    )
+    
+    return plans.map(plan => {
+      plan.tasks = JSON.parse(plan.tasks || '[]')
+      plan.generated_by_ai = !!plan.generated_by_ai
+      return plan as LessonPlan
+    })
+  },
+  
+  // 批量获取多个学员的过期计划数量
+  async getExpiredPlansCount(studentIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>()
+    if (studentIds.length === 0) return result
+    
+    const today = new Date().toISOString().split('T')[0]
+    const placeholders = studentIds.map(() => '?').join(',')
+    
+    const counts = await ipcQuery<{ student_id: string; count: number }[]>(
+      `SELECT lp.student_id, COUNT(*) as count FROM lesson_plans lp
+       WHERE lp.student_id IN (${placeholders})
+       AND lp.plan_date IS NOT NULL 
+       AND lp.plan_date < ?
+       AND NOT EXISTS (
+         SELECT 1 FROM class_records cr WHERE cr.student_id = lp.student_id AND cr.class_date = lp.plan_date
+       )
+       GROUP BY lp.student_id`,
+      [...studentIds, today]
+    )
+    
+    counts.forEach(item => {
+      result.set(item.student_id, item.count)
+    })
+    
+    return result
+  },
+
   async create(data: {
     student_id: string
     phase_id?: string
@@ -947,5 +1116,515 @@ export const trialConversionDb = {
     if (!student || !conversion) throw new Error('Failed to mark conversion')
     
     return { student, conversion }
+  }
+}
+
+// 助教操作
+export const teacherDb = {
+  async create(data: {
+    name: string
+    phone?: string
+    university?: string
+    major?: string
+    enroll_date?: string
+    status?: 'active' | 'inactive'
+    vocab_level?: string
+    oral_level?: 'basic' | 'intermediate' | 'advanced'
+    teaching_style?: string
+    suitable_grades?: string
+    suitable_levels?: string[]
+    training_stage?: 'probation' | 'intern' | 'formal'
+    teacher_types?: ('regular' | 'vacation')[]
+    total_teaching_hours?: number
+    notes?: string
+  }): Promise<Teacher> {
+    const id = generateId()
+    const now = new Date().toISOString()
+    
+    await ipcQuery(
+      `INSERT INTO teachers (id, name, phone, university, major, enroll_date, status, vocab_level, oral_level, teaching_style, suitable_grades, suitable_levels, training_stage, teacher_types, total_teaching_hours, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.name, data.phone || null, data.university || null, data.major || null, data.enroll_date || null, data.status || 'active', data.vocab_level || null, data.oral_level || 'intermediate', data.teaching_style || null, data.suitable_grades || null, data.suitable_levels ? JSON.stringify(data.suitable_levels) : null, data.training_stage || 'probation', data.teacher_types ? JSON.stringify(data.teacher_types) : '[]', data.total_teaching_hours || 0, data.notes || null, now]
+    )
+    
+    const result = await this.getById(id)
+    if (!result) throw new Error('Failed to create teacher')
+    return result
+  },
+  
+  async getById(id: string): Promise<Teacher | undefined> {
+    const teacher = await ipcQueryOne<any>(`SELECT * FROM teachers WHERE id = ?`, [id])
+    if (teacher) {
+      teacher.suitable_levels = teacher.suitable_levels ? JSON.parse(teacher.suitable_levels) : null
+      teacher.teacher_types = teacher.teacher_types ? JSON.parse(teacher.teacher_types) : []
+      teacher.total_teaching_hours = teacher.total_teaching_hours || 0
+      teacher.training_stage = teacher.training_stage || 'probation'
+    }
+    return teacher as Teacher | undefined
+  },
+  
+  async getAll(): Promise<Teacher[]> {
+    const teachers = await ipcQuery<any[]>(`SELECT * FROM teachers ORDER BY created_at DESC`)
+    return teachers.map(teacher => {
+      teacher.suitable_levels = teacher.suitable_levels ? JSON.parse(teacher.suitable_levels) : null
+      teacher.teacher_types = teacher.teacher_types ? JSON.parse(teacher.teacher_types) : []
+      teacher.total_teaching_hours = teacher.total_teaching_hours || 0
+      teacher.training_stage = teacher.training_stage || 'probation'
+      return teacher as Teacher
+    })
+  },
+  
+  async getActive(): Promise<Teacher[]> {
+    const teachers = await ipcQuery<any[]>(`SELECT * FROM teachers WHERE status = 'active' ORDER BY name`)
+    return teachers.map(teacher => {
+      teacher.suitable_levels = teacher.suitable_levels ? JSON.stringify(teacher.suitable_levels) : null
+      teacher.teacher_types = teacher.teacher_types ? JSON.parse(teacher.teacher_types) : []
+      teacher.total_teaching_hours = teacher.total_teaching_hours || 0
+      teacher.training_stage = teacher.training_stage || 'probation'
+      return teacher as Teacher
+    })
+  },
+  
+  async update(id: string, data: Partial<Teacher>): Promise<Teacher | undefined> {
+    const fields: string[] = []
+    const values: unknown[] = []
+    
+    for (const [key, value] of Object.entries(data)) {
+      if (key === 'suitable_levels' || key === 'teacher_types') {
+        fields.push(`${key} = ?`)
+        values.push(value ? JSON.stringify(value) : (key === 'teacher_types' ? '[]' : null))
+      } else if (key !== 'id' && key !== 'created_at') {
+        fields.push(`${key} = ?`)
+        values.push(value)
+      }
+    }
+    
+    if (fields.length > 0) {
+      values.push(id)
+      await ipcQuery(`UPDATE teachers SET ${fields.join(', ')} WHERE id = ?`, values)
+    }
+    
+    return this.getById(id)
+  },
+  
+  async delete(id: string): Promise<void> {
+    await ipcQuery(`DELETE FROM teachers WHERE id = ?`, [id])
+  },
+  
+  // 累加教学时长
+  async addTeachingHours(teacherId: string, hours: number): Promise<Teacher | undefined> {
+    const teacher = await this.getById(teacherId)
+    if (!teacher) return undefined
+    
+    return this.update(teacherId, {
+      total_teaching_hours: teacher.total_teaching_hours + hours
+    })
+  },
+  
+  // 检查培训阶段升级
+  async checkTrainingStageUpgrade(teacherId: string): Promise<{ upgraded: boolean; newStage?: string; message?: string }> {
+    const teacher = await this.getById(teacherId)
+    if (!teacher) return { upgraded: false }
+    
+    const hours = teacher.total_teaching_hours
+    
+    // 实训期满2小时 → 提醒升级实习期
+    if (teacher.training_stage === 'probation' && hours >= 2) {
+      return {
+        upgraded: true,
+        newStage: 'intern',
+        message: `${teacher.name} 已累计教学 ${hours} 小时，建议从实训期升级为实习期`
+      }
+    }
+    
+    // 实习期满10小时 → 提醒升级正式助教
+    if (teacher.training_stage === 'intern' && hours >= 10) {
+      return {
+        upgraded: true,
+        newStage: 'formal',
+        message: `${teacher.name} 已累计教学 ${hours} 小时，建议从实习期升级为正式助教`
+      }
+    }
+    
+    return { upgraded: false }
+  },
+  
+  // 获取所有需要升级提醒的助教
+  async getUpgradeReminders(): Promise<{ teacher: Teacher; newStage: string; message: string }[]> {
+    const teachers = await this.getActive()
+    const reminders: { teacher: Teacher; newStage: string; message: string }[] = []
+    
+    for (const teacher of teachers) {
+      const result = await this.checkTrainingStageUpgrade(teacher.id)
+      if (result.upgraded && result.newStage && result.message) {
+        reminders.push({
+          teacher,
+          newStage: result.newStage,
+          message: result.message
+        })
+      }
+    }
+    
+    return reminders
+  }
+}
+
+// 老师可用时段操作
+export const teacherAvailabilityDb = {
+  async create(data: {
+    teacher_id: string
+    week_start?: string
+    day_of_week: DayOfWeek
+    start_time?: string
+    end_time?: string
+    notes?: string
+  }): Promise<TeacherAvailability> {
+    const id = generateId()
+    
+    await ipcQuery(
+      `INSERT INTO teacher_availability (id, teacher_id, week_start, day_of_week, start_time, end_time, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.teacher_id, data.week_start || null, data.day_of_week, data.start_time || null, data.end_time || null, data.notes || null]
+    )
+    
+    const result = await this.getById(id)
+    if (!result) throw new Error('Failed to create teacher availability')
+    return result
+  },
+  
+  async getById(id: string): Promise<TeacherAvailability | undefined> {
+    return ipcQueryOne<TeacherAvailability>(`SELECT * FROM teacher_availability WHERE id = ?`, [id])
+  },
+  
+  async getByTeacherId(teacherId: string): Promise<TeacherAvailability[]> {
+    return ipcQuery<TeacherAvailability[]>(
+      `SELECT * FROM teacher_availability WHERE teacher_id = ? ORDER BY day_of_week, start_time`,
+      [teacherId]
+    )
+  },
+  
+  async getByWeek(weekStart: string): Promise<TeacherAvailability[]> {
+    return ipcQuery<TeacherAvailability[]>(
+      `SELECT * FROM teacher_availability WHERE week_start = ? OR week_start IS NULL ORDER BY day_of_week, start_time`,
+      [weekStart]
+    )
+  },
+  
+  async update(id: string, data: Partial<TeacherAvailability>): Promise<TeacherAvailability | undefined> {
+    const fields: string[] = []
+    const values: unknown[] = []
+    
+    for (const [key, value] of Object.entries(data)) {
+      if (key !== 'id') {
+        fields.push(`${key} = ?`)
+        values.push(value)
+      }
+    }
+    
+    if (fields.length > 0) {
+      values.push(id)
+      await ipcQuery(`UPDATE teacher_availability SET ${fields.join(', ')} WHERE id = ?`, values)
+    }
+    
+    return this.getById(id)
+  },
+  
+  async delete(id: string): Promise<void> {
+    await ipcQuery(`DELETE FROM teacher_availability WHERE id = ?`, [id])
+  },
+  
+  async deleteByTeacher(teacherId: string): Promise<void> {
+    await ipcQuery(`DELETE FROM teacher_availability WHERE teacher_id = ?`, [teacherId])
+  }
+}
+
+// 学生固定时段偏好操作
+export const studentSchedulePreferenceDb = {
+  async create(data: {
+    student_id: string
+    day_of_week: DayOfWeek
+    preferred_start?: string
+    preferred_end?: string
+    semester?: string
+    notes?: string
+  }): Promise<StudentSchedulePreference> {
+    const id = generateId()
+    
+    await ipcQuery(
+      `INSERT INTO student_schedule_preferences (id, student_id, day_of_week, preferred_start, preferred_end, semester, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.student_id, data.day_of_week, data.preferred_start || null, data.preferred_end || null, data.semester || null, data.notes || null]
+    )
+    
+    const result = await this.getById(id)
+    if (!result) throw new Error('Failed to create student schedule preference')
+    return result
+  },
+  
+  async getById(id: string): Promise<StudentSchedulePreference | undefined> {
+    return ipcQueryOne<StudentSchedulePreference>(`SELECT * FROM student_schedule_preferences WHERE id = ?`, [id])
+  },
+  
+  async getByStudentId(studentId: string): Promise<StudentSchedulePreference[]> {
+    return ipcQuery<StudentSchedulePreference[]>(
+      `SELECT * FROM student_schedule_preferences WHERE student_id = ? ORDER BY day_of_week, preferred_start`,
+      [studentId]
+    )
+  },
+  
+  async update(id: string, data: Partial<StudentSchedulePreference>): Promise<StudentSchedulePreference | undefined> {
+    const fields: string[] = []
+    const values: unknown[] = []
+    
+    for (const [key, value] of Object.entries(data)) {
+      if (key !== 'id') {
+        fields.push(`${key} = ?`)
+        values.push(value)
+      }
+    }
+    
+    if (fields.length > 0) {
+      values.push(id)
+      await ipcQuery(`UPDATE student_schedule_preferences SET ${fields.join(', ')} WHERE id = ?`, values)
+    }
+    
+    return this.getById(id)
+  },
+  
+  async delete(id: string): Promise<void> {
+    await ipcQuery(`DELETE FROM student_schedule_preferences WHERE id = ?`, [id])
+  },
+  
+  async deleteByStudent(studentId: string): Promise<void> {
+    await ipcQuery(`DELETE FROM student_schedule_preferences WHERE student_id = ?`, [studentId])
+  }
+}
+
+// 课表操作
+export const scheduledClassDb = {
+  async create(data: {
+    student_id: string
+    teacher_id?: string
+    class_date: string
+    start_time?: string
+    end_time?: string
+    duration_hours?: number
+    status?: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled'
+    rescheduled_from_id?: string
+    cancel_reason?: string
+    notes?: string
+  }): Promise<ScheduledClass> {
+    const id = generateId()
+    const now = new Date().toISOString()
+    
+    await ipcQuery(
+      `INSERT INTO scheduled_classes (id, student_id, teacher_id, class_date, start_time, end_time, duration_hours, status, rescheduled_from_id, cancel_reason, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.student_id, data.teacher_id || null, data.class_date, data.start_time || null, data.end_time || null, data.duration_hours || 1, data.status || 'scheduled', data.rescheduled_from_id || null, data.cancel_reason || null, data.notes || null, now]
+    )
+    
+    const result = await this.getById(id)
+    if (!result) throw new Error('Failed to create scheduled class')
+    return result
+  },
+  
+  async getById(id: string): Promise<ScheduledClass | undefined> {
+    return ipcQueryOne<ScheduledClass>(`SELECT * FROM scheduled_classes WHERE id = ?`, [id])
+  },
+  
+  async getByDate(date: string): Promise<(ScheduledClass & { student?: Student; teacher?: Teacher })[]> {
+    const results = await ipcQuery<any[]>(`
+      SELECT sc.*, s.name as student_name, s.grade, s.level, t.name as teacher_name
+      FROM scheduled_classes sc
+      LEFT JOIN students s ON sc.student_id = s.id
+      LEFT JOIN teachers t ON sc.teacher_id = t.id
+      WHERE sc.class_date = ?
+      ORDER BY sc.start_time
+    `, [date])
+    
+    return results.map(row => ({
+      id: row.id,
+      student_id: row.student_id,
+      teacher_id: row.teacher_id,
+      class_date: row.class_date,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      duration_hours: row.duration_hours,
+      status: row.status,
+      rescheduled_from_id: row.rescheduled_from_id,
+      cancel_reason: row.cancel_reason,
+      notes: row.notes,
+      created_at: row.created_at,
+      student: {
+        id: row.student_id,
+        name: row.student_name,
+        grade: row.grade,
+        level: row.level
+      } as Student,
+      teacher: row.teacher_id ? {
+        id: row.teacher_id,
+        name: row.teacher_name
+      } as Teacher : undefined
+    }))
+  },
+  
+  async getByWeek(startDate: string, endDate: string): Promise<(ScheduledClass & { student?: Student; teacher?: Teacher })[]> {
+    const results = await ipcQuery<any[]>(`
+      SELECT sc.*, s.name as student_name, s.grade, s.level, t.name as teacher_name
+      FROM scheduled_classes sc
+      LEFT JOIN students s ON sc.student_id = s.id
+      LEFT JOIN teachers t ON sc.teacher_id = t.id
+      WHERE sc.class_date >= ? AND sc.class_date <= ?
+      ORDER BY sc.class_date, sc.start_time
+    `, [startDate, endDate])
+    
+    return results.map(row => ({
+      id: row.id,
+      student_id: row.student_id,
+      teacher_id: row.teacher_id,
+      class_date: row.class_date,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      duration_hours: row.duration_hours,
+      status: row.status,
+      rescheduled_from_id: row.rescheduled_from_id,
+      cancel_reason: row.cancel_reason,
+      notes: row.notes,
+      created_at: row.created_at,
+      student: {
+        id: row.student_id,
+        name: row.student_name,
+        grade: row.grade,
+        level: row.level
+      } as Student,
+      teacher: row.teacher_id ? {
+        id: row.teacher_id,
+        name: row.teacher_name
+      } as Teacher : undefined
+    }))
+  },
+  
+  async getByStudentId(studentId: string): Promise<ScheduledClass[]> {
+    return ipcQuery<ScheduledClass[]>(
+      `SELECT * FROM scheduled_classes WHERE student_id = ? ORDER BY class_date DESC, start_time`,
+      [studentId]
+    )
+  },
+  
+  async getByTeacherId(teacherId: string): Promise<ScheduledClass[]> {
+    return ipcQuery<ScheduledClass[]>(
+      `SELECT * FROM scheduled_classes WHERE teacher_id = ? ORDER BY class_date DESC, start_time`,
+      [teacherId]
+    )
+  },
+  
+  async update(id: string, data: Partial<ScheduledClass>): Promise<ScheduledClass | undefined> {
+    const fields: string[] = []
+    const values: unknown[] = []
+    
+    for (const [key, value] of Object.entries(data)) {
+      if (key !== 'id' && key !== 'created_at') {
+        fields.push(`${key} = ?`)
+        values.push(value)
+      }
+    }
+    
+    if (fields.length > 0) {
+      values.push(id)
+      await ipcQuery(`UPDATE scheduled_classes SET ${fields.join(', ')} WHERE id = ?`, values)
+    }
+    
+    return this.getById(id)
+  },
+  
+  async delete(id: string): Promise<void> {
+    await ipcQuery(`DELETE FROM scheduled_classes WHERE id = ?`, [id])
+  },
+  
+  // 检查时段冲突
+  async checkConflict(teacherId: string, date: string, startTime: string, endTime: string, excludeId?: string): Promise<ScheduledClass | null> {
+    let sql = `
+      SELECT * FROM scheduled_classes 
+      WHERE teacher_id = ? AND class_date = ? AND status != 'cancelled'
+      AND ((start_time <= ? AND end_time > ?) OR (start_time < ? AND end_time >= ?) OR (start_time >= ? AND end_time <= ?))
+    `
+    const params: unknown[] = [teacherId, date, startTime, startTime, endTime, endTime, startTime, endTime]
+    
+    if (excludeId) {
+      sql += ` AND id != ?`
+      params.push(excludeId)
+    }
+    
+    const result = await ipcQueryOne<ScheduledClass>(sql, params)
+    return result || null
+  },
+  
+  // 批量创建排课
+  async batchCreate(classes: Array<{
+    student_id: string
+    teacher_id?: string
+    class_date: string
+    start_time?: string
+    end_time?: string
+    duration_hours?: number
+    notes?: string
+  }>): Promise<{ success: number; failed: number; conflicts: string[] }> {
+    let success = 0
+    let failed = 0
+    const conflicts: string[] = []
+    
+    for (const cls of classes) {
+      try {
+        // 检查冲突
+        if (cls.teacher_id && cls.start_time && cls.end_time) {
+          const conflict = await this.checkConflict(cls.teacher_id, cls.class_date, cls.start_time, cls.end_time)
+          if (conflict) {
+            conflicts.push(`${cls.class_date} ${cls.start_time}-${cls.end_time}`)
+            failed++
+            continue
+          }
+        }
+        
+        await this.create(cls)
+        success++
+      } catch (error) {
+        console.error('Failed to create scheduled class:', error)
+        failed++
+      }
+    }
+    
+    return { success, failed, conflicts }
+  },
+  
+  // 调课
+  async reschedule(id: string, newDate: string, newStartTime?: string, newEndTime?: string, newTeacherId?: string): Promise<ScheduledClass> {
+    const original = await this.getById(id)
+    if (!original) throw new Error('Scheduled class not found')
+    
+    // 创建新记录（状态为 scheduled，表示新的有效排课）
+    const newClass = await this.create({
+      student_id: original.student_id,
+      teacher_id: newTeacherId || original.teacher_id || undefined,
+      class_date: newDate,
+      start_time: newStartTime || original.start_time || undefined,
+      end_time: newEndTime || original.end_time || undefined,
+      duration_hours: original.duration_hours,
+      status: 'scheduled',
+      rescheduled_from_id: id,
+      notes: `调课自 ${original.class_date}`
+    })
+    
+    // 更新原记录状态为 rescheduled，表示已被调走
+    await this.update(id, { status: 'rescheduled', cancel_reason: `已调课至 ${newDate} ${newStartTime || ''}` })
+    
+    return newClass
+  },
+  
+  // 取消课程
+  async cancel(id: string, reason?: string): Promise<ScheduledClass | undefined> {
+    return this.update(id, {
+      status: 'cancelled',
+      cancel_reason: reason || null
+    })
   }
 }

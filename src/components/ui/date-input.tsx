@@ -44,8 +44,8 @@ export function DateInput({ value, onChange, className, disabled, placeholder }:
     const val = e.target.value.replace(/\D/g, '').slice(0, 4)
     updateDate(val, month, day)
     
-    // 年份输入四位后自动跳转到月份（仅当月份为空时）
-    if (val.length === 4 && !month) {
+    // 年份输入四位后自动跳转到月份
+    if (val.length === 4) {
       monthRef.current?.focus()
     }
   }
@@ -62,8 +62,8 @@ export function DateInput({ value, onChange, className, disabled, placeholder }:
     
     updateDate(year, val, day)
     
-    // 月份输入两位后自动跳转到日期（仅当日期为空时）
-    if (val.length === 2 && !day) {
+    // 月份输入两位后自动跳转到日期
+    if (val.length === 2) {
       dayRef.current?.focus()
     }
   }

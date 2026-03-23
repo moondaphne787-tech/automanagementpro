@@ -8,7 +8,8 @@ import {
   GraduationCap, 
   Settings,
   Upload,
-  Sparkles
+  Sparkles,
+  FileDown
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,6 +25,7 @@ const navItems = [
 const quickActions = [
   { icon: Upload, label: '批量导入课堂记录', action: 'import' },
   { icon: Sparkles, label: '批量生成课程计划', action: 'generate' },
+  { icon: FileDown, label: '批量导出课程计划', action: 'print' },
 ]
 
 interface SidebarProps {

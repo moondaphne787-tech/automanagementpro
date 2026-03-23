@@ -33,6 +33,9 @@ interface AppState {
   // 词库配置
   wordbanks: Wordbank[]
   
+  // 过期计划状态
+  expiredPlansMap: Map<string, number> // student_id -> expired count
+  
   // UI状态
   sidebarCollapsed: boolean
   theme: 'light' | 'dark'
@@ -186,14 +189,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   lessonPlans: [],
   examScores: [],
   learningPhases: [],
+  expiredPlansMap: new Map(),
   
+  // 加载学员列表
   // 加载学员列表
   loadStudents: async () => {
     set({ studentsLoading: true })
     try {
       const { filters, sort } = get()
       const students = await studentDb.getAllWithBilling(filters, sort)
-      set({ students, studentsLoading: false })
+      
+      // 加载过期计划数量
+      const activeStudentIds = students
+        .filter(s => s.status === 'active')
+        .map(s => s.id)
+      const expiredPlansMap = await lessonPlanDb.getExpiredPlansCount(activeStudentIds)
+      
+      set({ students, studentsLoading: false, expiredPlansMap })
     } catch (error) {
       console.error('Failed to load students:', error)
       set({ studentsLoading: false })
@@ -478,12 +490,57 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 删除课程计划
   deleteLessonPlan: async (id) => {
     const plan = await lessonPlanDb.getById(id)
-    if (plan) {
+    if (plan && plan.student_id) {
       await lessonPlanDb.delete(id)
       if (get().currentStudent?.id === plan.student_id) {
         await get().loadLessonPlans(plan.student_id)
       }
+      // 刷新过期计划数量
+      await get().loadStudents()
     }
+  },
+  
+  // 获取学员过期计划
+  getExpiredPlans: async (studentId: string): Promise<LessonPlan[]> => {
+    return await lessonPlanDb.getExpiredPlans(studentId)
+  },
+  
+  // 改期课程计划
+  rescheduleLessonPlan: async (id: string, newDate: string) => {
+    const plan = await lessonPlanDb.update(id, { plan_date: newDate })
+    if (plan && get().currentStudent?.id === plan.student_id) {
+      await get().loadLessonPlans(plan.student_id)
+    }
+    // 刷新过期计划数量
+    await get().loadStudents()
+    return plan
+  },
+  
+  // 沿用过期计划创建新计划
+  reuseExpiredPlan: async (expiredPlanId: string, newDate: string) => {
+    const expiredPlan = await lessonPlanDb.getById(expiredPlanId)
+    if (!expiredPlan) return undefined
+    
+    // 创建新计划
+    const newPlan = await lessonPlanDb.create({
+      student_id: expiredPlan.student_id,
+      plan_date: newDate,
+      tasks: expiredPlan.tasks,
+      notes: expiredPlan.notes || undefined,
+      generated_by_ai: false
+    })
+    
+    // 删除过期计划
+    await lessonPlanDb.delete(expiredPlanId)
+    
+    if (get().currentStudent?.id === expiredPlan.student_id) {
+      await get().loadLessonPlans(expiredPlan.student_id)
+    }
+    
+    // 刷新过期计划数量
+    await get().loadStudents()
+    
+    return newPlan
   },
   
   // 加载考试成绩

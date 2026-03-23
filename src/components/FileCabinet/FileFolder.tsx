@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Clock, AlertTriangle } from 'lucide-react'
+import { Clock, AlertTriangle, CalendarX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getLevelColor, formatHours, isHoursWarning } from '@/lib/utils'
 import type { StudentWithBilling, LEVEL_LABELS, STATUS_LABELS } from '@/types'
@@ -8,11 +8,13 @@ import { LEVEL_LABELS as levelLabels, STATUS_LABELS as statusLabels } from '@/ty
 
 interface FileFolderProps {
   student: StudentWithBilling
+  expiredPlansCount?: number
 }
 
-export function FileFolder({ student }: FileFolderProps) {
+export function FileFolder({ student, expiredPlansCount = 0 }: FileFolderProps) {
   const navigate = useNavigate()
   const isWarning = isHoursWarning(student.billing)
+  const hasExpiredPlans = expiredPlansCount > 0
   
   return (
     <motion.div
@@ -31,9 +33,19 @@ export function FileFolder({ student }: FileFolderProps) {
       )}
       
       {/* 课时预警角标 */}
-      {isWarning && student.billing && (
+      {isWarning && student.billing && !hasExpiredPlans && (
         <div className="absolute -top-1 -left-1 w-4 h-4 bg-warning rounded-full flex items-center justify-center">
           <AlertTriangle className="w-2.5 h-2.5 text-white" />
+        </div>
+      )}
+      
+      {/* 过期计划角标 */}
+      {hasExpiredPlans && (
+        <div className="absolute -top-1 -left-1 min-w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center px-1">
+          <CalendarX className="w-3 h-3 text-white" />
+          {expiredPlansCount > 1 && (
+            <span className="text-xs text-white font-medium ml-0.5">{expiredPlansCount}</span>
+          )}
         </div>
       )}
       

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2, Clock, Plus, Calendar, FileText, Sparkles, Download, Printer, Loader2 } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Clock, Plus, Calendar, FileText, Sparkles, Download, Printer, Loader2, CalendarX, RefreshCw, Copy, Link, Columns, Target, TrendingUp, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -13,12 +13,14 @@ import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { ClassRecordForm } from '@/components/ClassRecord/ClassRecordForm'
 import { GrowthPanel } from '@/components/Growth/GrowthPanel'
 import { StudentForm } from '@/components/Student/StudentForm'
-import { settingsDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
+import { settingsDb, progressDb, classRecordDb, lessonPlanDb, learningPhaseDb } from '@/db'
+import { classRecordDb as classRecordDbQuery } from '@/db'
 import { sendAIRequestStream } from '@/ai/client'
 import { SYSTEM_PROMPT, buildUserInput, parseAIResponse } from '@/ai/prompts'
 import { exportLessonPlanPDF, printLessonPlan } from '@/utils/pdfExport'
-import type { Student, Billing, ClassRecord, LessonPlan, AIConfig, TaskBlock as TaskBlockType } from '@/types'
+import type { Student, Billing, ClassRecord, LessonPlan, AIConfig, TaskBlock as TaskBlockType, LearningPhase, PhaseType } from '@/types'
 import { cn } from '@/lib/utils'
+import { formatDate as formatDateUtil } from '@/lib/utils'
 
 type TabType = 'info' | 'wordbank' | 'growth' | 'records' | 'plans'
 
@@ -61,6 +63,27 @@ export function StudentDetail() {
   const [extraInstruction, setExtraInstruction] = useState('')
   const [showPlanGenerator, setShowPlanGenerator] = useState(false)
   
+  // 过期计划状态
+  const [expiredPlans, setExpiredPlans] = useState<LessonPlan[]>([])
+  
+  // 课堂记录与计划关联状态
+  const [recordsWithPlan, setRecordsWithPlan] = useState<(ClassRecord & { plan?: LessonPlan })[]>([])
+  
+  // 学习阶段状态
+  const [learningPhases, setLearningPhases] = useState<LearningPhase[]>([])
+  const [showPhaseForm, setShowPhaseForm] = useState(false)
+  const [editingPhase, setEditingPhase] = useState<LearningPhase | null>(null)
+  const [phaseForm, setPhaseForm] = useState({
+    phase_name: '',
+    phase_type: 'semester' as PhaseType,
+    start_date: '',
+    end_date: '',
+    goal: '',
+    vocab_start: '',
+    vocab_end: '',
+    summary: ''
+  })
+  
   // Prompt dialog state
   const [promptState, setPromptState] = useState<{
     open: boolean
@@ -73,15 +96,21 @@ export function StudentDetail() {
     setPromptState({ open: true, title, defaultValue, onConfirm })
   }
 
-  useEffect(() => {
-    if (id) {
-      selectStudent(id)
-      loadWordbanks()
-      loadClassRecords(id)
-      loadLessonPlans(id)
-      loadAIConfig()
-    }
-  }, [id])
+  // 加载学习阶段
+  const loadLearningPhases = async (studentId: string) => {
+    const phases = await learningPhaseDb.getByStudentId(studentId)
+    setLearningPhases(phases)
+  }
+  
+  const loadRecordsWithPlan = async (studentId: string) => {
+    const records = await classRecordDbQuery.getWithPlan(studentId)
+    setRecordsWithPlan(records)
+  }
+  
+  const loadExpiredPlans = async (studentId: string) => {
+    const plans = await lessonPlanDb.getExpiredPlans(studentId)
+    setExpiredPlans(plans)
+  }
   
   const loadLessonPlans = async (studentId: string) => {
     const plans = await lessonPlanDb.getByStudentId(studentId)
@@ -132,6 +161,10 @@ export function StudentDetail() {
   const handleCreateRecord = async (data: any) => {
     await createClassRecord(data)
     setShowRecordForm(false)
+    // 刷新带计划关联的记录
+    if (id) {
+      loadRecordsWithPlan(id)
+    }
   }
   
   // AI 生成课程计划（流式输出）
@@ -205,6 +238,26 @@ export function StudentDetail() {
     return wordbank?.total_levels || 999
   }
 
+  useEffect(() => {
+    if (id) {
+      selectStudent(id)
+      loadWordbanks()
+      loadClassRecords(id)
+      loadLessonPlans(id)
+      loadAIConfig()
+      loadExpiredPlans(id)
+      loadRecordsWithPlan(id)
+      loadLearningPhases(id)
+      
+      // 检查是否需要跳转到特定 tab
+      const targetTab = sessionStorage.getItem('studentDetailTab')
+      if (targetTab && ['info', 'wordbank', 'growth', 'records', 'plans'].includes(targetTab)) {
+        setTab(targetTab as TabType)
+        sessionStorage.removeItem('studentDetailTab')
+      }
+    }
+  }, [id])
+
   if (!currentStudent) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground">
@@ -212,7 +265,75 @@ export function StudentDetail() {
       </div>
     )
   }
-
+  
+  const handleCreatePhase = async () => {
+    if (!id) return
+    await learningPhaseDb.create({
+      student_id: id,
+      phase_name: phaseForm.phase_name || undefined,
+      phase_type: phaseForm.phase_type,
+      start_date: phaseForm.start_date || undefined,
+      end_date: phaseForm.end_date || undefined,
+      goal: phaseForm.goal || undefined,
+      vocab_start: phaseForm.vocab_start ? parseInt(phaseForm.vocab_start) : undefined,
+      vocab_end: phaseForm.vocab_end ? parseInt(phaseForm.vocab_end) : undefined,
+      summary: phaseForm.summary || undefined
+    })
+    loadLearningPhases(id)
+    setShowPhaseForm(false)
+    resetPhaseForm()
+  }
+  
+  const handleUpdatePhase = async () => {
+    if (!editingPhase || !id) return
+    await learningPhaseDb.update(editingPhase.id, {
+      phase_name: phaseForm.phase_name || undefined,
+      phase_type: phaseForm.phase_type,
+      start_date: phaseForm.start_date || undefined,
+      end_date: phaseForm.end_date || undefined,
+      goal: phaseForm.goal || undefined,
+      vocab_start: phaseForm.vocab_start ? parseInt(phaseForm.vocab_start) : undefined,
+      vocab_end: phaseForm.vocab_end ? parseInt(phaseForm.vocab_end) : undefined,
+      summary: phaseForm.summary || undefined
+    })
+    loadLearningPhases(id)
+    setEditingPhase(null)
+    resetPhaseForm()
+  }
+  
+  const handleDeletePhase = async (phaseId: string) => {
+    if (!confirm('确定要删除这个学习阶段吗？')) return
+    await learningPhaseDb.delete(phaseId)
+    if (id) loadLearningPhases(id)
+  }
+  
+  const resetPhaseForm = () => {
+    setPhaseForm({
+      phase_name: '',
+      phase_type: 'semester',
+      start_date: '',
+      end_date: '',
+      goal: '',
+      vocab_start: '',
+      vocab_end: '',
+      summary: ''
+    })
+  }
+  
+  const openEditPhase = (phase: LearningPhase) => {
+    setEditingPhase(phase)
+    setPhaseForm({
+      phase_name: phase.phase_name || '',
+      phase_type: phase.phase_type,
+      start_date: phase.start_date || '',
+      end_date: phase.end_date || '',
+      goal: phase.goal || '',
+      vocab_start: phase.vocab_start?.toString() || '',
+      vocab_end: phase.vocab_end?.toString() || '',
+      summary: phase.summary || ''
+    })
+  }
+  
   const tabs: { key: TabType; label: string }[] = [
     { key: 'info', label: '基本信息' },
     { key: 'wordbank', label: '词库进度' },
@@ -556,7 +677,7 @@ export function StudentDetail() {
                 </div>
                 
                 {/* 课堂记录列表 */}
-                {classRecords.length === 0 ? (
+                {recordsWithPlan.length === 0 ? (
                   <div className="text-center text-muted-foreground py-12">
                     <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p>暂无课堂记录</p>
@@ -564,7 +685,7 @@ export function StudentDetail() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {classRecords.map((record) => (
+                    {recordsWithPlan.map((record) => (
                       <Card key={record.id}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
@@ -591,38 +712,107 @@ export function StudentDetail() {
                                 )}>
                                   {record.attendance === 'present' ? '到课' : record.attendance === 'late' ? '迟到' : '缺课'}
                                 </span>
+                                {record.plan_id && (
+                                  <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 flex items-center gap-1">
+                                    <Link className="w-3 h-3" />
+                                    关联计划
+                                  </span>
+                                )}
                               </div>
                               
-                              {/* 任务块 */}
-                              <div className="flex flex-wrap gap-2">
-                                {record.tasks.map((task, index) => (
-                                  <TaskBlock
-                                    key={index}
-                                    task={task}
-                                    index={index}
-                                  />
-                                ))}
-                              </div>
-                              
-                              {/* 完成状态和表现 */}
-                              <div className="flex items-center gap-4 text-sm">
-                                <span className={cn(
-                                  record.task_completed === 'completed' && "text-green-600",
-                                  record.task_completed === 'partial' && "text-yellow-600",
-                                  record.task_completed === 'not_completed' && "text-red-600"
-                                )}>
-                                  {record.task_completed === 'completed' ? '✓ 全部完成' : 
-                                   record.task_completed === 'partial' ? '◐ 部分完成' : '✗ 未完成'}
-                                </span>
-                                <span className={cn(
-                                  record.performance === 'excellent' && "text-green-600",
-                                  record.performance === 'good' && "text-blue-600",
-                                  record.performance === 'needs_improvement' && "text-orange-600"
-                                )}>
-                                  {record.performance === 'excellent' ? '表现优秀' : 
-                                   record.performance === 'good' ? '表现良好' : '待提高'}
-                                </span>
-                              </div>
+                              {/* 双栏对比展示：原定计划 vs 实际完成 */}
+                              {record.plan ? (
+                                <div className="border rounded-lg overflow-hidden">
+                                  <div className="grid grid-cols-2 divide-x">
+                                    {/* 左栏：原定计划 */}
+                                    <div className="bg-blue-50/50 p-3">
+                                      <div className="flex items-center gap-2 mb-2 text-blue-700">
+                                        <Columns className="w-4 h-4" />
+                                        <span className="text-xs font-medium">原定计划</span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {record.plan.tasks.map((task, idx) => (
+                                          <span key={idx} className="text-xs bg-white border border-blue-200 px-2 py-1 rounded">
+                                            {task.wordbank_label || task.content || task.type}
+                                            {task.level_from && task.level_to && ` 第${task.level_from}-${task.level_to}关`}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    
+                                    {/* 右栏：实际完成 */}
+                                    <div className="bg-green-50/50 p-3">
+                                      <div className="flex items-center gap-2 mb-2 text-green-700">
+                                        <FileText className="w-4 h-4" />
+                                        <span className="text-xs font-medium">实际完成</span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {record.tasks.map((task, idx) => (
+                                          <span key={idx} className="text-xs bg-white border border-green-200 px-2 py-1 rounded">
+                                            {task.wordbank_label || task.content || task.type}
+                                            {task.level_reached && ` → 第${task.level_reached}关`}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* 完成状态对比 */}
+                                  <div className="border-t p-2 bg-muted/30 flex items-center gap-4">
+                                    <span className={cn(
+                                      "text-sm font-medium",
+                                      record.task_completed === 'completed' && "text-green-600",
+                                      record.task_completed === 'partial' && "text-yellow-600",
+                                      record.task_completed === 'not_completed' && "text-red-600"
+                                    )}>
+                                      {record.task_completed === 'completed' ? '✓ 全部完成' : 
+                                       record.task_completed === 'partial' ? '◐ 部分完成' : '✗ 未完成'}
+                                    </span>
+                                    <span className={cn(
+                                      "text-sm",
+                                      record.performance === 'excellent' && "text-green-600",
+                                      record.performance === 'good' && "text-blue-600",
+                                      record.performance === 'needs_improvement' && "text-orange-600"
+                                    )}>
+                                      表现: {record.performance === 'excellent' ? '优秀' : 
+                                       record.performance === 'good' ? '良好' : '待提高'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  {/* 无关联计划时正常显示任务块 */}
+                                  <div className="flex flex-wrap gap-2">
+                                    {record.tasks.map((task, index) => (
+                                      <TaskBlock
+                                        key={index}
+                                        task={task}
+                                        index={index}
+                                      />
+                                    ))}
+                                  </div>
+                                  
+                                  {/* 完成状态和表现 */}
+                                  <div className="flex items-center gap-4 text-sm">
+                                    <span className={cn(
+                                      record.task_completed === 'completed' && "text-green-600",
+                                      record.task_completed === 'partial' && "text-yellow-600",
+                                      record.task_completed === 'not_completed' && "text-red-600"
+                                    )}>
+                                      {record.task_completed === 'completed' ? '✓ 全部完成' : 
+                                       record.task_completed === 'partial' ? '◐ 部分完成' : '✗ 未完成'}
+                                    </span>
+                                    <span className={cn(
+                                      record.performance === 'excellent' && "text-green-600",
+                                      record.performance === 'good' && "text-blue-600",
+                                      record.performance === 'needs_improvement' && "text-orange-600"
+                                    )}>
+                                      {record.performance === 'excellent' ? '表现优秀' : 
+                                       record.performance === 'good' ? '表现良好' : '待提高'}
+                                    </span>
+                                  </div>
+                                </>
+                              )}
                               
                               {/* 备注 */}
                               {record.issues && (
@@ -640,6 +830,9 @@ export function StudentDetail() {
                               onClick={async () => {
                                 if (confirm('确定删除此课堂记录？')) {
                                   await deleteClassRecord(record.id)
+                                  if (id) {
+                                    loadRecordsWithPlan(id)
+                                  }
                                 }
                               }}
                             >
@@ -751,6 +944,104 @@ export function StudentDetail() {
                   </Button>
                 </div>
                 
+                {/* 过期计划警告 */}
+                {expiredPlans.length > 0 && (
+                  <Card className="border-orange-300 bg-orange-50/50">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <CalendarX className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-orange-700 mb-2">
+                            有 {expiredPlans.length} 个过期未执行的课程计划
+                          </h4>
+                          <div className="space-y-2">
+                            {expiredPlans.map(plan => (
+                              <div key={plan.id} className="flex items-center justify-between bg-white rounded-lg p-3 border border-orange-200">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Calendar className="w-4 h-4 text-orange-500" />
+                                    <span className="font-medium">{plan.plan_date}</span>
+                                    <span className="text-xs text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">已过期</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {plan.tasks.slice(0, 3).map((task, idx) => (
+                                      <span key={idx} className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                                        {task.wordbank_label || task.content || task.type}
+                                      </span>
+                                    ))}
+                                    {plan.tasks.length > 3 && (
+                                      <span className="text-xs text-muted-foreground">+{plan.tasks.length - 3}更多</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 ml-3">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    title="改期"
+                                    onClick={() => {
+                                      showPrompt('请输入新的计划日期 (YYYY-MM-DD):', formatDateUtil(new Date()), async (newDate) => {
+                                        if (newDate) {
+                                          await lessonPlanDb.update(plan.id, { plan_date: newDate })
+                                          loadLessonPlans(id!)
+                                          loadExpiredPlans(id!)
+                                        }
+                                      })
+                                    }}
+                                  >
+                                    <RefreshCw className="w-4 h-4 mr-1" />
+                                    改期
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    title="沿用到新计划"
+                                    onClick={() => {
+                                      showPrompt('请输入新计划的日期 (YYYY-MM-DD):', formatDateUtil(new Date()), async (newDate) => {
+                                        if (newDate) {
+                                          // 创建新计划
+                                          await lessonPlanDb.create({
+                                            student_id: id!,
+                                            plan_date: newDate,
+                                            tasks: plan.tasks,
+                                            notes: plan.notes || undefined,
+                                            generated_by_ai: false
+                                          })
+                                          // 删除过期计划
+                                          await lessonPlanDb.delete(plan.id)
+                                          loadLessonPlans(id!)
+                                          loadExpiredPlans(id!)
+                                        }
+                                      })
+                                    }}
+                                  >
+                                    <Copy className="w-4 h-4 mr-1" />
+                                    沿用
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={async () => {
+                                      if (confirm('确定要删除这个过期计划吗？')) {
+                                        await lessonPlanDb.delete(plan.id)
+                                        loadLessonPlans(id!)
+                                        loadExpiredPlans(id!)
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                
                 {/* 课程计划列表 */}
                 {lessonPlans.length === 0 ? (
                   <div className="text-center text-muted-foreground py-12">
@@ -760,8 +1051,10 @@ export function StudentDetail() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {lessonPlans.map((plan) => (
-                      <Card key={plan.id}>
+                    {lessonPlans.map((plan) => {
+                      const isExpired = expiredPlans.some(ep => ep.id === plan.id)
+                      return (
+                      <Card key={plan.id} className={cn(isExpired && "border-orange-300 bg-orange-50/30")}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
                             <div className="space-y-3 flex-1">
@@ -774,6 +1067,11 @@ export function StudentDetail() {
                                 {plan.generated_by_ai && (
                                   <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-600">
                                     AI 生成
+                                  </span>
+                                )}
+                                {isExpired && (
+                                  <span className="text-xs px-2 py-0.5 rounded bg-orange-500/10 text-orange-600">
+                                    已过期
                                   </span>
                                 )}
                               </div>
@@ -841,7 +1139,8 @@ export function StudentDetail() {
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </>
