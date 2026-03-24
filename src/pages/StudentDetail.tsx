@@ -14,7 +14,6 @@ import { ClassRecordForm } from '@/components/ClassRecord/ClassRecordForm'
 import { GrowthPanel } from '@/components/Growth/GrowthPanel'
 import { StudentForm } from '@/components/Student/StudentForm'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb, learningPhaseDb } from '@/db'
-import { classRecordDb as classRecordDbQuery } from '@/db'
 import { sendAIRequestStream } from '@/ai/client'
 import { SYSTEM_PROMPT, buildUserInput, parseAIResponse } from '@/ai/prompts'
 import { exportLessonPlanPDF, printLessonPlan } from '@/utils/pdfExport'
@@ -69,6 +68,9 @@ export function StudentDetail() {
   // 课堂记录与计划关联状态
   const [recordsWithPlan, setRecordsWithPlan] = useState<(ClassRecord & { plan?: LessonPlan })[]>([])
   
+  // 学情反馈原文展开状态
+  const [expandedFeedbackId, setExpandedFeedbackId] = useState<string | null>(null)
+  
   // 学习阶段状态
   const [learningPhases, setLearningPhases] = useState<LearningPhase[]>([])
   const [showPhaseForm, setShowPhaseForm] = useState(false)
@@ -103,7 +105,7 @@ export function StudentDetail() {
   }
   
   const loadRecordsWithPlan = async (studentId: string) => {
-    const records = await classRecordDbQuery.getWithPlan(studentId)
+    const records = await classRecordDb.getWithPlan(studentId)
     setRecordsWithPlan(records)
   }
   
@@ -819,6 +821,30 @@ export function StudentDetail() {
                                 <p className="text-sm text-muted-foreground">
                                   问题: {record.issues}
                                 </p>
+                              )}
+                              
+                              {/* 学情反馈原文 */}
+                              {record.detail_feedback && (
+                                <div>
+                                  <button
+                                    onClick={() => setExpandedFeedbackId(
+                                      expandedFeedbackId === record.id ? null : record.id
+                                    )}
+                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    {expandedFeedbackId === record.id ? '收起反馈原文' : '查看完整反馈原文'}
+                                  </button>
+                                  
+                                  {expandedFeedbackId === record.id && (
+                                    <div className="mt-2 p-3 bg-muted/50 rounded-lg border border-muted">
+                                      <p className="text-xs text-muted-foreground mb-1 font-medium">学情反馈原文</p>
+                                      <pre className="text-sm whitespace-pre-wrap font-sans text-foreground leading-relaxed">
+                                        {record.detail_feedback}
+                                      </pre>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
                             

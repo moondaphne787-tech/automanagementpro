@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Clock, User, AlertCircle, Check, X, Loader2, CalendarDays, 
   Info, Trash2, RefreshCw, ChevronLeft, ChevronRight, AlertTriangle,
-  Moon, Sun
+  Moon, Sun, ChevronUp, ChevronDown, FileText
 } from 'lucide-react'
 import { studentDb, teacherDb, scheduledClassDb, studentSchedulePreferenceDb, teacherAvailabilityDb } from '@/db'
 import type { Student, Teacher, ScheduledClass, DayOfWeek, Billing, StudentSchedulePreference, TeacherAvailability, LevelType } from '@/types'
+import { getGradesFromSuitableGrades } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { DateInput } from '@/components/ui/date-input'
@@ -388,7 +389,8 @@ function StudentRowComponent({
   teachers,
   getTeacherAssignStatuses,
   onAssign,
-  onRemove
+  onRemove,
+  scrollLeft
 }: { 
   row: StudentRow
   timeRangeStart: number
@@ -397,6 +399,7 @@ function StudentRowComponent({
   getTeacherAssignStatuses: (slot: StudentSlot) => TeacherAssignStatus[]
   onAssign: (slotId: string, teacherId: string) => void
   onRemove: (slotId: string) => void
+  scrollLeft: number
 }) {
   const totalWidth = ((timeRangeEnd - timeRangeStart) / 60) * HOUR_WIDTH
   
@@ -410,10 +413,129 @@ function StudentRowComponent({
         </div>
       </div>
       
-      {/* 时间轴区域 - 移除 overflow-hidden，使用固定宽度 */}
-      <div className="relative" style={{ height: ROW_HEIGHT, width: `${totalWidth}px`, minWidth: `${totalWidth}px` }}>
-        {/* 时间网格线 - 需要包含结束时间的那条线，所以 +1 */}
-        <div className="absolute inset-0">
+      {/* 时间轴区域 - 使用 transform 同步滚动，与助教区域保持一致 */}
+      <div className="flex-1 overflow-hidden">
+        <div
+          className="relative"
+          style={{
+            width: `${totalWidth}px`,
+            height: `${ROW_HEIGHT}px`,
+            transform: `translateX(-${scrollLeft}px)`,
+          }}
+        >
+          {/* 时间网格线 */}
+          <div className="absolute inset-0">
+            {Array.from({ length: (timeRangeEnd - timeRangeStart) / 60 + 1 }).map((_, i) => (
+              <div
+                key={i}
+                className="absolute top-0 bottom-0 border-l border-dashed border-muted"
+                style={{ left: `${i * HOUR_WIDTH}px` }}
+              />
+            ))}
+          </div>
+          
+          {/* 时段色块 */}
+          <div className="relative" style={{ width: `${totalWidth}px`, height: '100%' }}>
+            {row.slots.map(slot => (
+              <StudentSlotBlock
+                key={slot.id}
+                slot={slot}
+                timeRangeStart={timeRangeStart}
+                teachers={teachers}
+                teacherAssignStatuses={getTeacherAssignStatuses(slot)}
+                onAssign={(teacherId) => onAssign(slot.id, teacherId)}
+                onRemove={() => onRemove(slot.id)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 助教时间轴行组件（用于下方助教排课一览）
+function TeacherTimelineRow({
+  card,
+  timeRangeStart,
+  timeRangeEnd,
+  scheduledClasses,
+  students,
+  scrollLeft,
+  selectedDate,
+  onClick
+}: {
+  card: TeacherCardData
+  timeRangeStart: number
+  timeRangeEnd: number
+  scheduledClasses: (ScheduledClass & { student?: Teacher })[]
+  students: (Student & { billing: Billing | null; preferences: StudentSchedulePreference[] })[]
+  scrollLeft: number
+  selectedDate: string
+  onClick: () => void
+}) {
+  const totalWidth = ((timeRangeEnd - timeRangeStart) / 60) * HOUR_WIDTH
+  
+  // 获取该助教今日可用时段 - 使用选中日期计算星期
+  const dayOfWeek = getDayOfWeek(selectedDate)
+  const todayAvail = (card.teacher.availabilities || []).filter(
+    (a: TeacherAvailability) => a.day_of_week === dayOfWeek
+  )
+  
+  // 获取该助教今日已排课程
+  const teacherClasses = scheduledClasses.filter(
+    c => c.teacher_id === card.teacher.id && c.status === 'scheduled'
+  )
+  
+  return (
+    <div
+      className="flex border-b hover:bg-muted/20 cursor-pointer"
+      style={{ height: `${ROW_HEIGHT}px` }}
+      onClick={onClick}
+    >
+      {/* 助教名称列 */}
+      <div className="w-32 flex-shrink-0 border-r px-2 flex flex-col justify-center">
+        <div
+          className="text-xs font-medium truncate"
+          style={{ color: card.color }}
+        >
+          {card.teacher.name}
+        </div>
+        <div className="text-[10px] text-muted-foreground">
+          {card.scheduledHours > 0 ? `已排 ${card.scheduledHours}h` : '未排课'}
+        </div>
+      </div>
+      
+      {/* 时间轴区域（通过 translateX 同步滚动） */}
+      <div className="flex-1 overflow-hidden">
+        <div
+          className="relative h-full"
+          style={{
+            width: `${totalWidth}px`,
+            transform: `translateX(-${scrollLeft}px)`,
+          }}
+        >
+          {/* 可用时段背景 */}
+          {todayAvail.map((avail: TeacherAvailability, i: number) => {
+            const startMin = timeToMinutes(avail.start_time || '00:00')
+            const endMin = timeToMinutes(avail.end_time || '23:59')
+            const left = ((startMin - timeRangeStart) / 60) * HOUR_WIDTH
+            const width = ((endMin - startMin) / 60) * HOUR_WIDTH
+            return (
+              <div
+                key={i}
+                className="absolute top-1 bottom-1 rounded"
+                style={{
+                  left: `${left}px`,
+                  width: `${Math.max(width, 0)}px`,
+                  backgroundColor: card.color + '15',
+                  border: `1px solid ${card.color}30`,
+                }}
+              />
+            )
+          })}
+          
+          {/* 时间网格线 */}
           {Array.from({ length: (timeRangeEnd - timeRangeStart) / 60 + 1 }).map((_, i) => (
             <div
               key={i}
@@ -421,21 +543,37 @@ function StudentRowComponent({
               style={{ left: `${i * HOUR_WIDTH}px` }}
             />
           ))}
-        </div>
-        
-        {/* 时段色块 */}
-        <div className="relative" style={{ width: `${totalWidth}px`, height: '100%' }}>
-          {row.slots.map(slot => (
-            <StudentSlotBlock
-              key={slot.id}
-              slot={slot}
-              timeRangeStart={timeRangeStart}
-              teachers={teachers}
-              teacherAssignStatuses={getTeacherAssignStatuses(slot)}
-              onAssign={(teacherId) => onAssign(slot.id, teacherId)}
-              onRemove={() => onRemove(slot.id)}
-            />
-          ))}
+          
+          {/* 已排课程块 */}
+          {teacherClasses.map(cls => {
+            const startMin = timeToMinutes(cls.start_time || '09:00')
+            const endMin = timeToMinutes(cls.end_time || '11:00')
+            const left = ((startMin - timeRangeStart) / 60) * HOUR_WIDTH
+            const width = ((endMin - startMin) / 60) * HOUR_WIDTH
+            const student = students.find(s => s.id === cls.student_id)
+            
+            return (
+              <div
+                key={cls.id}
+                className="absolute top-2 bottom-2 rounded flex items-center justify-center text-white text-[10px] font-medium overflow-hidden"
+                style={{
+                  left: `${left}px`,
+                  width: `${Math.max(width - 2, 40)}px`,
+                  backgroundColor: card.color,
+                }}
+                title={`${student?.name || '未知'} ${cls.start_time?.slice(0,5)}-${cls.end_time?.slice(0,5)}`}
+              >
+                <span className="truncate px-1">{student?.name}</span>
+              </div>
+            )
+          })}
+          
+          {/* 无时段占位 */}
+          {todayAvail.length === 0 && (
+            <div className="absolute inset-0 flex items-center pl-4">
+              <span className="text-xs text-muted-foreground">今日无可用时段</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -815,6 +953,52 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
   // 助教详情面板状态
   const [selectedTeacherCard, setSelectedTeacherCard] = useState<TeacherCardData | null>(null)
   
+  // 助教面板折叠状态
+  const [teacherPanelCollapsed, setTeacherPanelCollapsed] = useState(false)
+  
+  // 横向滚动位置（用于同步学生和助教面板）
+  const [scrollLeft, setScrollLeft] = useState(0)
+  
+  // 分隔线拖动状态 - 学生区高度百分比
+  const [studentPanelHeightPercent, setStudentPanelHeightPercent] = useState(60)
+  const [isDragging, setIsDragging] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  
+  // 分隔线拖动处理
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+  
+  // 全局拖动事件
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !containerRef.current) return
+      
+      const container = containerRef.current
+      const rect = container.getBoundingClientRect()
+      const newPercent = ((e.clientY - rect.top) / rect.height) * 100
+      
+      // 限制范围：最小30%，最大85%
+      const clampedPercent = Math.max(30, Math.min(85, newPercent))
+      setStudentPanelHeightPercent(clampedPercent)
+    }
+    
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+    
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    }
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging])
+  
   // 关闭详情面板
   const handleCloseTeacherDetail = useCallback(() => {
     setSelectedTeacherCard(null)
@@ -826,44 +1010,21 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
     loadData()
   }, [])
   
-  // 横向滚动同步
+  // 横向滚动同步 - 只需要监听时间轴头部的滚动
   const headerScrollRef = useRef<HTMLDivElement>(null)
-  const bodyScrollRef = useRef<HTMLDivElement>(null)
   
-  // 使用 useEffect 同步滚动
+  // 监听时间轴头部滚动，同步更新 scrollLeft 状态
   useEffect(() => {
     const headerEl = headerScrollRef.current
-    const bodyEl = bodyScrollRef.current
+    if (!headerEl) return
     
-    if (!headerEl || !bodyEl) return
-    
-    let isHeaderScrolling = false
-    let isBodyScrolling = false
-    
-    const syncHeaderToBody = () => {
-      if (isHeaderScrolling) return
-      isBodyScrolling = true
-      headerEl.scrollLeft = bodyEl.scrollLeft
-      requestAnimationFrame(() => {
-        isBodyScrolling = false
-      })
+    const handleScroll = () => {
+      setScrollLeft(headerEl.scrollLeft)
     }
     
-    const syncBodyToHeader = () => {
-      if (isBodyScrolling) return
-      isHeaderScrolling = true
-      bodyEl.scrollLeft = headerEl.scrollLeft
-      requestAnimationFrame(() => {
-        isHeaderScrolling = false
-      })
-    }
-    
-    headerEl.addEventListener('scroll', syncBodyToHeader)
-    bodyEl.addEventListener('scroll', syncHeaderToBody)
-    
+    headerEl.addEventListener('scroll', handleScroll)
     return () => {
-      headerEl.removeEventListener('scroll', syncBodyToHeader)
-      bodyEl.removeEventListener('scroll', syncHeaderToBody)
+      headerEl.removeEventListener('scroll', handleScroll)
     }
   }, [loading])
   
@@ -1174,7 +1335,8 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
     
     // 4. 检查年级匹配（软冲突）
     if (teacher.suitable_grades && slot.student.grade) {
-      if (!teacher.suitable_grades.includes(slot.student.grade)) {
+      const suitableGradeList = getGradesFromSuitableGrades(teacher.suitable_grades)
+      if (suitableGradeList.length > 0 && !suitableGradeList.includes(slot.student.grade)) {
         reasons.push(`年级不匹配(适合: ${teacher.suitable_grades})`)
       }
     }
@@ -1394,27 +1556,30 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
         </div>
       </header>
       
-      {/* 主内容区 */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* 主内容区：上下分区 */}
+      <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden relative select-none">
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <>
-            {/* 左侧：学生时间轴表格 */}
-            <div className="w-[85%] flex flex-col border-r">
-              {/* 时间轴头部 */}
-              <div className="h-10 border-b bg-muted/30 flex">
+            {/* 上方：学生排课区（动态高度，内容可滚动） */}
+            <div 
+              className="flex flex-col overflow-hidden flex-shrink-0" 
+              style={{ height: `${studentPanelHeightPercent}%` }}
+            >
+              {/* 时间轴头部（带学生列标题） */}
+              <div className="h-10 border-b bg-muted/30 flex flex-shrink-0">
                 <div className="w-32 flex-shrink-0 border-r flex items-center justify-center text-sm font-medium text-muted-foreground">
                   学生
                 </div>
-                <div 
+                <div
                   ref={headerScrollRef}
                   className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-none"
                 >
                   <div className="flex" style={{ width: `${((timeRange.end - timeRange.start) / 60) * HOUR_WIDTH}px` }}>
-                    {timeLabels.map((time, i) => (
+                    {timeLabels.map((time) => (
                       <div
                         key={time}
                         className="flex-shrink-0 text-center text-xs text-muted-foreground border-l"
@@ -1427,14 +1592,11 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                 </div>
               </div>
               
-              {/* 学生行 */}
-              <div 
-                ref={bodyScrollRef}
-                className="flex-1 overflow-auto"
-              >
+              {/* 学生行（可纵向滚动） */}
+              <div className="flex-1 overflow-y-auto">
                 {studentRows.length === 0 ? (
-                  <div className="flex items-center justify-center h-32 text-muted-foreground">
-                    今日无待排课学生
+                  <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
+                    今日无待排课学生（请先为学生设置时段偏好）
                   </div>
                 ) : (
                   studentRows.map(row => (
@@ -1447,15 +1609,113 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                       getTeacherAssignStatuses={getTeacherAssignStatuses}
                       onAssign={handleAssign}
                       onRemove={handleRemove}
+                      scrollLeft={scrollLeft}
                     />
                   ))
                 )}
               </div>
             </div>
             
-            {/* 右侧：助教状态面板 */}
-            <div className="w-[15%] flex flex-col relative">
-              {/* 助教详情悬浮卡片 */}
+            {/* 可拖动分隔栏 */}
+            <div
+              className={`h-1.5 bg-border hover:bg-primary/50 cursor-row-resize flex-shrink-0 transition-colors ${
+                isDragging ? 'bg-primary' : ''
+              }`}
+              onMouseDown={handleDividerMouseDown}
+            />
+            
+            {/* 分隔栏信息栏 + 折叠控制 */}
+            <div
+              className="h-7 border-b bg-muted/30 flex items-center justify-between px-4 flex-shrink-0"
+            >
+              <span className="text-xs font-medium text-muted-foreground">
+                今日助教排课一览
+                <span className="ml-2 text-primary">
+                  ({teacherCards.filter(c => c.hasAvailabilityToday).length} 位有时段)
+                </span>
+              </span>
+              <div className="flex items-center gap-2">
+                {/* 可用助教筛选切换 */}
+                <button
+                  className={`text-[10px] px-2 py-0.5 rounded ${
+                    showOnlyAvailable ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                  }`}
+                  onClick={e => { e.stopPropagation(); setShowOnlyAvailable(!showOnlyAvailable) }}
+                >
+                  {showOnlyAvailable ? '仅今日有空' : '显示全部'}
+                </button>
+                <button
+                  className="p-0.5 rounded hover:bg-muted"
+                  onClick={() => setTeacherPanelCollapsed(!teacherPanelCollapsed)}
+                  title={teacherPanelCollapsed ? '展开助教面板' : '折叠助教面板'}
+                >
+                  {teacherPanelCollapsed 
+                    ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  }
+                </button>
+              </div>
+            </div>
+            
+            {/* 下方：助教排课一览（动态高度，填充剩余空间） */}
+            {!teacherPanelCollapsed && (
+              <div className="border-b flex flex-col flex-1 overflow-hidden">
+                {/* 助教面板时间轴头部 */}
+                <div className="h-7 border-b bg-muted/20 flex flex-shrink-0">
+                  <div className="w-32 flex-shrink-0 border-r flex items-center px-2">
+                    <span className="text-xs text-muted-foreground">助教</span>
+                  </div>
+                  {/* 时间轴标签（只读，与上方同步显示） */}
+                  <div className="flex-1 overflow-hidden">
+                    <div className="flex" style={{ width: `${((timeRange.end - timeRange.start) / 60) * HOUR_WIDTH}px`, transform: `translateX(-${scrollLeft}px)` }}>
+                      {timeLabels.map((time) => (
+                        <div
+                          key={time}
+                          className="flex-shrink-0 text-center text-[10px] text-muted-foreground border-l"
+                          style={{ width: `${HOUR_WIDTH}px` }}
+                        >
+                          {time.slice(0, 5)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 助教行（可纵向滚动，填充剩余空间） */}
+                <div className="overflow-y-auto flex-1">
+                  {(() => {
+                    const displayCards = showOnlyAvailable
+                      ? teacherCards.filter(c => c.hasAvailabilityToday)
+                      : teacherCards
+                    
+                    if (displayCards.length === 0) {
+                      return (
+                        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                          今日无可用助教
+                        </div>
+                      )
+                    }
+                    
+                    return displayCards.map(card => (
+                      <TeacherTimelineRow
+                        key={card.teacher.id}
+                        card={card}
+                        timeRangeStart={timeRange.start}
+                        timeRangeEnd={timeRange.end}
+                        scheduledClasses={scheduledClasses}
+                        students={students}
+                        scrollLeft={scrollLeft}
+                        selectedDate={selectedDate}
+                        onClick={() => setSelectedTeacherCard(card)}
+                      />
+                    ))
+                  })()}
+                </div>
+              </div>
+            )}
+            
+            {/* 助教详情浮层（点击助教行后出现） */}
+            {selectedTeacherCard && (
               <TeacherDetailCard
                 open={selectedTeacherCard !== null}
                 onClose={handleCloseTeacherDetail}
@@ -1465,74 +1725,7 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                 onRemoveClass={handleRemoveClassFromDetail}
                 selectedDate={selectedDate}
               />
-              
-              <div className="h-10 border-b bg-muted/30 flex items-center justify-between px-2">
-                <div className="flex items-center">
-                  <span className="font-medium text-sm">助教</span>
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    ({teacherCards.filter(c => c.hasAvailabilityToday && !c.isFull).length})
-                  </span>
-                </div>
-                <button
-                  className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
-                    showOnlyAvailable 
-                      ? 'bg-blue-100 text-blue-700' 
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                  onClick={() => setShowOnlyAvailable(!showOnlyAvailable)}
-                  title={showOnlyAvailable ? '点击显示全部助教' : '点击只显示今日有空的助教'}
-                >
-                  {showOnlyAvailable ? '仅今日有空' : '全部'}
-                </button>
-              </div>
-              
-              <div className="flex-1 overflow-auto p-2">
-                <div className="space-y-1.5">
-                  {/* 根据筛选条件过滤助教 */}
-                  {(() => {
-                    const filteredCards = showOnlyAvailable 
-                      ? teacherCards.filter(c => c.hasAvailabilityToday)
-                      : teacherCards
-                    
-                    const availableCards = filteredCards.filter(c => !c.isFull)
-                    const fullCards = filteredCards.filter(c => c.isFull)
-                    
-                    return (
-                      <>
-                        {/* 可用助教 */}
-                        {availableCards.map(card => (
-                          <TeacherStatusCard 
-                            key={card.teacher.id} 
-                            data={card} 
-                            onClick={() => setSelectedTeacherCard(card)}
-                          />
-                        ))}
-                        
-                        {/* 今日已满助教 */}
-                        {fullCards.length > 0 && (
-                          <div className="pt-2 border-t">
-                            <div className="text-[10px] text-muted-foreground mb-1">已满</div>
-                            {fullCards.map(card => (
-                              <TeacherStatusCard 
-                                key={card.teacher.id} 
-                                data={card}
-                                onClick={() => setSelectedTeacherCard(card)}
-                              />
-                            ))}
-                          </div>
-                        )}
-                        
-                        {filteredCards.length === 0 && (
-                          <div className="text-center text-muted-foreground py-4 text-xs">
-                            {showOnlyAvailable ? '今日无可用助教' : '暂无助教'}
-                          </div>
-                        )}
-                      </>
-                    )
-                  })()}
-                </div>
-              </div>
-            </div>
+            )}
           </>
         )}
       </div>

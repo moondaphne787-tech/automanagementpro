@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, Trash2, Clock, Calendar, Phone, GraduationCap, Award, Edit, AlertTriangle, Check, TrendingUp, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 import { teacherDb, teacherAvailabilityDb, scheduledClassDb } from '@/db'
 import type { Teacher, TeacherAvailability, ScheduledClass, DayOfWeek, TrainingStage } from '@/types'
-import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS } from '@/types'
+import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, SUITABLE_GRADE_OPTIONS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -464,7 +464,20 @@ export function TeacherDetail() {
               </div>
               <div>
                 <span className="text-muted-foreground">适合年级: </span>
-                <span>{teacher.suitable_grades || '未填写'}</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {teacher.suitable_grades 
+                    ? teacher.suitable_grades.split(',').map(g => {
+                        const trimmed = g.trim()
+                        const option = SUITABLE_GRADE_OPTIONS.find(o => o.value === trimmed)
+                        return (
+                          <span key={trimmed} className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs">
+                            {option?.label || trimmed}
+                          </span>
+                        )
+                      })
+                    : <span className="text-muted-foreground">未设置</span>
+                  }
+                </div>
               </div>
               <div>
                 <span className="text-muted-foreground">适合程度: </span>

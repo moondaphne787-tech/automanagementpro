@@ -7,7 +7,7 @@ import { DateInput } from '@/components/ui/date-input'
 import { Plus, Trash2, TrendingUp, TrendingDown, Minus, CheckCircle, XCircle, Calendar } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatDate, cn } from '@/lib/utils'
-import { classRecordDb, settingsDb, examScoreDb } from '@/db'
+import { classRecordDb, examScoreDb } from '@/db'
 import type { ExamScore, StudentWordbankProgress, ClassRecord, PhaseType } from '@/types'
 import { ExamType } from '@/types'
 
@@ -439,49 +439,17 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
   // 完成率趋势数据
   const [completionRateData, setCompletionRateData] = useState<{ date: string; total: number; completed: number; rate: number }[]>([])
   
-  // 学期配置
-  const [semesterConfig, setSemesterConfig] = useState<SemesterConfig>({
-    spring_start: '',
-    spring_end: '',
-    summer_start: '',
-    summer_end: '',
-    autumn_start: '',
-    autumn_end: '',
-    winter_start: '',
-    winter_end: ''
-  })
+  // 从 store 获取学期配置
+  const semesterConfig = useAppStore(state => state.semesterConfig)
 
   useEffect(() => {
     loadExamScores(studentId)
     loadCompletionRateData(studentId)
-    loadSemesterConfig()
   }, [studentId])
   
   const loadCompletionRateData = async (studentId: string) => {
     const data = await classRecordDb.getCompletionRateStats(studentId, 12) // 最近12周
     setCompletionRateData(data)
-  }
-  
-  const loadSemesterConfig = async () => {
-    const springStart = await settingsDb.get('semester_spring_start')
-    const springEnd = await settingsDb.get('semester_spring_end')
-    const summerStart = await settingsDb.get('semester_summer_start')
-    const summerEnd = await settingsDb.get('semester_summer_end')
-    const autumnStart = await settingsDb.get('semester_autumn_start')
-    const autumnEnd = await settingsDb.get('semester_autumn_end')
-    const winterStart = await settingsDb.get('semester_winter_start')
-    const winterEnd = await settingsDb.get('semester_winter_end')
-    
-    setSemesterConfig({
-      spring_start: springStart || '',
-      spring_end: springEnd || '',
-      summer_start: summerStart || '',
-      summer_end: summerEnd || '',
-      autumn_start: autumnStart || '',
-      autumn_end: autumnEnd || '',
-      winter_start: winterStart || '',
-      winter_end: winterEnd || ''
-    })
   }
 
   // 获取自动计算的学习阶段列表
@@ -489,6 +457,9 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
     const phases: AutoPhase[] = []
     const today = new Date().toISOString().split('T')[0]
     const currentYear = new Date().getFullYear()
+    
+    // 如果学期配置未加载，返回空数组
+    if (!semesterConfig) return []
     
     // 辅助函数：判断日期是否在范围内
     const isInRange = (date: string, start: string, end: string): boolean => {

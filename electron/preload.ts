@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dbBackup: (backupPath: string) => 
     ipcRenderer.invoke('db:backup', backupPath),
 
+  // 显示保存对话框
+  showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) =>
+    ipcRenderer.invoke('dialog:showSaveDialog', options),
+
   // 获取 WASM 文件路径
   getWasmPath: (filename: string) => 
     ipcRenderer.invoke('getWasmPath', filename),
@@ -40,6 +44,8 @@ export interface ElectronAPI {
   dbTransaction: (statements: Array<{ sql: string; params: unknown[] }>) => Promise<{ success: boolean }>
   dbGetPath: () => Promise<string>
   dbBackup: (backupPath: string) => Promise<{ success: boolean }>
+  showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => 
+    Promise<{ canceled: boolean; filePath?: string }>
   printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
   platform: string
   isElectron: boolean

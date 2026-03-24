@@ -12,6 +12,7 @@ export type GradeType =
   | '三年级' | '四年级' | '五年级' | '六年级' 
   | '初一' | '初二' | '初三'
   | '高一' | '高二' | '高三'
+  | '大学'
 
 // 词库分类
 export type WordbankCategory = 
@@ -334,8 +335,51 @@ export interface SortOptions {
 export const GRADE_OPTIONS: GradeType[] = [
   '三年级', '四年级', '五年级', '六年级',
   '初一', '初二', '初三',
-  '高一', '高二', '高三'
+  '高一', '高二', '高三',
+  '大学'
 ]
+
+// 助教适合年级范围选项
+export const SUITABLE_GRADE_OPTIONS = [
+  { value: '小学', label: '小学（三至六年级）' },
+  { value: '初中', label: '初中（初一至初三）' },
+  { value: '高中', label: '高中（高一至高三）' },
+  { value: '小学,初中', label: '小学+初中' },
+  { value: '初中,高中', label: '初中+高中' },
+  { value: '小学,初中,高中', label: '小学+初中+高中' },
+] as const
+
+// 年级所属阶段映射
+export const GRADE_STAGE_MAP: Record<string, '小学' | '初中' | '高中' | '大学'> = {
+  '三年级': '小学', '四年级': '小学', '五年级': '小学', '六年级': '小学',
+  '初一': '初中', '初二': '初中', '初三': '初中',
+  '高一': '高中', '高二': '高中', '高三': '高中',
+  '大学': '大学'
+}
+
+// 根据适合年级范围获取具体年级列表
+export function getGradesFromSuitableGrades(suitableGrades: string | null): string[] {
+  if (!suitableGrades) return []
+  
+  const grades: string[] = []
+  const parts = suitableGrades.split(',').map(s => s.trim())
+  
+  for (const part of parts) {
+    switch (part) {
+      case '小学':
+        grades.push('三年级', '四年级', '五年级', '六年级')
+        break
+      case '初中':
+        grades.push('初一', '初二', '初三')
+        break
+      case '高中':
+        grades.push('高一', '高二', '高三')
+        break
+    }
+  }
+  
+  return grades
+}
 
 // 程度等级显示名称
 export const LEVEL_LABELS: Record<LevelType, string> = {
@@ -377,6 +421,8 @@ export interface ElectronAPI {
   dbTransaction: (statements: Array<{ sql: string; params: unknown[] }>) => Promise<{ success: boolean }>
   dbGetPath: () => Promise<string>
   dbBackup: (backupPath: string) => Promise<{ success: boolean }>
+  showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => 
+    Promise<{ canceled: boolean; filePath?: string }>
   getWasmPath: (filename: string) => Promise<string>
   printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
   platform: string

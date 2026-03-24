@@ -5,7 +5,8 @@ import { Search, Calendar, Target, BookOpen, TrendingUp, ChevronRight, X, Clock 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { settingsDb, studentDb, classRecordDb, examScoreDb } from '@/db'
+import { studentDb, classRecordDb, examScoreDb } from '@/db'
+import { useAppStore } from '@/store/appStore'
 import { TASK_TYPE_LABELS } from '@/types'
 import type { Student, ClassRecord, ExamScore, PhaseType } from '@/types'
 
@@ -50,17 +51,8 @@ export function PhasesPage() {
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   
-  // 学期配置
-  const [semesterConfig, setSemesterConfig] = useState<SemesterConfig>({
-    spring_start: '',
-    spring_end: '',
-    summer_start: '',
-    summer_end: '',
-    autumn_start: '',
-    autumn_end: '',
-    winter_start: '',
-    winter_end: ''
-  })
+  // 从 store 获取学期配置
+  const semesterConfig = useAppStore(state => state.semesterConfig)
   
   // 详情抽屉状态
   const [selectedPhase, setSelectedPhase] = useState<AutoPhase | null>(null)
@@ -70,14 +62,16 @@ export function PhasesPage() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [semesterConfig]) // 当学期配置变化时重新加载
 
   const loadData = async () => {
     setLoading(true)
     try {
-      // 加载学期配置
-      const config = await loadSemesterConfig()
-      setSemesterConfig(config)
+      // 如果学期配置未加载，等待
+      if (!semesterConfig) {
+        setLoading(false)
+        return
+      }
       
       // 加载所有学员
       const allStudents = await studentDb.getAllWithBilling(
@@ -96,7 +90,7 @@ export function PhasesPage() {
         const scores = await examScoreDb.getByStudentId(student.id)
         
         // 生成阶段
-        const studentPhases = generatePhasesForStudent(config, student, records, scores, today, currentYear)
+        const studentPhases = generatePhasesForStudent(semesterConfig, student, records, scores, today, currentYear)
         allPhases.push(...studentPhases)
       }
       
@@ -108,28 +102,6 @@ export function PhasesPage() {
       console.error('Failed to load phases:', error)
     } finally {
       setLoading(false)
-    }
-  }
-  
-  const loadSemesterConfig = async (): Promise<SemesterConfig> => {
-    const springStart = await settingsDb.get('semester_spring_start')
-    const springEnd = await settingsDb.get('semester_spring_end')
-    const summerStart = await settingsDb.get('semester_summer_start')
-    const summerEnd = await settingsDb.get('semester_summer_end')
-    const autumnStart = await settingsDb.get('semester_autumn_start')
-    const autumnEnd = await settingsDb.get('semester_autumn_end')
-    const winterStart = await settingsDb.get('semester_winter_start')
-    const winterEnd = await settingsDb.get('semester_winter_end')
-    
-    return {
-      spring_start: springStart || '',
-      spring_end: springEnd || '',
-      summer_start: summerStart || '',
-      summer_end: summerEnd || '',
-      autumn_start: autumnStart || '',
-      autumn_end: autumnEnd || '',
-      winter_start: winterStart || '',
-      winter_end: winterEnd || ''
     }
   }
   

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Plus, Pencil, Trash2, Phone, GraduationCap, Search, Clock, Award, AlertTriangle, Check, X } from 'lucide-react'
 import { teacherDb } from '@/db'
 import type { Teacher, TeacherStatus, OralLevel, TrainingStage, TeacherType } from '@/types'
-import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS } from '@/types'
+import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, SUITABLE_GRADE_OPTIONS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -59,7 +59,7 @@ interface TeacherFormData {
   vocab_level: string
   oral_level: OralLevel
   teaching_style: string
-  suitable_grades: string
+  suitable_grades: string[]
   suitable_levels: string[]
   training_stage: TrainingStage
   teacher_types: TeacherType[]
@@ -76,7 +76,7 @@ const initialFormData: TeacherFormData = {
   vocab_level: '',
   oral_level: 'intermediate',
   teaching_style: '',
-  suitable_grades: '',
+  suitable_grades: [],
   suitable_levels: [],
   training_stage: 'probation',
   teacher_types: [],
@@ -198,7 +198,7 @@ export function TeacherList() {
       vocab_level: teacher.vocab_level || '',
       oral_level: teacher.oral_level,
       teaching_style: teacher.teaching_style || '',
-      suitable_grades: teacher.suitable_grades || '',
+      suitable_grades: teacher.suitable_grades ? teacher.suitable_grades.split(',').map(s => s.trim()) : [],
       suitable_levels: teacher.suitable_levels || [],
       training_stage: teacher.training_stage || 'probation',
       teacher_types: teacher.teacher_types || [],
@@ -228,7 +228,7 @@ export function TeacherList() {
           vocab_level: formData.vocab_level || undefined,
           oral_level: formData.oral_level,
           teaching_style: formData.teaching_style || undefined,
-          suitable_grades: formData.suitable_grades || undefined,
+          suitable_grades: formData.suitable_grades.length > 0 ? formData.suitable_grades.join(',') : undefined,
           suitable_levels: formData.suitable_levels.length > 0 ? formData.suitable_levels : undefined,
           training_stage: formData.training_stage,
           teacher_types: formData.teacher_types.length > 0 ? formData.teacher_types : undefined,
@@ -245,7 +245,7 @@ export function TeacherList() {
           vocab_level: formData.vocab_level || undefined,
           oral_level: formData.oral_level,
           teaching_style: formData.teaching_style || undefined,
-          suitable_grades: formData.suitable_grades || undefined,
+          suitable_grades: formData.suitable_grades.length > 0 ? formData.suitable_grades.join(',') : undefined,
           suitable_levels: formData.suitable_levels.length > 0 ? formData.suitable_levels : undefined,
           training_stage: formData.training_stage,
           teacher_types: formData.teacher_types.length > 0 ? formData.teacher_types : undefined,
@@ -285,6 +285,16 @@ export function TeacherList() {
       suitable_levels: prev.suitable_levels.includes(level)
         ? prev.suitable_levels.filter(l => l !== level)
         : [...prev.suitable_levels, level]
+    }))
+  }
+  
+  // 切换适合年级范围
+  const toggleSuitableGrade = (grade: string) => {
+    setFormData(prev => ({
+      ...prev,
+      suitable_grades: prev.suitable_grades.includes(grade)
+        ? prev.suitable_grades.filter(g => g !== grade)
+        : [...prev.suitable_grades, grade]
     }))
   }
   
@@ -627,23 +637,36 @@ export function TeacherList() {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">培训阶段</label>
-                <Select
-                  value={formData.training_stage}
-                  onChange={e => setFormData(prev => ({ ...prev, training_stage: e.target.value as TrainingStage }))}
-                  options={TRAINING_STAGE_OPTIONS}
-                />
+            <div className="space-y-2">
+              <label className="text-sm font-medium">培训阶段</label>
+              <Select
+                value={formData.training_stage}
+                onChange={e => setFormData(prev => ({ ...prev, training_stage: e.target.value as TrainingStage }))}
+                options={TRAINING_STAGE_OPTIONS}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium">适合年级范围</label>
+              <div className="flex flex-wrap gap-2">
+                {SUITABLE_GRADE_OPTIONS.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => toggleSuitableGrade(option.value)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      formData.suitable_grades.includes(option.value)
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">适合年级范围</label>
-                <Input
-                  value={formData.suitable_grades}
-                  onChange={e => setFormData(prev => ({ ...prev, suitable_grades: e.target.value }))}
-                  placeholder="如：小学、初中"
-                />
-              </div>
+              <p className="text-xs text-muted-foreground">
+                可多选，例如选择"小学+初中"表示该助教适合教小学和初中学生
+              </p>
             </div>
             
             <div className="space-y-2">

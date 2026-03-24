@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AlertTriangle, Calendar, X, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { settingsDb } from '@/db'
 import { useNavigate } from 'react-router-dom'
+import { useAppStore } from '@/store/appStore'
 
+// 学期日期接口（包含备份日期）
 interface SemesterDates {
   spring_start: string | null
   spring_end: string | null
@@ -60,7 +62,6 @@ function getCurrentSemester(dates: SemesterDates): {
 
 // 检查是否需要设置学期节点
 function checkNeedSetup(dates: SemesterDates): boolean {
-  const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() + 1
   
   // 如果当前是1-2月或7-8月，检查是否设置了寒暑假
@@ -100,44 +101,32 @@ function checkBackupReminder(dates: SemesterDates): { need: boolean; days: numbe
 export function SemesterReminder() {
   const navigate = useNavigate()
   const [dismissed, setDismissed] = useState(false)
-  const [dates, setDates] = useState<SemesterDates>({
-    spring_start: null,
-    spring_end: null,
-    summer_start: null,
-    summer_end: null,
-    autumn_start: null,
-    autumn_end: null,
-    winter_start: null,
-    winter_end: null,
-    last_backup_date: null
-  })
+  const [lastBackupDate, setLastBackupDate] = useState<string | null>(null)
+  
+  // 从 store 获取学期配置
+  const semesterConfig = useAppStore(state => state.semesterConfig)
 
   useEffect(() => {
-    loadDates()
+    // 只需要加载备份日期，学期配置已在 main.tsx 中加载到 store
+    loadBackupDate()
   }, [])
 
-  const loadDates = async () => {
-    const springStart = await settingsDb.get('semester_spring_start')
-    const springEnd = await settingsDb.get('semester_spring_end')
-    const summerStart = await settingsDb.get('semester_summer_start')
-    const summerEnd = await settingsDb.get('semester_summer_end')
-    const autumnStart = await settingsDb.get('semester_autumn_start')
-    const autumnEnd = await settingsDb.get('semester_autumn_end')
-    const winterStart = await settingsDb.get('semester_winter_start')
-    const winterEnd = await settingsDb.get('semester_winter_end')
+  const loadBackupDate = async () => {
     const lastBackup = await settingsDb.get('last_backup_date')
-    
-    setDates({
-      spring_start: springStart,
-      spring_end: springEnd,
-      summer_start: summerStart,
-      summer_end: summerEnd,
-      autumn_start: autumnStart,
-      autumn_end: autumnEnd,
-      winter_start: winterStart,
-      winter_end: winterEnd,
-      last_backup_date: lastBackup
-    })
+    setLastBackupDate(lastBackup)
+  }
+  
+  // 将 store 的 semesterConfig 转换为 SemesterDates 格式
+  const dates: SemesterDates = {
+    spring_start: semesterConfig?.spring_start || null,
+    spring_end: semesterConfig?.spring_end || null,
+    summer_start: semesterConfig?.summer_start || null,
+    summer_end: semesterConfig?.summer_end || null,
+    autumn_start: semesterConfig?.autumn_start || null,
+    autumn_end: semesterConfig?.autumn_end || null,
+    winter_start: semesterConfig?.winter_start || null,
+    winter_end: semesterConfig?.winter_end || null,
+    last_backup_date: lastBackupDate
   }
 
   const currentSemester = getCurrentSemester(dates)
@@ -209,44 +198,20 @@ export function SemesterReminder() {
 
 // 当前学期显示组件
 export function CurrentSemesterBadge() {
-  const [dates, setDates] = useState<SemesterDates>({
-    spring_start: null,
-    spring_end: null,
-    summer_start: null,
-    summer_end: null,
-    autumn_start: null,
-    autumn_end: null,
-    winter_start: null,
-    winter_end: null,
+  // 从 store 获取学期配置
+  const semesterConfig = useAppStore(state => state.semesterConfig)
+  
+  // 将 store 的 semesterConfig 转换为 SemesterDates 格式
+  const dates: SemesterDates = {
+    spring_start: semesterConfig?.spring_start || null,
+    spring_end: semesterConfig?.spring_end || null,
+    summer_start: semesterConfig?.summer_start || null,
+    summer_end: semesterConfig?.summer_end || null,
+    autumn_start: semesterConfig?.autumn_start || null,
+    autumn_end: semesterConfig?.autumn_end || null,
+    winter_start: semesterConfig?.winter_start || null,
+    winter_end: semesterConfig?.winter_end || null,
     last_backup_date: null
-  })
-
-  useEffect(() => {
-    loadDates()
-  }, [])
-
-  const loadDates = async () => {
-    const springStart = await settingsDb.get('semester_spring_start')
-    const springEnd = await settingsDb.get('semester_spring_end')
-    const summerStart = await settingsDb.get('semester_summer_start')
-    const summerEnd = await settingsDb.get('semester_summer_end')
-    const autumnStart = await settingsDb.get('semester_autumn_start')
-    const autumnEnd = await settingsDb.get('semester_autumn_end')
-    const winterStart = await settingsDb.get('semester_winter_start')
-    const winterEnd = await settingsDb.get('semester_winter_end')
-    const lastBackup = await settingsDb.get('last_backup_date')
-    
-    setDates({
-      spring_start: springStart,
-      spring_end: springEnd,
-      summer_start: summerStart,
-      summer_end: summerEnd,
-      autumn_start: autumnStart,
-      autumn_end: autumnEnd,
-      winter_start: winterStart,
-      winter_end: winterEnd,
-      last_backup_date: lastBackup
-    })
   }
 
   const currentSemester = getCurrentSemester(dates)

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { initDatabase } from './db'
+import { useAppStore } from './store/appStore'
 
 console.log('main.tsx starting...')
 console.log('window:', typeof window)
@@ -78,8 +79,16 @@ console.log('Initial HTML set, rootElement.innerHTML length:', rootElement.inner
 
 // 初始化数据库后渲染应用
 initDatabase()
-  .then(() => {
+  .then(async () => {
     console.log('Database initialized successfully, rendering app...')
+    
+    // 加载学期配置到 store
+    try {
+      await useAppStore.getState().loadSemesterConfig()
+      console.log('Semester config loaded')
+    } catch (err) {
+      console.error('Failed to load semester config:', err)
+    }
     
     try {
       const root = ReactDOM.createRoot(rootElement)

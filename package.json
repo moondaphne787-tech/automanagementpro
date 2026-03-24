@@ -2,6 +2,7 @@
   "name": "edumanager-pro",
   "version": "1.0.0",
   "description": "EduManager Pro - 学员管理系统",
+  "author": "EduManager Team",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -10,6 +11,7 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",
+    "postinstall": "electron-builder install-app-deps",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -42,6 +44,8 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/better-sqlite3": "^7.6.8",
     "@types/node": "^20.11.16",
     "@types/react": "^18.2.55",
@@ -54,6 +58,7 @@
     "concurrently": "^8.2.2",
     "electron": "^28.2.1",
     "electron-builder": "^24.9.1",
+    "jsdom": "^29.0.1",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3",

@@ -36,10 +36,29 @@ export function Settings() {
   const [savingSemester, setSavingSemester] = useState(false)
   const [syncingPhases, setSyncingPhases] = useState(false)
 
+  // 从 store 获取学期配置和加载方法
+  const storeSemesterConfig = useAppStore(state => state.semesterConfig)
+  const loadSemesterConfig = useAppStore(state => state.loadSemesterConfig)
+
   useEffect(() => {
     loadSettings()
-    loadSemesterSettings()
   }, [])
+  
+  // 当 store 中的学期配置加载完成后，同步到本地状态
+  useEffect(() => {
+    if (storeSemesterConfig) {
+      setSemesterConfig({
+        spring_start: storeSemesterConfig.spring_start || '',
+        spring_end: storeSemesterConfig.spring_end || '',
+        summer_start: storeSemesterConfig.summer_start || '',
+        summer_end: storeSemesterConfig.summer_end || '',
+        autumn_start: storeSemesterConfig.autumn_start || '',
+        autumn_end: storeSemesterConfig.autumn_end || '',
+        winter_start: storeSemesterConfig.winter_start || '',
+        winter_end: storeSemesterConfig.winter_end || ''
+      })
+    }
+  }, [storeSemesterConfig])
 
   const loadSettings = async () => {
     const url = await settingsDb.get('ai_api_url')
@@ -57,27 +76,6 @@ export function Settings() {
     })
   }
 
-  const loadSemesterSettings = async () => {
-    const springStart = await settingsDb.get('semester_spring_start')
-    const springEnd = await settingsDb.get('semester_spring_end')
-    const summerStart = await settingsDb.get('semester_summer_start')
-    const summerEnd = await settingsDb.get('semester_summer_end')
-    const autumnStart = await settingsDb.get('semester_autumn_start')
-    const autumnEnd = await settingsDb.get('semester_autumn_end')
-    const winterStart = await settingsDb.get('semester_winter_start')
-    const winterEnd = await settingsDb.get('semester_winter_end')
-    
-    setSemesterConfig({
-      spring_start: springStart || '',
-      spring_end: springEnd || '',
-      summer_start: summerStart || '',
-      summer_end: summerEnd || '',
-      autumn_start: autumnStart || '',
-      autumn_end: autumnEnd || '',
-      winter_start: winterStart || '',
-      winter_end: winterEnd || ''
-    })
-  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -142,6 +140,10 @@ export function Settings() {
       await settingsDb.set('semester_autumn_end', semesterConfig.autumn_end)
       await settingsDb.set('semester_winter_start', semesterConfig.winter_start)
       await settingsDb.set('semester_winter_end', semesterConfig.winter_end)
+      
+      // 更新 store 中的学期配置
+      await loadSemesterConfig()
+      
       alert('学期节点设置已保存！')
     } catch (error) {
       alert('保存失败：' + (error as Error).message)
@@ -232,15 +234,23 @@ export function Settings() {
 
   const handleBackup = async () => {
     try {
-      if (window.electronAPI) {
-        const dbPath = await window.electronAPI.dbGetPath()
-        const backupPath = `/Users/zoey/Downloads/edumanager_backup_${new Date().toISOString().split('T')[0]}.db`
-        await window.electronAPI.dbBackup(backupPath)
-        await settingsDb.set('last_backup_date', new Date().toISOString())
-        alert(`备份成功！文件已保存到：${backupPath}`)
-      } else {
+      if (!window.electronAPI) {
         alert('备份功能仅在桌面应用中可用')
+        return
       }
+      
+      // 通过 IPC 调用主进程的 dialog.showSaveDialog
+      const result = await window.electronAPI.showSaveDialog({
+        title: '选择备份保存位置',
+        defaultPath: `edumanager_backup_${new Date().toISOString().split('T')[0]}.db`,
+        filters: [{ name: 'SQLite Database', extensions: ['db'] }]
+      })
+      
+      if (!result || result.canceled || !result.filePath) return
+      
+      await window.electronAPI.dbBackup(result.filePath)
+      await settingsDb.set('last_backup_date', new Date().toISOString())
+      alert(`备份成功！文件已保存到：${result.filePath}`)
     } catch (error) {
       alert('备份失败：' + (error as Error).message)
     }

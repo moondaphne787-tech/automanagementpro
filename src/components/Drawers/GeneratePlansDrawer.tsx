@@ -43,7 +43,6 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
   const [filterGrade, setFilterGrade] = useState<string>('all')
   const [searchName, setSearchName] = useState('')
-  const [streamContent, setStreamContent] = useState<string>('')
   
   // 加载 AI 配置
   useEffect(() => {
@@ -138,7 +137,6 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
     if (!aiConfig || selectedStudents.length === 0) return
     
     setGenerating(true)
-    setStreamContent('')
     
     for (let i = 0; i < selectedStudents.length; i++) {
       const item = selectedStudents[i]
@@ -147,7 +145,7 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
       if (item.status === 'saved' || item.status === 'skipped') continue
       
       // 更新状态为生成中
-      setSelectedStudents(prev => prev.map((s, idx) => 
+      setSelectedStudents(prev => prev.map((s) =>
         s.student.id === item.student.id ? { ...s, status: 'generating' as GenerationStatus } : s
       ))
       
@@ -303,7 +301,6 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
   const handleClose = () => {
     setSelectedStudents([])
     setExtraInstruction('')
-    setStreamContent('')
     onClose()
   }
   
@@ -367,7 +364,11 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                         { value: '六年级', label: '六年级' },
                         { value: '初一', label: '初一' },
                         { value: '初二', label: '初二' },
-                        { value: '初三', label: '初三' }
+                        { value: '初三', label: '初三' },
+                        { value: '高一', label: '高一' },
+                        { value: '高二', label: '高二' },
+                        { value: '高三', label: '高三' },
+                        { value: '大学', label: '大学' }
                       ]}
                       onChange={(e) => setFilterGrade(e.target.value)}
                       className="w-28"
@@ -384,7 +385,7 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                   >
                     {selectedStudents.length === filteredStudents.length ? '取消全选' : '全选'}
                   </Button>
-                  {['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三'].map(grade => (
+                  {['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三', '大学'].map(grade => (
                     <Button
                       key={grade}
                       variant="ghost"

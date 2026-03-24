@@ -16,7 +16,7 @@ import type {
   StudentType,
   TaskBlock
 } from '@/types'
-import { studentDb, billingDb, wordbankDb, progressDb, classRecordDb, lessonPlanDb, examScoreDb, learningPhaseDb, trialConversionDb } from '@/db'
+import { studentDb, billingDb, wordbankDb, progressDb, classRecordDb, lessonPlanDb, examScoreDb, learningPhaseDb, trialConversionDb, settingsDb, teacherDb } from '@/db'
 
 interface AppState {
   // 学员列表
@@ -35,6 +35,19 @@ interface AppState {
   
   // 过期计划状态
   expiredPlansMap: Map<string, number> // student_id -> expired count
+  
+  // 学期配置
+  semesterConfig: {
+    spring_start: string
+    spring_end: string
+    summer_start: string
+    summer_end: string
+    autumn_start: string
+    autumn_end: string
+    winter_start: string
+    winter_end: string
+  } | null
+  loadSemesterConfig: () => Promise<void>
   
   // UI状态
   sidebarCollapsed: boolean
@@ -183,6 +196,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentBilling: null,
   currentProgress: [],
   wordbanks: [],
+  semesterConfig: null,
   sidebarCollapsed: false,
   theme: 'light',
   classRecords: [],
@@ -362,8 +376,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     
     // 同步词库进度
     for (const task of data.tasks) {
+      const effectiveLevel = task.level_reached ?? task.level_to
       if ((task.type === 'vocab_new' || task.type === 'vocab_review') && 
-          task.wordbank_label && task.level_reached) {
+          task.wordbank_label && effectiveLevel) {
         // 查找对应的词库
         const wordbanks = await wordbankDb.getAll()
         const wordbank = wordbanks.find(w => w.name === task.wordbank_label)
@@ -372,14 +387,27 @@ export const useAppStore = create<AppState>((set, get) => ({
           const currentProgress = existingProgress.find(p => p.wordbank_id === wordbank.id)
           
           // 只有新关数大于当前关数才更新
-          if (!currentProgress || task.level_reached > currentProgress.current_level) {
+          if (!currentProgress || effectiveLevel > currentProgress.current_level) {
             await progressDb.upsert({
               student_id: data.student_id,
               wordbank_id: wordbank.id,
-              current_level: task.level_reached
+              current_level: effectiveLevel
             })
           }
         }
+      }
+    }
+    
+    // 同步助教累计课时
+    if (data.teacher_name && data.duration_hours) {
+      const allTeachers = await teacherDb.getAll()
+      const matchedTeacher = allTeachers.find(t => 
+        t.name === data.teacher_name || 
+        t.name.includes(data.teacher_name!) || 
+        data.teacher_name!.includes(t.name)
+      )
+      if (matchedTeacher) {
+        await teacherDb.addTeachingHours(matchedTeacher.id, data.duration_hours)
       }
     }
     
@@ -441,22 +469,45 @@ export const useAppStore = create<AppState>((set, get) => ({
     // 同步词库进度
     for (const record of records) {
       for (const task of record.tasks) {
+        const effectiveLevel = task.level_reached ?? task.level_to
         if ((task.type === 'vocab_new' || task.type === 'vocab_review') && 
-            task.wordbank_label && task.level_reached) {
+            task.wordbank_label && effectiveLevel) {
           const wordbanks = await wordbankDb.getAll()
           const wordbank = wordbanks.find(w => w.name === task.wordbank_label)
           if (wordbank) {
             const existingProgress = await progressDb.getByStudentId(record.student_id)
             const currentProgress = existingProgress.find(p => p.wordbank_id === wordbank.id)
             
-            if (!currentProgress || task.level_reached > currentProgress.current_level) {
+            if (!currentProgress || effectiveLevel > currentProgress.current_level) {
               await progressDb.upsert({
                 student_id: record.student_id,
                 wordbank_id: wordbank.id,
-                current_level: task.level_reached
+                current_level: effectiveLevel
               })
             }
           }
+        }
+      }
+    }
+    
+    // 按助教姓名汇总需要累加的课时
+    const teacherHoursMap = new Map<string, number>()
+    for (const record of records) {
+      if (record.teacher_name && record.duration_hours) {
+        const current = teacherHoursMap.get(record.teacher_name) || 0
+        teacherHoursMap.set(record.teacher_name, current + record.duration_hours)
+      }
+    }
+    
+    // 批量更新助教课时
+    if (teacherHoursMap.size > 0) {
+      const allTeachers = await teacherDb.getAll()
+      for (const [teacherName, hours] of teacherHoursMap) {
+        const teacher = allTeachers.find(t => 
+          t.name === teacherName || t.name.includes(teacherName) || teacherName.includes(t.name)
+        )
+        if (teacher) {
+          await teacherDb.addTeachingHours(teacher.id, hours)
         }
       }
     }
@@ -498,49 +549,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       // 刷新过期计划数量
       await get().loadStudents()
     }
-  },
-  
-  // 获取学员过期计划
-  getExpiredPlans: async (studentId: string): Promise<LessonPlan[]> => {
-    return await lessonPlanDb.getExpiredPlans(studentId)
-  },
-  
-  // 改期课程计划
-  rescheduleLessonPlan: async (id: string, newDate: string) => {
-    const plan = await lessonPlanDb.update(id, { plan_date: newDate })
-    if (plan && get().currentStudent?.id === plan.student_id) {
-      await get().loadLessonPlans(plan.student_id)
-    }
-    // 刷新过期计划数量
-    await get().loadStudents()
-    return plan
-  },
-  
-  // 沿用过期计划创建新计划
-  reuseExpiredPlan: async (expiredPlanId: string, newDate: string) => {
-    const expiredPlan = await lessonPlanDb.getById(expiredPlanId)
-    if (!expiredPlan) return undefined
-    
-    // 创建新计划
-    const newPlan = await lessonPlanDb.create({
-      student_id: expiredPlan.student_id,
-      plan_date: newDate,
-      tasks: expiredPlan.tasks,
-      notes: expiredPlan.notes || undefined,
-      generated_by_ai: false
-    })
-    
-    // 删除过期计划
-    await lessonPlanDb.delete(expiredPlanId)
-    
-    if (get().currentStudent?.id === expiredPlan.student_id) {
-      await get().loadLessonPlans(expiredPlan.student_id)
-    }
-    
-    // 刷新过期计划数量
-    await get().loadStudents()
-    
-    return newPlan
   },
   
   // 加载考试成绩
@@ -607,6 +615,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         await get().loadLearningPhases(phase.student_id)
       }
     }
+  },
+  
+  // 加载学期配置
+  loadSemesterConfig: async () => {
+    const keys = ['spring_start', 'spring_end', 'summer_start', 'summer_end', 
+                   'autumn_start', 'autumn_end', 'winter_start', 'winter_end']
+    const values = await Promise.all(keys.map(k => settingsDb.get(`semester_${k}`)))
+    set({
+      semesterConfig: {
+        spring_start: values[0] || '',
+        spring_end: values[1] || '',
+        summer_start: values[2] || '',
+        summer_end: values[3] || '',
+        autumn_start: values[4] || '',
+        autumn_end: values[5] || '',
+        winter_start: values[6] || '',
+        winter_end: values[7] || '',
+      }
+    })
   },
   
   // 切换侧边栏

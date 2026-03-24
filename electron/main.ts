@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import Database from 'better-sqlite3'
 import * as fs from 'fs'
@@ -484,6 +484,12 @@ ipcMain.handle('db:backup', async (_event, backupPath: string) => {
     console.error('Backup error:', error)
     throw error
   }
+})
+
+// 显示保存对话框
+ipcMain.handle('dialog:showSaveDialog', async (_event, options) => {
+  const result = await dialog.showSaveDialog(mainWindow!, options)
+  return result
 })
 
 // 打印课程计划
