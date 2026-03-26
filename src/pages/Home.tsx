@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, ArrowUpDown, AlertTriangle, Upload } from 'lucide-react'
+import { Plus, Search, ArrowUpDown, AlertTriangle, Upload, Calendar } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { FileCabinet } from '@/components/FileCabinet/FileCabinet'
 import { SemesterReminder, CurrentSemesterBadge } from '@/components/Reminder/SemesterReminder'
 import { ImportStudentsDrawer } from '@/components/Drawers/ImportStudentsDrawer'
+import { BulkClassRecordDrawer } from '@/components/Drawers/BulkClassRecordDrawer'
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/lib/utils'
 import { GRADE_OPTIONS, LEVEL_LABELS, STATUS_LABELS } from '@/types'
@@ -54,6 +55,7 @@ export function Home() {
     filters, 
     sort, 
     loadStudents, 
+    loadExpiredPlansCount,
     setFilters, 
     setSort 
   } = useAppStore()
@@ -61,10 +63,22 @@ export function Home() {
   const [searchValue, setSearchValue] = useState(filters.search)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(sort.direction)
   const [importDrawerOpen, setImportDrawerOpen] = useState(false)
+  
+  // 追踪是否已加载过期计划，确保只加载一次
+  const expiredPlansLoadedRef = useRef(false)
 
   useEffect(() => {
+    // 加载学员列表
     loadStudents()
   }, [])
+  
+  // 过期计划查询只在学员首次加载完成后执行一次
+  useEffect(() => {
+    if (!expiredPlansLoadedRef.current && students.length > 0 && !studentsLoading) {
+      expiredPlansLoadedRef.current = true
+      loadExpiredPlansCount()
+    }
+  }, [students.length, studentsLoading])
 
   // 搜索防抖
   useEffect(() => {
@@ -102,6 +116,7 @@ export function Home() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <BulkClassRecordDrawer />
           <Button variant="outline" onClick={() => setImportDrawerOpen(true)}>
             <Upload className="w-4 h-4 mr-1" />
             批量导入

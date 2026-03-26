@@ -8,6 +8,7 @@ import { DateInput } from '@/components/ui/date-input'
 import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { useAppStore } from '@/store/appStore'
 import { parseExcelFile, createImportPreview, type ImportPreviewItem } from '@/utils/excelParser'
+import { extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
 import { cn } from '@/lib/utils'
 import type { TaskBlock as TaskBlockType } from '@/types'
 
@@ -102,7 +103,9 @@ export function ImportRecordsDrawer({ open, onClose }: ImportRecordsDrawerProps)
         attendance: item.attendance,
         tasks: item.tasks,
         task_completed: item.task_completed,
-        detail_feedback: item.detail_feedback,
+        incomplete_reason: item.incomplete_reason,
+        // 处理学情反馈，保留"学习状态"及之前的内容，删除后续的注意事项等内容
+        detail_feedback: item.detail_feedback ? extractFeedbackBeforeNotes(item.detail_feedback) : undefined,
         imported_from_excel: true
       }))
       

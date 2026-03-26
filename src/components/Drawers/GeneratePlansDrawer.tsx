@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Sparkles, Check, AlertCircle, Loader2, ChevronDown, ChevronUp, RefreshCw, Edit, Save, SkipForward } from 'lucide-react'
+import { X, Sparkles, Check, AlertCircle, Loader2, ChevronDown, ChevronUp, RefreshCw, Edit, Save, SkipForward, Plus, CheckCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { DateInput } from '@/components/ui/date-input'
 import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { useAppStore } from '@/store/appStore'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
-import { sendAIRequest, sendAIRequestStream } from '@/ai/client'
+import { sendAIRequest } from '@/ai/client'
 import { SYSTEM_PROMPT, buildUserInput, parseAIResponse, formatTasksSummary } from '@/ai/prompts'
 import { cn } from '@/lib/utils'
 import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock as TaskBlockType, AIConfig } from '@/types'
@@ -31,6 +31,7 @@ interface StudentPlanState {
   } | null
   error: string | null
   expanded: boolean
+  editing: boolean  // 是否处于编辑模式
 }
 
 export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps) {
@@ -91,7 +92,8 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
           status: 'pending',
           plan: null,
           error: null,
-          expanded: false
+          expanded: false,
+          editing: false
         }]
       }
     })
@@ -107,29 +109,63 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
         status: 'pending',
         plan: null,
         error: null,
-        expanded: false
+        expanded: false,
+        editing: false
       })))
     }
   }
   
-  // 按年级全选
+  // 按年级全选/取消全选
   const selectByGrade = (grade: string) => {
     const gradeStudents = filteredStudents.filter(s => s.grade === grade)
-    const newSelection = [...selectedStudents]
+    // 检查该年级是否已全部选中
+    const allGradeSelected = gradeStudents.every(student => 
+      selectedStudents.some(s => s.student.id === student.id)
+    )
     
-    gradeStudents.forEach(student => {
-      if (!newSelection.find(s => s.student.id === student.id)) {
-        newSelection.push({
-          student,
-          status: 'pending',
-          plan: null,
-          error: null,
-          expanded: false
-        })
-      }
-    })
-    
-    setSelectedStudents(newSelection)
+    if (allGradeSelected) {
+      // 取消选中该年级所有学员
+      setSelectedStudents(prev => prev.filter(s => 
+        !gradeStudents.some(gs => gs.id === s.student.id)
+      ))
+    } else {
+      // 选中该年级所有学员
+      const newSelection = [...selectedStudents]
+      
+      gradeStudents.forEach(student => {
+        if (!newSelection.find(s => s.student.id === student.id)) {
+          newSelection.push({
+            student,
+            status: 'pending',
+            plan: null,
+            error: null,
+            expanded: false,
+            editing: false
+          })
+        }
+      })
+      
+      setSelectedStudents(newSelection)
+    }
+  }
+  
+  // 检查某年级是否全部选中
+  const isGradeFullySelected = (grade: string) => {
+    const gradeStudents = filteredStudents.filter(s => s.grade === grade)
+    if (gradeStudents.length === 0) return false
+    return gradeStudents.every(student => 
+      selectedStudents.some(s => s.student.id === student.id)
+    )
+  }
+  
+  // 检查某年级是否部分选中
+  const isGradePartiallySelected = (grade: string) => {
+    const gradeStudents = filteredStudents.filter(s => s.grade === grade)
+    if (gradeStudents.length === 0) return false
+    const selectedCount = gradeStudents.filter(student => 
+      selectedStudents.some(s => s.student.id === student.id)
+    ).length
+    return selectedCount > 0 && selectedCount < gradeStudents.length
   }
   
   // 开始生成
@@ -297,6 +333,67 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
     ))
   }
   
+  // 切换编辑模式
+  const toggleEditing = (studentId: string) => {
+    setSelectedStudents(prev => prev.map(s => 
+      s.student.id === studentId ? { ...s, editing: !s.editing } : s
+    ))
+  }
+  
+  // 更新任务
+  const updateTask = (studentId: string, taskIndex: number, updatedTask: TaskBlockType) => {
+    setSelectedStudents(prev => prev.map(s => {
+      if (s.student.id === studentId && s.plan) {
+        const newTasks = [...s.plan.tasks]
+        newTasks[taskIndex] = updatedTask
+        return { ...s, plan: { ...s.plan, tasks: newTasks } }
+      }
+      return s
+    }))
+  }
+  
+  // 删除任务
+  const deleteTask = (studentId: string, taskIndex: number) => {
+    setSelectedStudents(prev => prev.map(s => {
+      if (s.student.id === studentId && s.plan) {
+        const newTasks = s.plan.tasks.filter((_, idx) => idx !== taskIndex)
+        return { ...s, plan: { ...s.plan, tasks: newTasks } }
+      }
+      return s
+    }))
+  }
+  
+  // 添加任务
+  const addTask = (studentId: string) => {
+    setSelectedStudents(prev => prev.map(s => {
+      if (s.student.id === studentId && s.plan) {
+        const newTask: TaskBlockType = { type: 'vocab_new' }
+        return { ...s, plan: { ...s.plan, tasks: [...s.plan.tasks, newTask] } }
+      }
+      return s
+    }))
+  }
+  
+  // 更新备注
+  const updateNotes = (studentId: string, notes: string) => {
+    setSelectedStudents(prev => prev.map(s => {
+      if (s.student.id === studentId && s.plan) {
+        return { ...s, plan: { ...s.plan, notes } }
+      }
+      return s
+    }))
+  }
+  
+  // 更新计划说明
+  const updateReason = (studentId: string, reason: string) => {
+    setSelectedStudents(prev => prev.map(s => {
+      if (s.student.id === studentId && s.plan) {
+        return { ...s, plan: { ...s.plan, reason } }
+      }
+      return s
+    }))
+  }
+  
   // 关闭并重置
   const handleClose = () => {
     setSelectedStudents([])
@@ -377,7 +474,7 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                 </div>
                 
                 {/* 全选按钮 */}
-                <div className="flex items-center gap-4 mb-3">
+                <div className="flex items-center gap-3 mb-3 flex-wrap">
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -385,16 +482,38 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                   >
                     {selectedStudents.length === filteredStudents.length ? '取消全选' : '全选'}
                   </Button>
-                  {['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三', '大学'].map(grade => (
-                    <Button
-                      key={grade}
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => selectByGrade(grade)}
-                    >
-                      {grade}
-                    </Button>
-                  ))}
+                  {['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三', '大学'].map(grade => {
+                    const fullySelected = isGradeFullySelected(grade)
+                    const partiallySelected = isGradePartiallySelected(grade)
+                    const gradeCount = filteredStudents.filter(s => s.grade === grade).length
+                    
+                    return (
+                      <button
+                        key={grade}
+                        onClick={() => selectByGrade(grade)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-sm transition-colors relative",
+                          fullySelected 
+                            ? "bg-primary text-primary-foreground" 
+                            : partiallySelected
+                              ? "bg-primary/20 text-primary border border-primary/50"
+                              : "bg-muted hover:bg-muted/80",
+                          gradeCount === 0 && "opacity-40 cursor-not-allowed"
+                        )}
+                        disabled={gradeCount === 0}
+                      >
+                        {grade}
+                        {gradeCount > 0 && (
+                          <span className={cn(
+                            "ml-1 text-xs",
+                            fullySelected ? "text-primary-foreground/70" : "text-muted-foreground"
+                          )}>
+                            ({gradeCount})
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
                 
                 {/* 学员列表 */}
@@ -523,6 +642,26 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                                   >
                                     {item.expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                   </Button>
+                                  {item.expanded && !item.editing && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => toggleEditing(item.student.id)}
+                                    >
+                                      <Edit className="w-3 h-3 mr-1" />
+                                      编辑
+                                    </Button>
+                                  )}
+                                  {item.expanded && item.editing && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => toggleEditing(item.student.id)}
+                                    >
+                                      <CheckCheck className="w-3 h-3 mr-1" />
+                                      完成编辑
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -571,25 +710,72 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                           {item.expanded && item.plan && (
                             <div className="mt-4 pt-4 border-t space-y-3">
                               <div>
-                                <p className="text-sm text-muted-foreground mb-2">任务列表：</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {item.plan.tasks.map((task, idx) => (
-                                    <TaskBlock key={idx} task={task} index={idx} />
-                                  ))}
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="text-sm text-muted-foreground">任务列表：</p>
+                                  {item.editing && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => addTask(item.student.id)}
+                                    >
+                                      <Plus className="w-3 h-3 mr-1" />
+                                      添加任务
+                                    </Button>
+                                  )}
                                 </div>
+                                {item.editing ? (
+                                  <div className="space-y-2">
+                                    {item.plan.tasks.map((task, idx) => (
+                                      <TaskBlock
+                                        key={idx}
+                                        task={task}
+                                        index={idx}
+                                        editable
+                                        onChange={(updatedTask) => updateTask(item.student.id, idx, updatedTask)}
+                                        onDelete={() => deleteTask(item.student.id, idx)}
+                                        wordbanks={wordbanks}
+                                      />
+                                    ))}
+                                    {item.plan.tasks.length === 0 && (
+                                      <p className="text-sm text-muted-foreground text-center py-4">
+                                        暂无任务，点击上方按钮添加
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-wrap gap-2">
+                                    {item.plan.tasks.map((task, idx) => (
+                                      <TaskBlock key={idx} task={task} index={idx} />
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                              {item.plan.notes && (
-                                <div>
-                                  <p className="text-sm text-muted-foreground">助教提示：</p>
-                                  <p className="text-sm">{item.plan.notes}</p>
-                                </div>
-                              )}
-                              {item.plan.reason && (
-                                <div>
-                                  <p className="text-sm text-muted-foreground">计划说明：</p>
-                                  <p className="text-sm">{item.plan.reason}</p>
-                                </div>
-                              )}
+                              <div>
+                                <p className="text-sm text-muted-foreground mb-1">助教提示：</p>
+                                {item.editing ? (
+                                  <textarea
+                                    className="w-full min-h-[60px] p-2 text-sm border rounded-md resize-y"
+                                    value={item.plan.notes || ''}
+                                    onChange={(e) => updateNotes(item.student.id, e.target.value)}
+                                    placeholder="输入助教提示..."
+                                  />
+                                ) : (
+                                  <p className="text-sm">{item.plan.notes || '无'}</p>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-sm text-muted-foreground mb-1">计划说明：</p>
+                                {item.editing ? (
+                                  <textarea
+                                    className="w-full min-h-[60px] p-2 text-sm border rounded-md resize-y"
+                                    value={item.plan.reason || ''}
+                                    onChange={(e) => updateReason(item.student.id, e.target.value)}
+                                    placeholder="输入计划说明..."
+                                  />
+                                ) : (
+                                  <p className="text-sm">{item.plan.reason || '无'}</p>
+                                )}
+                              </div>
                             </div>
                           )}
                         </CardContent>

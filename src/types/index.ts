@@ -416,13 +416,43 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
 
 // Electron API 类型声明
 export interface ElectronAPI {
+  // 基础数据库操作
   dbQuery: (sql: string, params?: unknown[]) => Promise<unknown>
   dbQueryOne: (sql: string, params?: unknown[]) => Promise<unknown>
   dbTransaction: (statements: Array<{ sql: string; params: unknown[] }>) => Promise<{ success: boolean }>
   dbGetPath: () => Promise<string>
   dbBackup: (backupPath: string) => Promise<{ success: boolean }>
+  
+  // 迁移和备份相关
+  dbGetVersion: () => Promise<{ version: number; latestVersion: number }>
+  dbGetMigrationHistory: () => Promise<Array<{ version: number; applied_at: string; description?: string }>>
+  dbGetStats: () => Promise<{
+    version: number
+    latestVersion: number
+    students: number
+    teachers: number
+    classRecords: number
+    lessonPlans: number
+    dbSize: number
+    lastBackup: string | null
+  } | null>
+  dbCreateBackup: (backupName?: string) => Promise<{ success: boolean; path: string }>
+  dbGetBackupHistory: (limit?: number) => Promise<Array<{
+    id: string
+    backup_path: string
+    backup_type: string
+    file_size: number
+    created_at: string
+  }>>
+  dbRestoreFromBackup: (backupPath: string) => Promise<{ success: boolean; message: string }>
+  dbGetBackupDir: () => Promise<string>
+  dbOpenBackupDir: () => Promise<{ success: boolean }>
+  
+  // 对话框
   showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => 
     Promise<{ canceled: boolean; filePath?: string }>
+  
+  // 其他
   getWasmPath: (filename: string) => Promise<string>
   printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
   platform: string

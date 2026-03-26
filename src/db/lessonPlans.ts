@@ -155,5 +155,53 @@ export const lessonPlanDb = {
     }).join(' + ')
     
     return `上次计划：${taskSummary}`
+  },
+
+  // 获取所有过期未执行的计划（plan_date < 今天且没有对应的课堂记录）
+  async getAllExpiredPlans(): Promise<LessonPlan[]> {
+    const today = new Date().toISOString().split('T')[0]
+    
+    const plans = await ipcQuery<any[]>(
+      `SELECT lp.* FROM lesson_plans lp
+       WHERE lp.plan_date IS NOT NULL 
+       AND lp.plan_date < ?
+       AND NOT EXISTS (
+         SELECT 1 FROM class_records cr WHERE cr.student_id = lp.student_id AND cr.class_date = lp.plan_date
+       )
+       ORDER BY lp.plan_date DESC`,
+      [today]
+    )
+    
+    return plans.map(plan => {
+      plan.tasks = JSON.parse(plan.tasks || '[]')
+      plan.generated_by_ai = !!plan.generated_by_ai
+      return plan as LessonPlan
+    })
+  },
+
+  // 按日期范围查询计划
+  async getByDateRange(start: string, end: string): Promise<LessonPlan[]> {
+    const plans = await ipcQuery<any[]>(
+      `SELECT * FROM lesson_plans WHERE plan_date BETWEEN ? AND ? ORDER BY plan_date ASC`,
+      [start, end]
+    )
+    return plans.map(plan => {
+      plan.tasks = JSON.parse(plan.tasks || '[]')
+      plan.generated_by_ai = !!plan.generated_by_ai
+      return plan as LessonPlan
+    })
+  },
+
+  // 获取指定日期的计划
+  async getByDate(date: string): Promise<LessonPlan[]> {
+    const plans = await ipcQuery<any[]>(
+      `SELECT * FROM lesson_plans WHERE plan_date = ? ORDER BY created_at DESC`,
+      [date]
+    )
+    return plans.map(plan => {
+      plan.tasks = JSON.parse(plan.tasks || '[]')
+      plan.generated_by_ai = !!plan.generated_by_ai
+      return plan as LessonPlan
+    })
   }
 }

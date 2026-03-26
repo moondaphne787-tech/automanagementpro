@@ -6,11 +6,10 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useAppStore } from '@/store/appStore'
 import { lessonPlanDb } from '@/db'
+import { parseTasks } from '@/db/utils'
 import { cn } from '@/lib/utils'
 import { TASK_TYPE_LABELS } from '@/types'
 import type { Student, LessonPlan, TaskBlock as TaskBlockType } from '@/types'
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
 
 interface PrintPlansDrawerProps {
   open: boolean
@@ -19,16 +18,21 @@ interface PrintPlansDrawerProps {
 
 interface StudentWithPlan {
   student: Student
-  plan: LessonPlan | null
+  plans: LessonPlan[]   // 改为数组，存最近 N 条
   selected: boolean
 }
 
-// 每张纸排数选项
+// 每行学员数选项
 const LAYOUT_OPTIONS = [
-  { value: '2', label: '每张 2 个' },
-  { value: '4', label: '每张 4 个' },
-  { value: '6', label: '每张 6 个' },
-  { value: '10', label: '每张 10 个' },
+  { value: '2', label: '每行 2 人（宽松）' },
+  { value: '3', label: '每行 3 人（标准）' },
+  { value: '4', label: '每行 4 人（紧凑）' },
+]
+
+// 每位学员卡片内显示的计划数选项
+const PLANS_PER_STUDENT_OPTIONS = [
+  { value: '1', label: '只打印最新计划' },
+  { value: '2', label: '打印最近 2 次计划' },
 ]
 
 export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
@@ -37,7 +41,8 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
   const [studentsWithPlans, setStudentsWithPlans] = useState<StudentWithPlan[]>([])
   const [filterGrade, setFilterGrade] = useState<string>('all')
   const [searchName, setSearchName] = useState('')
-  const [layout, setLayout] = useState<number>(4)
+  const [layout, setLayout] = useState<number>(3)  // 默认每行3人
+  const [plansPerStudent, setPlansPerStudent] = useState<number>(2)  // 默认显示2条计划
   const [showAssistantTips, setShowAssistantTips] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -64,10 +69,10 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     const results: StudentWithPlan[] = await Promise.all(
       activeStudents.map(async (student) => {
         const plans = await lessonPlanDb.getByStudentId(student.id)
-        const latestPlan = plans.length > 0 ? plans[0] : null
+        const latestPlans = plans.slice(0, 2)  // 取最近 2 条计划
         return {
           student,
-          plan: latestPlan,
+          plans: latestPlans,
           selected: false
         }
       })
@@ -120,21 +125,28 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     })
   }
   
-  // 获取布局参数
-  const getLayoutParams = (perPage: number) => {
-    switch (perPage) {
-      case 2: return { cols: 1, rows: 2 }
-      case 4: return { cols: 2, rows: 2 }
-      case 6: return { cols: 3, rows: 2 }
-      case 10: return { cols: 2, rows: 5 }
-      default: return { cols: 2, rows: 2 }
-    }
+  // 获取布局参数（按每行学员数计算）
+  const getLayoutParams = (cols: number) => {
+    // A4纸高度可容纳约3行学员卡片
+    return { cols, rows: 3 }
   }
   
   // 生成打印HTML
   const generatePrintHTML = (): string => {
-    const cards = selectedStudents.map(item => generatePlanCard(item))
-    const { cols, rows } = getLayoutParams(layout)
+    // 每个计划生成一个独立的卡片
+    const cards: string[] = []
+    selectedStudents.forEach(item => {
+      if (item.plans.length === 0) {
+        cards.push(generateSinglePlanCard(item.student, null, 0))
+      } else {
+        item.plans.slice(0, plansPerStudent).forEach((plan, idx) => {
+          cards.push(generateSinglePlanCard(item.student, plan, idx + 1))
+        })
+      }
+    })
+    
+    const { cols } = getLayoutParams(layout)
+    const perPage = cols * 5  // 每页5行
     
     return `
 <!DOCTYPE html>
@@ -151,37 +163,37 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     
     @page {
       size: A4;
-      margin: 5mm;
+      margin: 8mm;
     }
     
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      font-size: 12px;
-      line-height: 1.4;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.5;
       background: white;
     }
     
     .page {
       width: 210mm;
-      min-height: 297mm;
-      padding: 5mm;
+      padding: 4mm;
       page-break-after: always;
       display: grid;
       grid-template-columns: repeat(${cols}, 1fr);
-      grid-template-rows: repeat(${rows}, 1fr);
-      gap: 0;
+      gap: 4mm;
     }
     
     .page:last-child {
       page-break-after: auto;
     }
     
-    .card {
-      border: 1px dashed #999;
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      position: relative;
+    .plan-card {
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 8px 10px;
+      page-break-inside: avoid;
+      overflow: hidden;
+      font-size: 11px;
+      min-height: 60px;
     }
     
     .card-header {
@@ -189,76 +201,53 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
       justify-content: space-between;
       align-items: center;
       padding-bottom: 6px;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid #ddd;
       margin-bottom: 6px;
     }
     
     .student-name {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
-    }
-    
-    .student-info {
-      font-size: 11px;
-      color: #666;
+      color: #333;
     }
     
     .plan-date {
-      font-size: 11px;
-      color: #888;
+      font-size: 10px;
+      color: #666;
     }
     
-    .tasks-container {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    
-    .task-item {
+    .task-line {
       display: flex;
       align-items: flex-start;
       gap: 4px;
-      padding: 4px 0;
-      font-size: 12px;
-    }
-    
-    .task-number {
-      font-weight: 500;
-      color: #374151;
-      min-width: 16px;
-    }
-    
-    .task-type {
       font-size: 11px;
-      color: #666;
-      margin-right: 4px;
+      line-height: 1.5;
+      margin-bottom: 2px;
+    }
+    
+    .task-no {
+      color: #333;
+      min-width: 16px;
+      font-weight: 500;
     }
     
     .task-content {
+      color: #222;
       flex: 1;
-      color: #1f2937;
-    }
-    
-    .section-title {
-      font-size: 11px;
-      font-weight: 500;
-      color: #555;
-      margin-top: 6px;
-      padding-top: 4px;
-      border-top: 1px dashed #ddd;
-    }
-    
-    .section-content {
-      font-size: 11px;
-      color: #666;
-      margin-top: 2px;
     }
     
     .no-plan {
       color: #999;
       text-align: center;
-      padding: 20px;
+      padding: 15px;
+    }
+    
+    .plan-label {
+      font-size: 9px;
+      color: #888;
+      background: #f5f5f5;
+      padding: 1px 4px;
+      border-radius: 2px;
     }
     
     @media print {
@@ -270,77 +259,50 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
   </style>
 </head>
 <body>
-  ${generatePages(cards, layout)}
+  ${generatePages(cards, perPage)}
 </body>
 </html>
     `
   }
   
-  // 生成单个计划卡片HTML
-  const generatePlanCard = (item: StudentWithPlan): string => {
-    const { student, plan } = item
-    
+  // 生成单个计划的卡片
+  const generateSinglePlanCard = (student: Student, plan: LessonPlan | null, planIndex: number): string => {
     if (!plan) {
       return `
-        <div class="card">
+        <div class="plan-card">
           <div class="card-header">
-            <div>
-              <div class="student-name">${student.name}</div>
-              <div class="student-info">${student.grade || '-'}</div>
-            </div>
+            <span class="student-name">${student.name}</span>
+            <span class="student-grade">${student.grade || ''}</span>
           </div>
-          <div class="no-plan">暂无课程计划</div>
+          <div class="no-plan">暂无计划</div>
         </div>
       `
     }
     
-    const tasks = typeof plan.tasks === 'string' ? JSON.parse(plan.tasks) : plan.tasks
-    
-    const tasksHTML = tasks.map((task: TaskBlockType, index: number) => {
+    const tasks = parseTasks(plan.tasks)
+    const tasksHtml = tasks.map((task: TaskBlockType, i: number) => {
       const typeLabel = TASK_TYPE_LABELS[task.type] || task.type
-      
       let content = ''
       if (['vocab_new', 'vocab_review', 'nine_grid'].includes(task.type)) {
-        if (task.wordbank_label) {
-          content = task.wordbank_label
-          if (task.level_from && task.level_to) {
-            content += ` 第${task.level_from}-${task.level_to}关`
-          }
-        }
+        content = task.wordbank_label || ''
+        if (task.level_from && task.level_to) content += ` 第${task.level_from}-${task.level_to}关`
       } else {
         content = task.content || ''
       }
-      
-      return `
-        <div class="task-item">
-          <span class="task-number">${index + 1}.</span>
-          <span class="task-type">${typeLabel}</span>
-          <span class="task-content">${content}</span>
-        </div>
-      `
+      const taskText = content ? `${typeLabel}：${content}` : typeLabel
+      return `<div class="task-line"><span class="task-no">${i + 1}.</span><span class="task-content">${taskText}</span></div>`
     }).join('')
     
-    let assistantTipsHTML = ''
-    if (showAssistantTips && plan.notes) {
-      assistantTipsHTML = `
-        <div class="section-title">助教提示</div>
-        <div class="section-content">${plan.notes}</div>
-      `
-    }
+    const planLabel = plansPerStudent === 2 ? (planIndex === 1 ? '【第一次】' : '【第二次】') : ''
     
     return `
-      <div class="card">
+      <div class="plan-card">
         <div class="card-header">
-          <div>
-            <div class="student-name">${student.name}</div>
-            <div class="student-info">${student.grade || '-'}</div>
-          </div>
-          <div class="plan-date">${plan.plan_date || ''}</div>
+          <span class="student-name">${student.name} ${student.grade || ''}</span>
+          <span class="plan-date">${plan.plan_date || '未定'} ${planLabel}</span>
         </div>
-        <div class="tasks-container">
-          ${tasksHTML}
-          ${assistantTipsHTML}
-        </div>
+        <div class="tasks">${tasksHtml}</div>
+        ${showAssistantTips && plan.notes ? `<div style="font-size: 9px; color: #666; margin-top: 4px; padding-top: 4px; border-top: 1px dashed #ddd;">提示：${plan.notes}</div>` : ''}
       </div>
     `
   }
@@ -350,62 +312,33 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     const pages: string[] = []
     for (let i = 0; i < cards.length; i += perPage) {
       const pageCards = cards.slice(i, i + perPage)
+      // 填充空白卡片确保页面完整
+      while (pageCards.length < perPage) {
+        pageCards.push('<div class="student-card"><div class="no-plan"></div></div>')
+      }
       pages.push(`<div class="page">${pageCards.join('')}</div>`)
     }
     return pages.join('')
   }
   
-  // 导出 PDF
+  // 导出 PDF（通过打印功能，支持中文）
   const handleExportPDF = async () => {
     if (selectedStudents.length === 0) return
     
     setExporting(true)
     
     try {
-      // 创建临时容器
-      const container = document.createElement('div')
-      container.style.position = 'absolute'
-      container.style.left = '-9999px'
-      container.style.top = '0'
-      container.style.width = '210mm'
-      container.innerHTML = generatePrintHTML()
-      document.body.appendChild(container)
+      const html = generatePrintHTML()
       
-      // 使用 html2canvas 截图
-      const pages = container.querySelectorAll('.page')
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      })
-      
-      const pageWidth = 210
-      const pageHeight = 297
-      
-      for (let i = 0; i < pages.length; i++) {
-        const page = pages[i] as HTMLElement
-        
-        const canvas = await html2canvas(page, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff'
-        })
-        
-        if (i > 0) {
-          doc.addPage()
+      // 打开打印窗口，用户可以选择"另存为PDF"
+      const printWindow = window.open('', '_blank')
+      if (printWindow) {
+        printWindow.document.write(html)
+        printWindow.document.close()
+        printWindow.onload = () => {
+          printWindow.print()
         }
-        
-        const imgData = canvas.toDataURL('image/png')
-        doc.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight)
       }
-      
-      // 清理临时容器
-      document.body.removeChild(container)
-      
-      // 保存文件
-      const fileName = `课程计划_批量导出_${new Date().toISOString().split('T')[0]}.pdf`
-      doc.save(fileName)
     } catch (error) {
       console.error('Export PDF error:', error)
       alert('导出PDF失败：' + (error as Error).message)
@@ -522,7 +455,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                           item.selected 
                             ? "bg-primary/10 text-primary border border-primary/30" 
                             : "bg-muted hover:bg-muted/80",
-                          !item.plan && "opacity-60"
+                          item.plans.length === 0 && "opacity-60"
                         )}
                       >
                         {item.selected && (
@@ -532,8 +465,11 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                         <span className="text-xs text-muted-foreground ml-1">
                           {item.student.grade}
                         </span>
-                        {!item.plan && (
+                        {item.plans.length === 0 && (
                           <span className="text-xs text-yellow-600 block">无计划</span>
+                        )}
+                        {item.plans.length > 0 && (
+                          <span className="text-xs text-green-600 block">{item.plans.length}条计划</span>
                         )}
                       </button>
                     ))
@@ -543,7 +479,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                 {selectedStudents.length > 0 && (
                   <p className="text-sm text-muted-foreground mt-3">
                     已选择 <span className="text-primary font-medium">{selectedStudents.length}</span> 名学员
-                    （{selectedStudents.filter(s => s.plan).length} 人有计划）
+                    （{selectedStudents.filter(s => s.plans.length > 0).length} 人有计划）
                   </p>
                 )}
               </div>
@@ -554,7 +490,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                 
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm text-muted-foreground mb-2 block">每张纸排数</label>
+                    <label className="text-sm text-muted-foreground mb-2 block">每行学员数</label>
                     <Select
                       value={layout.toString()}
                       options={LAYOUT_OPTIONS}
@@ -562,9 +498,18 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                     />
                   </div>
                   
-                  <div className="col-span-2">
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">每人计划数</label>
+                    <Select
+                      value={plansPerStudent.toString()}
+                      options={PLANS_PER_STUDENT_OPTIONS}
+                      onChange={(e) => setPlansPerStudent(parseInt(e.target.value))}
+                    />
+                  </div>
+                  
+                  <div>
                     <label className="text-sm text-muted-foreground mb-2 block">显示选项</label>
-                    <div className="flex gap-6">
+                    <div className="flex gap-4">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -572,16 +517,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                           onChange={(e) => setShowAssistantTips(e.target.checked)}
                           className="w-4 h-4"
                         />
-                        <span className="text-sm">显示助教提示</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={showNotes}
-                          onChange={(e) => setShowNotes(e.target.checked)}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm">显示备注</span>
+                        <span className="text-sm">助教提示</span>
                       </label>
                     </div>
                   </div>
@@ -598,70 +534,88 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* 模拟 A4 纸张预览 */}
-                    <div className="bg-white border rounded-lg shadow-sm mx-auto" 
-                         style={{ 
-                           width: '100%', 
-                           maxWidth: '595px',
-                           aspectRatio: '210/297',
-                           padding: '10px',
-                           display: 'grid',
-                           gridTemplateColumns: layout === 2 ? '1fr' : layout === 10 ? '1fr 1fr' : layout === 4 ? '1fr 1fr' : '1fr 1fr 1fr',
-                           gridTemplateRows: layout === 2 ? '1fr' : layout === 10 ? 'repeat(5, 1fr)' : '1fr 1fr',
-                           gap: '2px'
-                         }}>
-                      {selectedStudents.slice(0, layout).map(item => (
-                        <div 
-                          key={item.student.id}
-                          className="border border-dashed border-gray-400 p-2 overflow-hidden text-[8px]"
-                        >
-                          <div className="flex justify-between items-center border-b border-gray-200 pb-1 mb-1">
-                            <div>
-                              <span className="font-semibold text-[10px]">{item.student.name}</span>
-                              <span className="text-gray-500 ml-1">{item.student.grade}</span>
-                            </div>
-                            <span className="text-gray-400">{item.plan?.plan_date || ''}</span>
+                    {/* 模拟 A4 纸张预览 - 每个计划独立一个卡片 */}
+                    {(() => {
+                      const previewCards: Array<{ student: Student, plan: LessonPlan | null, planIndex: number }> = []
+                      selectedStudents.slice(0, 6).forEach(item => {
+                        if (item.plans.length === 0) {
+                          previewCards.push({ student: item.student, plan: null, planIndex: 0 })
+                        } else {
+                          item.plans.slice(0, plansPerStudent).forEach((plan, idx) => {
+                            previewCards.push({ student: item.student, plan, planIndex: idx + 1 })
+                          })
+                        }
+                      })
+                      
+                      const totalPages = Math.ceil(selectedStudents.reduce((acc, item) => {
+                        return acc + (item.plans.length === 0 ? 1 : Math.min(item.plans.length, plansPerStudent))
+                      }, 0) / (layout * 5))
+                      
+                      return (
+                        <>
+                          <div className="bg-white border rounded-lg shadow-sm mx-auto" 
+                               style={{ 
+                                 width: '100%', 
+                                 maxWidth: '595px',
+                                 aspectRatio: '210/297',
+                                 padding: '8px',
+                                 display: 'grid',
+                                 gridTemplateColumns: layout === 2 ? '1fr' : layout === 4 ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr',
+                                 gap: '6px'
+                               }}>
+                            {previewCards.slice(0, layout * 4).map((card, idx) => (
+                              <div 
+                                key={idx}
+                                className="border border-solid border-gray-400 rounded p-2 overflow-hidden text-[7px]"
+                              >
+                                <div className="flex justify-between items-center border-b border-gray-300 pb-1 mb-1">
+                                  <span className="font-semibold text-[9px]">{card.student.name} {card.student.grade || ''}</span>
+                                  {card.plan && (
+                                    <span className="text-[6px] text-gray-500">
+                                      {card.plan.plan_date || '未定'}
+                                      {plansPerStudent === 2 && (card.planIndex === 1 ? ' (一)' : ' (二)')}
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                {card.plan ? (
+                                  <div className="space-y-0.5">
+                                    {parseTasks(card.plan.tasks).slice(0, 4).map((task: TaskBlockType, tIdx: number) => {
+                                      const typeLabel = TASK_TYPE_LABELS[task.type] || task.type
+                                      let taskContent = ''
+                                      if (['vocab_new', 'vocab_review', 'nine_grid'].includes(task.type)) {
+                                        if (task.wordbank_label) {
+                                          taskContent = task.wordbank_label
+                                          if (task.level_from && task.level_to) {
+                                            taskContent += ` ${task.level_from}-${task.level_to}关`
+                                          }
+                                        }
+                                      } else {
+                                        taskContent = task.content || ''
+                                      }
+                                      return (
+                                        <div key={tIdx} className="flex items-start gap-0.5">
+                                          <span className="text-[6px] font-medium shrink-0">{tIdx + 1}.</span>
+                                          <span className="text-[6px] leading-tight">{typeLabel}{taskContent ? `：${taskContent}` : ''}</span>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="text-gray-400 text-center text-[7px]">暂无计划</div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                           
-                          {item.plan ? (
-                            <div className="space-y-1">
-                              {(typeof item.plan.tasks === 'string' ? JSON.parse(item.plan.tasks) : item.plan.tasks).slice(0, 4).map((task: TaskBlockType, idx: number) => {
-                                const typeLabel = TASK_TYPE_LABELS[task.type] || task.type
-                                
-                                // 构建完整任务内容
-                                let taskContent = ''
-                                if (['vocab_new', 'vocab_review', 'nine_grid'].includes(task.type)) {
-                                  if (task.wordbank_label) {
-                                    taskContent = task.wordbank_label
-                                    if (task.level_from && task.level_to) {
-                                      taskContent += ` ${task.level_from}-${task.level_to}关`
-                                    }
-                                  }
-                                } else {
-                                  taskContent = task.content || ''
-                                }
-                                
-                                return (
-                                  <div key={idx} className="flex items-start gap-1">
-                                    <span className="text-[7px] font-medium shrink-0">{idx + 1}.</span>
-                                    <span className="text-[7px] text-gray-600 shrink-0">{typeLabel}</span>
-                                    <span className="text-[7px] leading-tight">{taskContent}</span>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          ) : (
-                            <div className="text-gray-400 text-center">暂无计划</div>
+                          {totalPages > 1 && (
+                            <p className="text-sm text-muted-foreground text-center">
+                              共 {totalPages} 页，显示第 1 页预览
+                            </p>
                           )}
-                        </div>
-                      ))}
-                    </div>
-                    
-                    {selectedStudents.length > layout && (
-                      <p className="text-sm text-muted-foreground text-center">
-                        共 {Math.ceil(selectedStudents.length / layout)} 页，显示第 1 页预览
-                      </p>
-                    )}
+                        </>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
@@ -684,7 +638,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                 ) : (
                   <>
                     <FileDown className="w-4 h-4 mr-2" />
-                    导出 PDF ({selectedStudents.filter(s => s.plan).length} 份)
+                    导出 PDF ({selectedStudents.filter(s => s.plans.length > 0).length} 份)
                   </>
                 )}
               </Button>

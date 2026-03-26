@@ -214,6 +214,47 @@ export const classRecordDb = {
     return successCount
   },
   
+  // 批量获取多个学员的课堂记录（解决 N+1 查询问题）
+  async getAllForStudents(studentIds: string[]): Promise<Map<string, ClassRecord[]>> {
+    if (studentIds.length === 0) return new Map()
+    
+    const placeholders = studentIds.map(() => '?').join(',')
+    const records = await ipcQuery<any[]>(
+      `SELECT * FROM class_records WHERE student_id IN (${placeholders}) ORDER BY class_date DESC`,
+      studentIds
+    )
+    
+    const result = new Map<string, ClassRecord[]>()
+    for (const record of records) {
+      record.tasks = JSON.parse(record.tasks || '[]')
+      record.checkin_completed = !!record.checkin_completed
+      record.imported_from_excel = !!record.imported_from_excel
+      record.plan_id = record.plan_id || null
+      
+      if (!result.has(record.student_id)) {
+        result.set(record.student_id, [])
+      }
+      result.get(record.student_id)!.push(record as ClassRecord)
+    }
+    
+    return result
+  },
+  
+  // 按日期范围查询课堂记录
+  async getByDateRange(start: string, end: string): Promise<ClassRecord[]> {
+    const records = await ipcQuery<any[]>(
+      `SELECT * FROM class_records WHERE class_date BETWEEN ? AND ? ORDER BY class_date ASC`,
+      [start, end]
+    )
+    return records.map(record => {
+      record.tasks = JSON.parse(record.tasks || '[]')
+      record.checkin_completed = !!record.checkin_completed
+      record.imported_from_excel = !!record.imported_from_excel
+      record.plan_id = record.plan_id || null
+      return record as ClassRecord
+    })
+  },
+
   // 获取完成率统计（用于成长档案趋势图）
   async getCompletionRateStats(studentId: string, months: number = 6): Promise<{ date: string; total: number; completed: number; rate: number }[]> {
     const startDate = new Date()

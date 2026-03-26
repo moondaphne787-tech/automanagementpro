@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit, Trash2, Clock, Plus, Calendar, FileText, Sparkles, Download, Printer, Loader2, CalendarX, RefreshCw, Copy, Link, Columns, Target, TrendingUp, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { PromptDialog } from '@/components/ui/dialog'
 import { useAppStore } from '@/store/appStore'
 import { formatDate, formatHours, isHoursWarning, getLevelColor } from '@/lib/utils'
+import { extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
 import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS, TASK_TYPE_LABELS } from '@/types'
 import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { ClassRecordForm } from '@/components/ClassRecord/ClassRecordForm'
@@ -62,8 +63,7 @@ export function StudentDetail() {
   const [extraInstruction, setExtraInstruction] = useState('')
   const [showPlanGenerator, setShowPlanGenerator] = useState(false)
   
-  // 过期计划状态
-  const [expiredPlans, setExpiredPlans] = useState<LessonPlan[]>([])
+  // 过期计划状态（从 lessonPlans 派生计算，不再单独查询）
   
   // 课堂记录与计划关联状态
   const [recordsWithPlan, setRecordsWithPlan] = useState<(ClassRecord & { plan?: LessonPlan })[]>([])
@@ -109,15 +109,28 @@ export function StudentDetail() {
     setRecordsWithPlan(records)
   }
   
-  const loadExpiredPlans = async (studentId: string) => {
-    const plans = await lessonPlanDb.getExpiredPlans(studentId)
-    setExpiredPlans(plans)
-  }
+  // 移除 loadExpiredPlans，改为从 lessonPlans 派生计算
   
   const loadLessonPlans = async (studentId: string) => {
     const plans = await lessonPlanDb.getByStudentId(studentId)
     setLessonPlans(plans)
   }
+  
+  // 从 lessonPlans 和 recordsWithPlan 派生计算过期计划
+  // 过期条件：计划日期存在且小于今天，且没有对应的课堂记录
+  const expiredPlans = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]
+    const executedDates = new Set(
+      recordsWithPlan
+        .filter(r => r.class_date)
+        .map(r => r.class_date)
+    )
+    return lessonPlans.filter(plan => 
+      plan.plan_date && 
+      plan.plan_date < today && 
+      !executedDates.has(plan.plan_date)
+    )
+  }, [lessonPlans, recordsWithPlan])
   
   const loadAIConfig = async () => {
     const url = await settingsDb.get('ai_api_url')
@@ -247,7 +260,7 @@ export function StudentDetail() {
       loadClassRecords(id)
       loadLessonPlans(id)
       loadAIConfig()
-      loadExpiredPlans(id)
+      // 移除 loadExpiredPlans(id)，expiredPlans 现在从 lessonPlans 派生计算
       loadRecordsWithPlan(id)
       loadLearningPhases(id)
       
@@ -840,7 +853,7 @@ export function StudentDetail() {
                                     <div className="mt-2 p-3 bg-muted/50 rounded-lg border border-muted">
                                       <p className="text-xs text-muted-foreground mb-1 font-medium">学情反馈原文</p>
                                       <pre className="text-sm whitespace-pre-wrap font-sans text-foreground leading-relaxed">
-                                        {record.detail_feedback}
+                                        {extractFeedbackBeforeNotes(record.detail_feedback)}
                                       </pre>
                                     </div>
                                   )}
@@ -1010,7 +1023,7 @@ export function StudentDetail() {
                                         if (newDate) {
                                           await lessonPlanDb.update(plan.id, { plan_date: newDate })
                                           loadLessonPlans(id!)
-                                          loadExpiredPlans(id!)
+                                          // expiredPlans 会自动从 lessonPlans 派生更新
                                         }
                                       })
                                     }}
@@ -1036,7 +1049,7 @@ export function StudentDetail() {
                                           // 删除过期计划
                                           await lessonPlanDb.delete(plan.id)
                                           loadLessonPlans(id!)
-                                          loadExpiredPlans(id!)
+                                          // expiredPlans 会自动从 lessonPlans 派生更新
                                         }
                                       })
                                     }}
@@ -1052,7 +1065,7 @@ export function StudentDetail() {
                                       if (confirm('确定要删除这个过期计划吗？')) {
                                         await lessonPlanDb.delete(plan.id)
                                         loadLessonPlans(id!)
-                                        loadExpiredPlans(id!)
+                                        // expiredPlans 会自动从 lessonPlans 派生更新
                                       }
                                     }}
                                   >
@@ -1132,6 +1145,24 @@ export function StudentDetail() {
                             
                             {/* 操作按钮 */}
                             <div className="flex items-center gap-2 ml-4">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                title="复制为新计划"
+                                onClick={async () => {
+                                  await createLessonPlan({
+                                    student_id: id!,
+                                    plan_date: new Date().toISOString().split('T')[0],
+                                    tasks: plan.tasks,
+                                    notes: plan.notes || undefined,
+                                    generated_by_ai: false
+                                  })
+                                  loadLessonPlans(id!)
+                                }}
+                              >
+                                <Copy className="w-4 h-4 mr-1" />
+                                复制为新计划
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"

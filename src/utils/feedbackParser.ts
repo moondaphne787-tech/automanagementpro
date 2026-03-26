@@ -7,13 +7,13 @@ const WORDBANK_KEYWORDS = [
   '2025初中考纲', '2025小学考纲', '2025高中考纲',
   // 标准词库
   '初中考纲', '初中进阶', '小学考纲', '小学进阶', 
-  '高中考纲', '高中进阶', '大学四级',
+  '高中考纲', '高中进阶', '大学四级', '大学六级',
   // 教材词库
   '七上', '七下', '八上', '八下', 
   '六上', '六下', '五上', '五下',
   '四上', '四下', '三上', '三下',
   // 其他
-  '中考考纲', '高考考纲', 'KET', 'PET'
+  '维克多', '高频', 'KET', 'PET'
 ]
 
 // 任务类型关键词映射
@@ -181,7 +181,65 @@ function parseTaskLine(line: string): TaskBlock | null {
 }
 
 /**
- * 从学情反馈长文本中提取「学习内容」区块
+ * 从学情反馈中截取内容，保留"学习状态"及其之前的内容
+ * 删除"注意"、"学习任务"等后续段落
+ */
+export function extractFeedbackBeforeNotes(feedback: string): string {
+  if (!feedback) return feedback
+  
+  // 定义学习状态段落后的结束标记（按优先级排序）
+  // 注意：需要包含带冒号和不带冒号的版本
+  const endMarkers = [
+    // 注意事项类 - 单词识记
+    '注意以下单词的识记：',
+    '注意以下单词的识记',
+    '注意以下单词识记：',
+    '注意以下单词识记',
+    // 注意事项类 - 单词发音
+    '注意以下单词的发音：',
+    '注意以下单词的发音',
+    '注意以下单词发音：',
+    '注意以下单词发音',
+    // 注意事项类 - 其他
+    '注意以下单词的：',
+    '注意以下单词的',
+    '注意以下单词：',
+    '注意以下单词',
+    // 注意事项类 - 区分
+    '注意相关区分：',
+    '注意相关区分',
+    '注意以下区分：',
+    '注意以下区分',
+    // 注意事项类 - 通用
+    '注意：',
+    '注意:',
+    '注意\n',
+    // 学习任务类
+    '学习任务：',
+    '学习任务:',
+    '学习任务\n'
+  ]
+  
+  // 找到最早的结束标记位置
+  let earliestIndex = -1
+  for (const marker of endMarkers) {
+    const index = feedback.indexOf(marker)
+    if (index !== -1 && (earliestIndex === -1 || index < earliestIndex)) {
+      earliestIndex = index
+    }
+  }
+  
+  // 如果找到了结束标记，截取之前的内容
+  if (earliestIndex !== -1) {
+    return feedback.substring(0, earliestIndex).trim()
+  }
+  
+  // 如果没有找到结束标记，返回原文
+  return feedback
+}
+
+/**
+ * 从学情反馈中提取「学习内容」区块
  */
 function extractLearningContent(text: string): string | null {
   // 匹配「学习内容」区块

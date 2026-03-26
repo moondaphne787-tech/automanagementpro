@@ -79,15 +79,22 @@ export function PhasesPage() {
         { field: 'student_no', direction: 'asc' }
       )
       
+      // 批量获取所有学员的课堂记录和考试成绩（解决 N+1 查询问题）
+      const studentIds = allStudents.map(s => s.id)
+      const [allRecordsMap, allScoresMap] = await Promise.all([
+        classRecordDb.getAllForStudents(studentIds),
+        examScoreDb.getAllForStudents(studentIds)
+      ])
+      
       // 为每个学员生成自动阶段
       const allPhases: AutoPhase[] = []
       const today = new Date().toISOString().split('T')[0]
       const currentYear = new Date().getFullYear()
       
       for (const student of allStudents) {
-        // 获取该学员的所有课堂记录
-        const records = await classRecordDb.getByStudentId(student.id)
-        const scores = await examScoreDb.getByStudentId(student.id)
+        // 从批量查询结果中获取该学员的数据
+        const records = allRecordsMap.get(student.id) || []
+        const scores = allScoresMap.get(student.id) || []
         
         // 生成阶段
         const studentPhases = generatePhasesForStudent(semesterConfig, student, records, scores, today, currentYear)

@@ -1,5 +1,4 @@
 import { NavLink } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import { 
   Users, 
   UserPlus, 
@@ -9,12 +8,15 @@ import {
   Settings,
   Upload,
   Sparkles,
-  FileDown
+  FileDown,
+  Zap,
+  LayoutDashboard
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { to: '/', icon: Users, label: '学员档案' },
+  { to: '/', icon: LayoutDashboard, label: '工作台' },
+  { to: '/students', icon: Users, label: '学员管理' },
   { to: '/trial', icon: UserPlus, label: '体验生' },
   { to: '/schedule', icon: Calendar, label: '排课' },
   { to: '/teachers', icon: GraduationCap, label: '助教' },
@@ -23,6 +25,7 @@ const navItems = [
 ]
 
 const quickActions = [
+  { icon: Zap, label: '快速录入今日课堂', action: 'quickRecord' },
   { icon: Upload, label: '批量导入课堂记录', action: 'import' },
   { icon: Sparkles, label: '批量生成课程计划', action: 'generate' },
   { icon: FileDown, label: '批量导出课程计划', action: 'print' },

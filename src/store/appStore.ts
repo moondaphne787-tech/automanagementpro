@@ -35,6 +35,7 @@ interface AppState {
   
   // 过期计划状态
   expiredPlansMap: Map<string, number> // student_id -> expired count
+  expiredPlansLoading: boolean
   
   // 学期配置
   semesterConfig: {
@@ -55,6 +56,7 @@ interface AppState {
   
   // 操作方法
   loadStudents: () => Promise<void>
+  loadExpiredPlansCount: () => Promise<void>
   setFilters: (filters: Partial<FilterOptions>) => void
   setSort: (sort: SortOptions) => void
   createStudent: (student: Omit<Student, 'id' | 'created_at' | 'updated_at'>) => Promise<Student>
@@ -204,25 +206,36 @@ export const useAppStore = create<AppState>((set, get) => ({
   examScores: [],
   learningPhases: [],
   expiredPlansMap: new Map(),
+  expiredPlansLoading: false,
   
-  // 加载学员列表
-  // 加载学员列表
+  // 加载学员列表（不含过期计划查询，提高性能）
   loadStudents: async () => {
     set({ studentsLoading: true })
     try {
       const { filters, sort } = get()
       const students = await studentDb.getAllWithBilling(filters, sort)
       
-      // 加载过期计划数量
+      set({ students, studentsLoading: false })
+    } catch (error) {
+      console.error('Failed to load students:', error)
+      set({ studentsLoading: false })
+    }
+  },
+  
+  // 单独加载过期计划数量（仅在首页挂载时调用一次）
+  loadExpiredPlansCount: async () => {
+    set({ expiredPlansLoading: true })
+    try {
+      const { students } = get()
       const activeStudentIds = students
         .filter(s => s.status === 'active')
         .map(s => s.id)
       const expiredPlansMap = await lessonPlanDb.getExpiredPlansCount(activeStudentIds)
       
-      set({ students, studentsLoading: false, expiredPlansMap })
+      set({ expiredPlansMap, expiredPlansLoading: false })
     } catch (error) {
-      console.error('Failed to load students:', error)
-      set({ studentsLoading: false })
+      console.error('Failed to load expired plans count:', error)
+      set({ expiredPlansLoading: false })
     }
   },
   
@@ -396,6 +409,24 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         }
       }
+      
+      // 九宫格进度同步
+      if (task.type === 'nine_grid' && task.wordbank_label) {
+        const wordbanks = await wordbankDb.getAll()
+        const wordbank = wordbanks.find(w => w.name === task.wordbank_label)
+        if (wordbank) {
+          const existingProgress = await progressDb.getByStudentId(data.student_id)
+          const currentProgress = existingProgress.find(p => p.wordbank_id === wordbank.id)
+          if (currentProgress) {
+            await progressDb.upsert({
+              student_id: data.student_id,
+              wordbank_id: wordbank.id,
+              current_level: currentProgress.current_level,
+              last_nine_grid_level: currentProgress.current_level  // 记录本次九宫格完成到的关
+            })
+          }
+        }
+      }
     }
     
     // 同步助教累计课时
@@ -483,6 +514,24 @@ export const useAppStore = create<AppState>((set, get) => ({
                 student_id: record.student_id,
                 wordbank_id: wordbank.id,
                 current_level: effectiveLevel
+              })
+            }
+          }
+        }
+        
+        // 九宫格进度同步
+        if (task.type === 'nine_grid' && task.wordbank_label) {
+          const wordbanks = await wordbankDb.getAll()
+          const wordbank = wordbanks.find(w => w.name === task.wordbank_label)
+          if (wordbank) {
+            const existingProgress = await progressDb.getByStudentId(record.student_id)
+            const currentProgress = existingProgress.find(p => p.wordbank_id === wordbank.id)
+            if (currentProgress) {
+              await progressDb.upsert({
+                student_id: record.student_id,
+                wordbank_id: wordbank.id,
+                current_level: currentProgress.current_level,
+                last_nine_grid_level: currentProgress.current_level  // 记录本次九宫格完成到的关
               })
             }
           }

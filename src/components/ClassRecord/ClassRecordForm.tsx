@@ -6,7 +6,7 @@ import { Select } from '@/components/ui/select'
 import { DateInput } from '@/components/ui/date-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskBlock, createEmptyTask } from '@/components/TaskBlock/TaskBlock'
-import { parseFeedback } from '@/utils/feedbackParser'
+import { parseFeedback, extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
 import { lessonPlanDb } from '@/db'
 import type { TaskBlock as TaskBlockType, AttendanceType, PerformanceType, TaskCompletedType, Wordbank, LessonPlan } from '@/types'
 
@@ -129,10 +129,13 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
     
     // 过滤掉空任务
     const validTasks = tasks.filter(t => {
-      if (['vocab_new', 'vocab_review', 'nine_grid'].includes(t.type)) {
+      if (['vocab_new', 'vocab_review'].includes(t.type)) {
         return t.wordbank_label && t.level_from && t.level_to
       }
-      return t.content
+      if (t.type === 'nine_grid') {
+        return !!t.wordbank_label  // 九宫格只需要词库名
+      }
+      return !!t.content
     })
     
     if (validTasks.length === 0) {
@@ -143,6 +146,9 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
     setSaving(true)
     
     try {
+      // 处理学情反馈，保留"学习状态"及之前的内容，删除后续的注意事项等内容
+      const processedFeedback = extractFeedbackBeforeNotes(detailFeedback)
+      
       await onSave({
         student_id: studentId,
         class_date: classDate,
@@ -153,7 +159,7 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
         task_completed: taskCompleted,
         incomplete_reason: incompleteReason || undefined,
         performance,
-        detail_feedback: detailFeedback || undefined,
+        detail_feedback: processedFeedback || undefined,
         highlights: highlights || undefined,
         issues: issues || undefined,
         plan_id: selectedPlanId || undefined

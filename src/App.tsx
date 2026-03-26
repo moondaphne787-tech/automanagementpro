@@ -4,6 +4,8 @@ import { AppLayout } from '@/components/Layout/AppLayout'
 import { ImportRecordsDrawer } from '@/components/Drawers/ImportRecordsDrawer'
 import { GeneratePlansDrawer } from '@/components/Drawers/GeneratePlansDrawer'
 import { PrintPlansDrawer } from '@/components/Drawers/PrintPlansDrawer'
+import { QuickClassRecordDrawer } from '@/components/Drawers/QuickClassRecordDrawer'
+import { DashboardPage } from '@/pages/DashboardPage'
 import { Home } from '@/pages/Home'
 import { StudentNew } from '@/pages/StudentNew'
 import { StudentDetail } from '@/pages/StudentDetail'
@@ -19,6 +21,7 @@ function App() {
   const [importDrawerOpen, setImportDrawerOpen] = useState(false)
   const [generateDrawerOpen, setGenerateDrawerOpen] = useState(false)
   const [printDrawerOpen, setPrintDrawerOpen] = useState(false)
+  const [quickRecordDrawerOpen, setQuickRecordDrawerOpen] = useState(false)
   
   // 处理快捷操作
   const handleQuickAction = (action: string) => {
@@ -32,6 +35,9 @@ function App() {
       case 'print':
         setPrintDrawerOpen(true)
         break
+      case 'quickRecord':
+        setQuickRecordDrawerOpen(true)
+        break
     }
   }
   
@@ -39,7 +45,8 @@ function App() {
     <HashRouter>
       <Routes>
         <Route element={<AppLayout onQuickAction={handleQuickAction} />}>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/students" element={<Home />} />
           <Route path="/students/new" element={<StudentNew />} />
           <Route path="/students/:id" element={<StudentDetail />} />
           <Route path="/trial" element={<TrialList />} />
@@ -68,6 +75,12 @@ function App() {
       <PrintPlansDrawer 
         open={printDrawerOpen} 
         onClose={() => setPrintDrawerOpen(false)} 
+      />
+      
+      {/* 快速录入今日课堂抽屉 */}
+      <QuickClassRecordDrawer 
+        open={quickRecordDrawerOpen} 
+        onClose={() => setQuickRecordDrawerOpen(false)} 
       />
     </HashRouter>
   )

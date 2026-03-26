@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -452,19 +452,14 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
     setCompletionRateData(data)
   }
 
-  // 获取自动计算的学习阶段列表
-  const getAutoPhases = (): AutoPhase[] => {
+  // 使用 useMemo 缓存自动计算的学习阶段列表，避免每次渲染重新计算
+  const autoPhases = useMemo(() => {
     const phases: AutoPhase[] = []
     const today = new Date().toISOString().split('T')[0]
     const currentYear = new Date().getFullYear()
     
     // 如果学期配置未加载，返回空数组
     if (!semesterConfig) return []
-    
-    // 辅助函数：判断日期是否在范围内
-    const isInRange = (date: string, start: string, end: string): boolean => {
-      return date >= start && date <= end
-    }
     
     // 辅助函数：判断阶段状态
     const getPhaseStatus = (start: string, end: string) => {
@@ -530,7 +525,7 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
     }
     
     return phases
-  }
+  }, [semesterConfig])
 
   const handleSaveExam = async (data: any) => {
     if (editingExam) {
@@ -779,7 +774,7 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
           studentId={studentId}
           classRecords={classRecords}
           examScores={examScores}
-          phases={getAutoPhases()}
+          phases={autoPhases}
         />
       )}
     </div>

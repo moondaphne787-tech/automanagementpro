@@ -2,6 +2,17 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import Database from 'better-sqlite3'
 import * as fs from 'fs'
+import {
+  runMigrations,
+  runAutoBackup,
+  createManualBackup,
+  restoreFromBackup,
+  getBackupHistory,
+  getMigrationHistory,
+  getCurrentVersion,
+  getDatabaseStats,
+  migrations
+} from './migrations'
 
 let mainWindow: BrowserWindow | null = null
 let db: Database.Database | null = null
@@ -14,7 +25,6 @@ function initDatabase() {
   try {
     const dbDir = path.dirname(dbPath)
     // 确保目录存在
-    const fs = require('fs')
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true })
     }
@@ -24,12 +34,42 @@ function initDatabase() {
     db.pragma('journal_mode = WAL')
     console.log('Database opened successfully')
     
-    // 创建表
+    // 创建基础表（保持向后兼容）
     createTables()
+    
+    // 运行数据库迁移系统
+    if (db) {
+      try {
+        const appliedMigrations = runMigrations(db)
+        if (appliedMigrations.length > 0) {
+          console.log(`Database migrated to version ${getCurrentVersion(db)}`)
+        }
+      } catch (migrationError) {
+        console.error('Migration error:', migrationError)
+        // 迁移失败时显示警告但不阻止应用启动
+        dialog.showMessageBox(mainWindow!, {
+          type: 'warning',
+          title: '数据库迁移警告',
+          message: '数据库迁移过程中出现部分问题，部分功能可能受影响。',
+          detail: `错误信息: ${(migrationError as Error).message}`
+        })
+      }
+      
+      // 执行自动备份
+      try {
+        runAutoBackup(db, dbPath)
+      } catch (backupError) {
+        console.error('Auto backup error:', backupError)
+        // 备份失败不阻塞应用
+      }
+    }
+    
+    // 记录数据库版本信息
+    console.log(`Database initialized. Current version: ${db ? getCurrentVersion(db) : 'unknown'}`)
+    
   } catch (error) {
     console.error('Failed to initialize database:', error)
     // 显示错误对话框
-    const { dialog } = require('electron')
     dialog.showErrorBox('数据库初始化失败', 
       `无法初始化数据库，应用可能无法正常工作。\n\n错误信息: ${(error as Error).message}\n\n数据库路径: ${dbPath}`)
     // 仍然继续运行，但数据库操作会失败
@@ -70,7 +110,7 @@ function createTables() {
       student_id TEXT NOT NULL,
       total_hours REAL DEFAULT 0,
       used_hours REAL DEFAULT 0,
-      warning_threshold REAL DEFAULT 3,
+      warning_threshold REAL DEFAULT 10,
       last_payment_date TEXT,
       notes TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -338,6 +378,22 @@ function createTables() {
     )
   `)
 
+  // 待办事项表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS todos (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      student_id TEXT,
+      student_name TEXT,
+      due_date TEXT,
+      completed INTEGER DEFAULT 0,
+      completed_at TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      sort_order INTEGER DEFAULT 0,
+      FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL
+    )
+  `)
+
   // 插入默认词库配置
   const wordbanksCount = db.prepare('SELECT COUNT(*) as count FROM wordbanks').get() as { count: number }
   if (wordbanksCount.count === 0) {
@@ -490,6 +546,108 @@ ipcMain.handle('db:backup', async (_event, backupPath: string) => {
 ipcMain.handle('dialog:showSaveDialog', async (_event, options) => {
   const result = await dialog.showSaveDialog(mainWindow!, options)
   return result
+})
+
+// === 迁移和备份相关 IPC 处理程序 ===
+
+// 获取数据库版本信息
+ipcMain.handle('db:getVersion', () => {
+  if (!db) return { version: 0, latestVersion: 0 }
+  return {
+    version: getCurrentVersion(db),
+    latestVersion: migrations[migrations.length - 1]?.version ?? 0
+  }
+})
+
+// 获取迁移历史
+ipcMain.handle('db:getMigrationHistory', () => {
+  if (!db) return []
+  return getMigrationHistory(db)
+})
+
+// 获取数据库统计信息
+ipcMain.handle('db:getStats', () => {
+  if (!db) return null
+  const stats = getDatabaseStats(db)
+  // 获取数据库文件大小
+  try {
+    const statsFs = fs.statSync(dbPath)
+    stats.dbSize = statsFs.size
+  } catch {
+    stats.dbSize = 0
+  }
+  return stats
+})
+
+// 创建手动备份
+ipcMain.handle('db:createBackup', async (_event, backupName?: string) => {
+  if (!db) throw new Error('Database not initialized')
+  try {
+    const backupPath = createManualBackup(db, dbPath, backupName)
+    return { success: true, path: backupPath }
+  } catch (error) {
+    console.error('Create backup error:', error)
+    throw error
+  }
+})
+
+// 获取备份历史
+ipcMain.handle('db:getBackupHistory', async (_event, limit?: number) => {
+  if (!db) return []
+  return getBackupHistory(db, limit ?? 20)
+})
+
+// 从备份恢复
+ipcMain.handle('db:restoreFromBackup', async (_event, backupPath: string) => {
+  if (!db) throw new Error('Database not initialized')
+  try {
+    // 先关闭数据库连接
+    db.close()
+    db = null
+    
+    // 执行恢复
+    const success = restoreFromBackup(dbPath, backupPath)
+    
+    if (success) {
+      // 重新打开数据库
+      db = new Database(dbPath)
+      db.pragma('journal_mode = WAL')
+      return { success: true, message: '数据库已从备份恢复，请重启应用。' }
+    } else {
+      throw new Error('恢复失败')
+    }
+  } catch (error) {
+    console.error('Restore from backup error:', error)
+    // 尝试重新打开数据库
+    if (!db) {
+      try {
+        db = new Database(dbPath)
+        db.pragma('journal_mode = WAL')
+      } catch (e) {
+        console.error('Failed to reopen database:', e)
+      }
+    }
+    throw error
+  }
+})
+
+// 获取备份目录路径
+ipcMain.handle('db:getBackupDir', () => {
+  return path.join(path.dirname(dbPath), 'backups')
+})
+
+// 打开备份目录（在文件管理器中显示）
+ipcMain.handle('db:openBackupDir', async () => {
+  const backupDir = path.join(path.dirname(dbPath), 'backups')
+  
+  // 确保目录存在
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true })
+  }
+  
+  const { shell } = require('electron')
+  shell.openPath(backupDir)
+  return { success: true }
 })
 
 // 打印课程计划

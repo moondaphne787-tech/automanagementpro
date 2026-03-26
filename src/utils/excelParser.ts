@@ -298,6 +298,7 @@ export interface ImportPreviewItem {
   teacher_name?: string
   attendance: 'present' | 'absent' | 'late'
   task_completed: 'completed' | 'partial' | 'not_completed'
+  incomplete_reason?: string
   detail_feedback?: string
   issues?: string
   wordbank?: string  // 词库名称（如"初中考纲"、"2025初中考纲"）
@@ -337,6 +338,7 @@ export function createImportPreview(
       teacher_name: row.teacher_name,
       attendance: row.attendance,
       task_completed: row.task_completed,
+      incomplete_reason: row.incomplete_reason,
       detail_feedback: row.detail_feedback,
       issues: issues.length > 0 ? issues.join('；') : undefined,
       wordbank: row.wordbank,

@@ -1,5 +1,3 @@
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
 import type { LessonPlan, Student, TaskBlock } from '@/types'
 import { TASK_TYPE_NAMES } from '@/ai/prompts'
 
@@ -25,7 +23,15 @@ function formatTaskText(task: TaskBlock): string {
   return typeName
 }
 
-// 创建课程计划的 HTML 内容
+// 获取学员程度显示文本
+function getLevelText(level?: string): string {
+  if (level === 'weak') return '基础薄弱'
+  if (level === 'medium') return '基础较好'
+  if (level === 'strong') return '非常优秀'
+  return '-'
+}
+
+// 创建单个学员课程计划的 HTML 内容
 function createLessonPlanHTML(student: Student, plan: LessonPlan): string {
   const tasksHtml = plan.tasks.map((task, index) => {
     const taskText = formatTaskText(task)
@@ -58,114 +64,94 @@ function createLessonPlanHTML(student: Student, plan: LessonPlan): string {
       text-align: center;
       margin-bottom: 30px;
       padding-bottom: 20px;
-      border-bottom: 2px solid #6366f1;
+      border-bottom: 2px solid #333;
     }
     .title {
       font-size: 28px;
       font-weight: bold;
-      color: #6366f1;
+      color: #333;
       margin-bottom: 8px;
     }
     .subtitle {
       font-size: 14px;
-      color: #9ca3af;
+      color: #666;
     }
     .info-section {
       display: flex;
       flex-wrap: wrap;
       gap: 20px;
       margin-bottom: 30px;
-      padding: 20px;
-      background: #f9fafb;
-      border-radius: 12px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
     }
     .info-item {
       flex: 1;
-      min-width: 150px;
+      min-width: 120px;
     }
     .info-label {
       font-size: 12px;
-      color: #6b7280;
+      color: #666;
       margin-bottom: 4px;
     }
     .info-value {
       font-size: 16px;
       font-weight: 600;
-      color: #111827;
+      color: #333;
     }
     .section {
       margin-bottom: 25px;
     }
     .section-title {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 600;
-      color: #374151;
-      margin-bottom: 15px;
-      padding-left: 12px;
-      border-left: 4px solid #6366f1;
+      color: #333;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
     }
     .task-list {
-      background: #ffffff;
-      border-radius: 8px;
+      background: #fff;
     }
     .task-item {
-      display: flex;
-      align-items: flex-start;
-      padding: 12px 16px;
-      margin-bottom: 8px;
-      background: #f3f4f6;
-      border-radius: 8px;
-    }
-    .task-number {
-      font-weight: 600;
-      color: #6366f1;
-      margin-right: 8px;
-      min-width: 24px;
-    }
-    .task-text {
-      flex: 1;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-    .note-box {
-      padding: 16px;
-      background: #fef3c7;
-      border-radius: 8px;
-      border-left: 4px solid #f59e0b;
-    }
-    .note-box .box-title {
-      font-weight: 600;
-      color: #92400e;
-      margin-bottom: 8px;
-    }
-    .note-box .box-content {
-      color: #78350f;
+      padding: 8px 0;
+      border-bottom: 1px dashed #eee;
       font-size: 14px;
       line-height: 1.6;
     }
-    .reason-box {
-      padding: 16px;
-      background: #dbeafe;
-      border-radius: 8px;
-      border-left: 4px solid #3b82f6;
+    .task-item:last-child {
+      border-bottom: none;
     }
-    .reason-box .box-title {
+    .note-box, .reason-box {
+      padding: 12px;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .note-box .box-title, .reason-box .box-title {
       font-weight: 600;
-      color: #1e40af;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
-    .reason-box .box-content {
-      color: #1e3a8a;
+    .note-box .box-content, .reason-box .box-content {
       font-size: 14px;
       line-height: 1.6;
     }
     .footer {
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 1px solid #e5e7eb;
+      margin-top: 30px;
+      padding-top: 15px;
+      border-top: 1px solid #ddd;
       text-align: center;
       font-size: 12px;
-      color: #9ca3af;
+      color: #999;
+    }
+    @media print {
+      body {
+        padding: 20mm;
+      }
+      @page {
+        size: A4;
+        margin: 0;
+      }
     }
   </style>
 </head>
@@ -186,10 +172,7 @@ function createLessonPlanHTML(student: Student, plan: LessonPlan): string {
     </div>
     <div class="info-item">
       <div class="info-label">程度</div>
-      <div class="info-value">${
-        student.level === 'weak' ? '基础薄弱' : 
-        student.level === 'medium' ? '基础较好' : '非常优秀'
-      }</div>
+      <div class="info-value">${getLevelText(student.level)}</div>
     </div>
     <div class="info-item">
       <div class="info-label">计划日期</div>
@@ -230,142 +213,236 @@ function createLessonPlanHTML(student: Student, plan: LessonPlan): string {
   `
 }
 
-// 导出课程计划为 PDF（使用 html2canvas 支持中文）
+// 创建多个学员课程计划的 HTML 内容（批量导出用）
+function createMultiplePlansHTML(plans: Array<{ student: Student; plan: LessonPlan }>): string {
+  const plansHtml = plans.map(({ student, plan }, index) => {
+    const tasksHtml = plan.tasks.map((task, taskIndex) => {
+      const taskText = formatTaskText(task)
+      return `<div class="task-item">
+        <span class="task-number">${taskIndex + 1}.</span>
+        <span class="task-text">${taskText}</span>
+      </div>`
+    }).join('')
+    
+    return `
+      <div class="plan-page ${index > 0 ? 'page-break' : ''}">
+        <div class="header">
+          <div class="title">课程计划</div>
+          <div class="subtitle">EduManager Pro</div>
+        </div>
+        
+        <div class="info-section">
+          <div class="info-item">
+            <div class="info-label">学员姓名</div>
+            <div class="info-value">${student.name}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">年级</div>
+            <div class="info-value">${student.grade || '-'}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">程度</div>
+            <div class="info-value">${getLevelText(student.level)}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">计划日期</div>
+            <div class="info-value">${plan.plan_date || '-'}</div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <div class="section-title">任务列表</div>
+          <div class="task-list">
+            ${tasksHtml}
+          </div>
+        </div>
+        
+        ${plan.notes ? `
+          <div class="section">
+            <div class="note-box">
+              <div class="box-title">助教提示</div>
+              <div class="box-content">${plan.notes}</div>
+            </div>
+          </div>
+        ` : ''}
+        
+        ${plan.ai_reason ? `
+          <div class="section">
+            <div class="reason-box">
+              <div class="box-title">计划说明</div>
+              <div class="box-content">${plan.ai_reason}</div>
+            </div>
+          </div>
+        ` : ''}
+        
+        <div class="footer">
+          由 EduManager Pro 生成 | ${new Date().toLocaleDateString('zh-CN')}
+        </div>
+      </div>
+    `
+  }).join('')
+  
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>课程计划批量导出</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: white;
+      color: #1f2937;
+    }
+    .plan-page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: 40px;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #333;
+    }
+    .title {
+      font-size: 28px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #666;
+    }
+    .info-section {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-bottom: 30px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .info-item {
+      flex: 1;
+      min-width: 120px;
+    }
+    .info-label {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .info-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+    .section {
+      margin-bottom: 25px;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
+    }
+    .task-list {
+      background: #fff;
+    }
+    .task-item {
+      padding: 8px 0;
+      border-bottom: 1px dashed #eee;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .task-item:last-child {
+      border-bottom: none;
+    }
+    .note-box, .reason-box {
+      padding: 12px;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .note-box .box-title, .reason-box .box-title {
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .note-box .box-content, .reason-box .box-content {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 15px;
+      border-top: 1px solid #ddd;
+      text-align: center;
+      font-size: 12px;
+      color: #999;
+    }
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      @page {
+        size: A4;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${plansHtml}
+</body>
+</html>
+  `
+}
+
+// 导出课程计划为 PDF（通过打印功能）
 export async function exportLessonPlanPDF(
   student: Student,
   plan: LessonPlan
 ): Promise<void> {
-  // 创建临时容器
-  const container = document.createElement('div')
-  container.style.position = 'absolute'
-  container.style.left = '-9999px'
-  container.style.top = '0'
-  container.style.width = '210mm'
-  container.innerHTML = createLessonPlanHTML(student, plan)
-  document.body.appendChild(container)
+  const html = createLessonPlanHTML(student, plan)
   
-  try {
-    // 使用 html2canvas 截图
-    const canvas = await html2canvas(container, {
-      scale: 2, // 高清
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff'
-    })
-    
-    // 创建 PDF
-    const imgWidth = 210 // A4 宽度 mm
-    const imgHeight = (canvas.height * imgWidth) / canvas.width
-    const pageHeight = 297 // A4 高度 mm
-    
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    })
-    
-    const imgData = canvas.toDataURL('image/png')
-    
-    // 如果内容超过一页，分页处理
-    if (imgHeight > pageHeight) {
-      let position = 0
-      let remainingHeight = imgHeight
-      
-      while (remainingHeight > 0) {
-        if (position > 0) {
-          doc.addPage()
-        }
-        
-        const heightOnPage = Math.min(remainingHeight, pageHeight)
-        doc.addImage(imgData, 'PNG', 0, -position, imgWidth, imgHeight)
-        
-        position += pageHeight
-        remainingHeight -= pageHeight
-      }
-    } else {
-      doc.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
+  // 打开打印窗口，用户可以选择"另存为PDF"
+  const printWindow = window.open('', '_blank')
+  if (printWindow) {
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.onload = () => {
+      printWindow.print()
     }
-    
-    // 保存文件
-    const fileName = `课程计划_${student.name}_${plan.plan_date || new Date().toISOString().split('T')[0]}.pdf`
-    doc.save(fileName)
-  } finally {
-    // 清理临时容器
-    document.body.removeChild(container)
   }
 }
 
-// 导出多个学员的课程计划为 PDF（合并文件）
+// 导出多个学员的课程计划为 PDF（通过打印功能）
 export async function exportMultipleLessonPlansPDF(
   plans: Array<{ student: Student; plan: LessonPlan }>
 ): Promise<void> {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
-  })
+  const html = createMultiplePlansHTML(plans)
   
-  const pageWidth = 210
-  const pageHeight = 297
-  
-  for (let i = 0; i < plans.length; i++) {
-    const { student, plan } = plans[i]
-    
-    // 创建临时容器
-    const container = document.createElement('div')
-    container.style.position = 'absolute'
-    container.style.left = '-9999px'
-    container.style.top = '0'
-    container.style.width = '210mm'
-    container.innerHTML = createLessonPlanHTML(student, plan)
-    document.body.appendChild(container)
-    
-    try {
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      })
-      
-      const imgWidth = pageWidth
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      
-      // 新学员从新页开始
-      if (i > 0) {
-        doc.addPage()
-      }
-      
-      const imgData = canvas.toDataURL('image/png')
-      
-      // 分页处理
-      if (imgHeight > pageHeight) {
-        let position = 0
-        let remainingHeight = imgHeight
-        let isFirstPage = true
-        
-        while (remainingHeight > 0) {
-          if (!isFirstPage) {
-            doc.addPage()
-          }
-          
-          doc.addImage(imgData, 'PNG', 0, -position, imgWidth, imgHeight)
-          
-          position += pageHeight
-          remainingHeight -= pageHeight
-          isFirstPage = false
-        }
-      } else {
-        doc.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
-      }
-    } finally {
-      document.body.removeChild(container)
+  // 打开打印窗口，用户可以选择"另存为PDF"
+  const printWindow = window.open('', '_blank')
+  if (printWindow) {
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.onload = () => {
+      printWindow.print()
     }
   }
-  
-  // 保存
-  const fileName = `课程计划_批量导出_${new Date().toISOString().split('T')[0]}.pdf`
-  doc.save(fileName)
 }
 
 // 打印课程计划（打开新窗口打印）

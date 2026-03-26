@@ -16,7 +16,7 @@ export const studentDb = {
     // 创建课时记录
     await ipcQuery(
       `INSERT INTO billing (id, student_id, total_hours, used_hours, warning_threshold, created_at, updated_at)
-       VALUES (?, ?, 0, 0, 3, ?, ?)`,
+       VALUES (?, ?, 0, 0, 10, ?, ?)`,
       [generateId(), id, now, now]
     )
     
@@ -103,7 +103,7 @@ export const studentDb = {
           total_hours: row.total_hours || 0,
           used_hours: row.used_hours || 0,
           remaining_hours: (row.total_hours || 0) - (row.used_hours || 0),
-          warning_threshold: row.warning_threshold || 3,
+          warning_threshold: row.warning_threshold || 10,
           last_payment_date: row.last_payment_date,
           notes: null,
           created_at: row.created_at,
@@ -141,5 +141,14 @@ export const studentDb = {
   
   async delete(id: string): Promise<void> {
     await ipcQuery(`DELETE FROM students WHERE id = ?`, [id])
+  },
+
+  async getAll(): Promise<Student[]> {
+    const results = await ipcQuery<Record<string, unknown>[]>(`SELECT * FROM students ORDER BY name ASC`)
+    return results.map(row => {
+      row.phonics_completed = !!row.phonics_completed
+      row.ipa_completed = !!row.ipa_completed
+      return row as unknown as Student
+    })
   }
 }

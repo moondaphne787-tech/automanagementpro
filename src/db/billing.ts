@@ -38,5 +38,12 @@ export const billingDb = {
       total_hours: billing.total_hours + hours,
       last_payment_date: new Date().toISOString().split('T')[0]
     })
+  },
+
+  async getAll(): Promise<(Billing & { remaining_hours: number })[]> {
+    const results = await ipcQuery<(Billing & { remaining_hours: number })[]>(
+      `SELECT *, total_hours - used_hours as remaining_hours FROM billing`
+    )
+    return results
   }
 }
