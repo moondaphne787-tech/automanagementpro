@@ -1,7 +1,8 @@
 import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock } from '@/types'
 
 // 系统提示词 - 包含李教授教学大纲规则
-export const SYSTEM_PROMPT = `你是一位专业的青少年英语教学顾问，熟悉以下词库体系：
+// 默认系统提示词 - 作为兜底值
+export const DEFAULT_SYSTEM_PROMPT = `你是一位专业的青少年英语教学顾问，熟悉以下词库体系：
 书本课文单词 → 小学考纲 → 小学进阶 → 初中考纲 → 初中进阶 → 高中考纲 → 高中进阶 → 大学四级
 
 教学规则：
@@ -30,6 +31,20 @@ type 可选值：phonics / vocab_new / vocab_review / nine_grid / textbook / rea
 2. 不要使用代码块包裹
 3. 确保所有字段名称使用双引号
 4. 确保数字类型的值不加引号`
+
+// 保持向后兼容
+export const SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
+
+// 异步获取当前生效的系统提示词（优先从数据库读取，否则用默认值）
+export async function getSystemPrompt(): Promise<string> {
+  try {
+    const { settingsDb } = await import('@/db')
+    const customPrompt = await settingsDb.get('ai_system_prompt')
+    return customPrompt || DEFAULT_SYSTEM_PROMPT
+  } catch {
+    return DEFAULT_SYSTEM_PROMPT
+  }
+}
 
 // 构建学员数据的用户输入
 export function buildUserInput(params: {

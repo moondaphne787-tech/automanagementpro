@@ -7,14 +7,14 @@ export const lessonPlanDb = {
   async getExpiredPlans(studentId: string): Promise<LessonPlan[]> {
     const today = new Date().toISOString().split('T')[0]
     
-    // 查找过期且未被执行的计划（没有对应的课堂记录关联）
+    // 通过 plan_id 关联判断：计划已过期 且 没有任何课堂记录关联了此计划
     const plans = await ipcQuery<any[]>(
       `SELECT lp.* FROM lesson_plans lp
        WHERE lp.student_id = ? 
        AND lp.plan_date IS NOT NULL 
        AND lp.plan_date < ?
        AND NOT EXISTS (
-         SELECT 1 FROM class_records cr WHERE cr.student_id = lp.student_id AND cr.class_date = lp.plan_date
+         SELECT 1 FROM class_records cr WHERE cr.plan_id = lp.id
        )
        ORDER BY lp.plan_date DESC`,
       [studentId, today]
@@ -41,7 +41,7 @@ export const lessonPlanDb = {
        AND lp.plan_date IS NOT NULL 
        AND lp.plan_date < ?
        AND NOT EXISTS (
-         SELECT 1 FROM class_records cr WHERE cr.student_id = lp.student_id AND cr.class_date = lp.plan_date
+         SELECT 1 FROM class_records cr WHERE cr.plan_id = lp.id
        )
        GROUP BY lp.student_id`,
       [...studentIds, today]
@@ -166,7 +166,7 @@ export const lessonPlanDb = {
        WHERE lp.plan_date IS NOT NULL 
        AND lp.plan_date < ?
        AND NOT EXISTS (
-         SELECT 1 FROM class_records cr WHERE cr.student_id = lp.student_id AND cr.class_date = lp.plan_date
+         SELECT 1 FROM class_records cr WHERE cr.plan_id = lp.id
        )
        ORDER BY lp.plan_date DESC`,
       [today]

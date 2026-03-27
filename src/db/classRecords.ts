@@ -215,14 +215,26 @@ export const classRecordDb = {
   },
   
   // 批量获取多个学员的课堂记录（解决 N+1 查询问题）
-  async getAllForStudents(studentIds: string[]): Promise<Map<string, ClassRecord[]>> {
+  async getAllForStudents(studentIds: string[], options?: { startDate?: string; endDate?: string }): Promise<Map<string, ClassRecord[]>> {
     if (studentIds.length === 0) return new Map()
     
     const placeholders = studentIds.map(() => '?').join(',')
-    const records = await ipcQuery<any[]>(
-      `SELECT * FROM class_records WHERE student_id IN (${placeholders}) ORDER BY class_date DESC`,
-      studentIds
-    )
+    let sql = `SELECT * FROM class_records WHERE student_id IN (${placeholders})`
+    const params: unknown[] = [...studentIds]
+    
+    // 添加日期范围过滤
+    if (options?.startDate) {
+      sql += ` AND class_date >= ?`
+      params.push(options.startDate)
+    }
+    if (options?.endDate) {
+      sql += ` AND class_date <= ?`
+      params.push(options.endDate)
+    }
+    
+    sql += ` ORDER BY class_date DESC`
+    
+    const records = await ipcQuery<any[]>(sql, params)
     
     const result = new Map<string, ClassRecord[]>()
     for (const record of records) {

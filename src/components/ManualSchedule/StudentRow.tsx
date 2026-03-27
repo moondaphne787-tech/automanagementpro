@@ -116,8 +116,19 @@ export function StudentRowComponent({
   const shouldShowWarning = billing && billing.remaining_hours <= billing.warning_threshold
   const isCritical = billing && billing.remaining_hours <= 0
   
+  // 根据课时状态确定背景色
+  const getRowBackgroundClass = () => {
+    if (isCritical) {
+      return 'bg-red-50 border-red-200' // 课时耗尽：红色背景
+    }
+    if (shouldShowWarning) {
+      return 'bg-orange-50 border-orange-200' // 课时不足：橙色背景
+    }
+    return 'hover:bg-muted/30'
+  }
+  
   return (
-    <div className="flex border-b hover:bg-muted/30">
+    <div className={`flex border-b ${getRowBackgroundClass()}`}>
       {/* 学生信息列 */}
       <div className="w-32 flex-shrink-0 border-r p-2 flex flex-col justify-center">
         <div className="flex items-center gap-1">

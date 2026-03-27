@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { studentDb } from '../db/students'
 import { lessonPlanDb } from '../db/lessonPlans'
 import { classRecordDb } from '../db/classRecords'
@@ -80,6 +80,27 @@ export interface DashboardData {
   todos: Todo[]
 }
 
+// 缓存配置
+interface CacheConfig {
+  staleTime: number  // 数据新鲜时间（毫秒），在此时间内不会重新请求
+  cacheTime: number  // 缓存保留时间（毫秒），超过此时间缓存会被清除
+}
+
+const DEFAULT_CACHE_CONFIG: CacheConfig = {
+  staleTime: 30 * 1000,  // 30 秒内数据视为新鲜
+  cacheTime: 5 * 60 * 1000,  // 5 分钟后缓存失效
+}
+
+// 缓存项
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+  dateKey: string  // 用于判断日期是否变化（跨天需要刷新）
+}
+
+// 全局缓存存储
+let dashboardCache: CacheEntry<DashboardData> | null = null
+
 // 格式化本地日期为 YYYY-MM-DD 格式（避免时区问题）
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear()
@@ -121,14 +142,77 @@ function getTodayStr(): string {
   return new Date().toISOString().split('T')[0]
 }
 
-export function useDashboard() {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// 检查缓存是否有效
+function isCacheValid(cache: CacheEntry<DashboardData> | null, config: CacheConfig): boolean {
+  if (!cache) return false
+  
+  const now = Date.now()
+  const today = getTodayStr()
+  
+  // 如果日期变化（跨天），缓存失效
+  if (cache.dateKey !== today) return false
+  
+  // 如果超过新鲜时间，缓存失效
+  if (now - cache.timestamp > config.staleTime) return false
+  
+  return true
+}
 
-  const loadData = useCallback(async () => {
+// 清除缓存
+export function clearDashboardCache(): void {
+  dashboardCache = null
+}
+
+// 获取缓存状态（用于调试和测试）
+export function getDashboardCacheStatus(): { hasCache: boolean; timestamp: number | null; isStale: boolean } {
+  if (!dashboardCache) {
+    return { hasCache: false, timestamp: null, isStale: true }
+  }
+  
+  const now = Date.now()
+  const isStale = now - dashboardCache.timestamp > DEFAULT_CACHE_CONFIG.staleTime
+  
+  return {
+    hasCache: true,
+    timestamp: dashboardCache.timestamp,
+    isStale
+  }
+}
+
+export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
+  const config = { ...DEFAULT_CACHE_CONFIG, ...cacheConfig }
+  
+  const [data, setData] = useState<DashboardData | null>(() => {
+    // 初始化时检查是否有有效缓存
+    if (isCacheValid(dashboardCache, config)) {
+      return dashboardCache!.data
+    }
+    return null
+  })
+  const [loading, setLoading] = useState(() => !isCacheValid(dashboardCache, config))
+  const [error, setError] = useState<string | null>(null)
+  
+  // 使用 ref 追踪是否正在进行请求
+  const isLoadingRef = useRef(false)
+
+  const loadData = useCallback(async (forceRefresh: boolean = false) => {
+    // 如果有有效缓存且不是强制刷新，直接返回缓存数据
+    if (!forceRefresh && isCacheValid(dashboardCache, config)) {
+      setData(dashboardCache!.data)
+      setLoading(false)
+      setError(null)
+      return
+    }
+    
+    // 防止重复请求
+    if (isLoadingRef.current) {
+      return
+    }
+    
+    isLoadingRef.current = true
     setLoading(true)
     setError(null)
+    
     try {
       const today = getTodayStr()
       const week = getWeekRange()
@@ -271,16 +355,10 @@ export function useDashboard() {
         weekLabel: string,
         dateRange: string
       ): WeeklySummary => {
-        interface TaskItem { completed?: boolean }
-        const completionRates = records
-          .filter((r: ClassRecord) => r.tasks && r.tasks.length > 0)
-          .map((r: ClassRecord) => {
-            const tasks = r.tasks as TaskItem[]
-            const completed = tasks.filter((t: TaskItem) => t.completed).length
-            return tasks.length > 0 ? completed / tasks.length : 0
-          })
-        const avgCompletionRate = completionRates.length > 0
-          ? Math.round(completionRates.reduce((a: number, b: number) => a + b, 0) / completionRates.length * 100)
+        // 使用 task_completed 字段计算完成率（'completed' 表示 100% 完成）
+        const completedCount = records.filter((r: ClassRecord) => r.task_completed === 'completed').length
+        const avgCompletionRate = records.length > 0
+          ? Math.round(completedCount / records.length * 100)
           : 0
 
         const totalHours = records.reduce((sum: number, r: ClassRecord) => sum + (r.duration_hours ?? 0), 0)
@@ -401,7 +479,7 @@ export function useDashboard() {
         ).length,
       }
 
-      setData({
+      const result: DashboardData = {
         stats,
         todaySchedules: todayScheduleItems,
         problemPlanStudents,
@@ -409,17 +487,40 @@ export function useDashboard() {
         alertStudents,
         studentOverview,
         todos: allTodos,
-      })
+      }
+      
+      // 更新缓存
+      dashboardCache = {
+        data: result,
+        timestamp: Date.now(),
+        dateKey: today
+      }
+      
+      setData(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
       setLoading(false)
+      isLoadingRef.current = false
     }
-  }, [])
+  }, [config])
 
   useEffect(() => {
+    // 检查缓存有效性
+    if (isCacheValid(dashboardCache, config)) {
+      setData(dashboardCache!.data)
+      setLoading(false)
+      return
+    }
+    
     loadData()
-  }, [loadData])
+  }, [loadData, config])
 
-  return { data, loading, error, refresh: loadData }
+  return { 
+    data, 
+    loading, 
+    error, 
+    refresh: () => loadData(true),  // 强制刷新
+    clearCache: clearDashboardCache  // 清除缓存
+  }
 }

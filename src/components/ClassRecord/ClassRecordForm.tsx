@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Save, X, Link, Unlink } from 'lucide-react'
+import { Plus, Save, X, Link, Unlink, Edit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskBlock, createEmptyTask } from '@/components/TaskBlock/TaskBlock'
 import { parseFeedback, extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
 import { lessonPlanDb } from '@/db'
-import type { TaskBlock as TaskBlockType, AttendanceType, PerformanceType, TaskCompletedType, Wordbank, LessonPlan } from '@/types'
+import type { TaskBlock as TaskBlockType, AttendanceType, PerformanceType, TaskCompletedType, Wordbank, LessonPlan, ClassRecord } from '@/types'
 
 interface ClassRecordFormProps {
   studentId: string
@@ -31,20 +31,24 @@ interface ClassRecordFormProps {
   }) => Promise<void>
   onCancel: () => void
   initialDate?: string
+  initialData?: ClassRecord  // 用于编辑模式
 }
 
-export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, initialDate }: ClassRecordFormProps) {
-  const [classDate, setClassDate] = useState(initialDate || new Date().toISOString().split('T')[0])
-  const [durationHours, setDurationHours] = useState(1)
-  const [teacherName, setTeacherName] = useState('')
-  const [attendance, setAttendance] = useState<AttendanceType>('present')
-  const [tasks, setTasks] = useState<TaskBlockType[]>([createEmptyTask()])
-  const [taskCompleted, setTaskCompleted] = useState<TaskCompletedType>('completed')
-  const [incompleteReason, setIncompleteReason] = useState('')
-  const [performance, setPerformance] = useState<PerformanceType>('good')
-  const [detailFeedback, setDetailFeedback] = useState('')
-  const [highlights, setHighlights] = useState('')
-  const [issues, setIssues] = useState('')
+export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, initialDate, initialData }: ClassRecordFormProps) {
+  // 判断是否为编辑模式
+  const isEditMode = !!initialData
+  
+  const [classDate, setClassDate] = useState(initialData?.class_date || initialDate || new Date().toISOString().split('T')[0])
+  const [durationHours, setDurationHours] = useState(initialData?.duration_hours || 1)
+  const [teacherName, setTeacherName] = useState(initialData?.teacher_name || '')
+  const [attendance, setAttendance] = useState<AttendanceType>(initialData?.attendance || 'present')
+  const [tasks, setTasks] = useState<TaskBlockType[]>(initialData?.tasks?.length ? [...initialData.tasks] : [createEmptyTask()])
+  const [taskCompleted, setTaskCompleted] = useState<TaskCompletedType>(initialData?.task_completed || 'completed')
+  const [incompleteReason, setIncompleteReason] = useState(initialData?.incomplete_reason || '')
+  const [performance, setPerformance] = useState<PerformanceType>(initialData?.performance || 'good')
+  const [detailFeedback, setDetailFeedback] = useState(initialData?.detail_feedback || '')
+  const [highlights, setHighlights] = useState(initialData?.highlights || '')
+  const [issues, setIssues] = useState(initialData?.issues || '')
   const [saving, setSaving] = useState(false)
   
   // 关联计划相关状态
@@ -54,10 +58,10 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
   
   // 加载指定日期的课程计划
   useEffect(() => {
-    if (classDate) {
+    if (classDate && !isEditMode) {
       loadPlansForDate(classDate)
     }
-  }, [classDate, studentId])
+  }, [classDate, studentId, isEditMode])
   
   const loadPlansForDate = async (date: string) => {
     const plans = await lessonPlanDb.getByStudentId(studentId)
@@ -173,7 +177,10 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>新建课堂记录</span>
+          <span className="flex items-center gap-2">
+            {isEditMode ? <Edit className="w-4 h-4" /> : null}
+            {isEditMode ? '编辑课堂记录' : '新建课堂记录'}
+          </span>
           <Button variant="ghost" size="icon" onClick={onCancel}>
             <X className="w-4 h-4" />
           </Button>
@@ -222,8 +229,8 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
           </div>
         </div>
         
-        {/* 关联课程计划 */}
-        {availablePlans.length > 0 && (
+        {/* 关联课程计划 - 编辑模式下不显示关联计划功能 */}
+        {!isEditMode && availablePlans.length > 0 && (
           <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-blue-700">

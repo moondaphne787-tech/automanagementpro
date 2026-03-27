@@ -36,8 +36,9 @@ export const studentDb = {
   },
   
   async getAllWithBilling(filters: FilterOptions, sort: SortOptions): Promise<(Student & { billing: Billing | null })[]> {
+    // remaining_hours 是 billing 表的生成列，会自动计算 total_hours - used_hours
     let sql = `
-      SELECT s.*, b.id as billing_id, b.total_hours, b.used_hours, b.warning_threshold, b.last_payment_date
+      SELECT s.*, b.id as billing_id, b.total_hours, b.used_hours, b.remaining_hours, b.warning_threshold, b.last_payment_date
       FROM students s
       LEFT JOIN billing b ON s.id = b.student_id
       WHERE 1=1
@@ -71,7 +72,7 @@ export const studentDb = {
       total_hours: 'b.total_hours',
       remaining_hours: 'b.total_hours - b.used_hours',
       enroll_date: 's.enroll_date',
-      last_class: 's.updated_at'
+      last_class: `(SELECT IFNULL(MAX(cr.class_date), '1970-01-01') FROM class_records cr WHERE cr.student_id = s.id)`
     }
     sql += ` ORDER BY ${sortFieldMap[sort.field] || 's.student_no'} ${sort.direction === 'desc' ? 'DESC' : 'ASC'}`
     
@@ -102,7 +103,8 @@ export const studentDb = {
           student_id: row.id,
           total_hours: row.total_hours || 0,
           used_hours: row.used_hours || 0,
-          remaining_hours: (row.total_hours || 0) - (row.used_hours || 0),
+          // remaining_hours 是生成列，直接从查询结果获取
+          remaining_hours: row.remaining_hours ?? (row.total_hours || 0) - (row.used_hours || 0),
           warning_threshold: row.warning_threshold || 10,
           last_payment_date: row.last_payment_date,
           notes: null,

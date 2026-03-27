@@ -121,7 +121,7 @@ export function TrialConversions() {
                     </div>
                     <div>
                       <div className="text-2xl font-bold">{yearTotal}</div>
-                      <div className="text-sm text-muted-foreground">年度体验生</div>
+                      <div className="text-sm text-muted-foreground">年度体验生（含成交）</div>
                     </div>
                   </div>
                 </CardContent>
@@ -263,7 +263,7 @@ export function TrialConversions() {
                         <div className="flex items-center gap-2 px-3 py-1 bg-muted rounded-lg text-sm">
                           <Users className="w-4 h-4 text-muted-foreground" />
                           <span className="font-medium">{monthDetail.total}</span>
-                          <span className="text-muted-foreground">人</span>
+                          <span className="text-muted-foreground">体验生（含成交）</span>
                         </div>
                         <div className="flex items-center gap-2 px-3 py-1 bg-green-500/10 text-green-600 rounded-lg text-sm">
                           <CheckCircle className="w-4 h-4" />

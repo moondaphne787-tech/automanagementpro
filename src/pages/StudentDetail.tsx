@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit, Trash2, Clock, Plus, Calendar, FileText, Sparkles, Download, Printer, Loader2, CalendarX, RefreshCw, Copy, Link, Columns, Target, TrendingUp, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ import { GrowthPanel } from '@/components/Growth/GrowthPanel'
 import { StudentForm } from '@/components/Student/StudentForm'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb, learningPhaseDb } from '@/db'
 import { sendAIRequestStream } from '@/ai/client'
-import { SYSTEM_PROMPT, buildUserInput, parseAIResponse } from '@/ai/prompts'
+import { SYSTEM_PROMPT, buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { exportLessonPlanPDF, printLessonPlan } from '@/utils/pdfExport'
 import type { Student, Billing, ClassRecord, LessonPlan, AIConfig, TaskBlock as TaskBlockType, LearningPhase, PhaseType } from '@/types'
 import { cn } from '@/lib/utils'
@@ -42,6 +42,7 @@ export function StudentDetail() {
     deleteProgress,
     loadClassRecords,
     createClassRecord,
+    updateClassRecord,
     deleteClassRecord,
     createLessonPlan,
     deleteLessonPlan
@@ -54,6 +55,7 @@ export function StudentDetail() {
     warning_threshold: '3'
   })
   const [showRecordForm, setShowRecordForm] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<ClassRecord | null>(null)
   
   // 课程计划相关状态
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([])
@@ -63,7 +65,8 @@ export function StudentDetail() {
   const [extraInstruction, setExtraInstruction] = useState('')
   const [showPlanGenerator, setShowPlanGenerator] = useState(false)
   
-  // 过期计划状态（从 lessonPlans 派生计算，不再单独查询）
+  // 过期计划状态（通过 plan_id 关联判断，从后端加载）
+  const [expiredPlans, setExpiredPlans] = useState<LessonPlan[]>([])
   
   // 课堂记录与计划关联状态
   const [recordsWithPlan, setRecordsWithPlan] = useState<(ClassRecord & { plan?: LessonPlan })[]>([])
@@ -109,28 +112,13 @@ export function StudentDetail() {
     setRecordsWithPlan(records)
   }
   
-  // 移除 loadExpiredPlans，改为从 lessonPlans 派生计算
-  
   const loadLessonPlans = async (studentId: string) => {
     const plans = await lessonPlanDb.getByStudentId(studentId)
     setLessonPlans(plans)
+    // 通过 plan_id 关联判断过期计划
+    const expired = await lessonPlanDb.getExpiredPlans(studentId)
+    setExpiredPlans(expired)
   }
-  
-  // 从 lessonPlans 和 recordsWithPlan 派生计算过期计划
-  // 过期条件：计划日期存在且小于今天，且没有对应的课堂记录
-  const expiredPlans = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0]
-    const executedDates = new Set(
-      recordsWithPlan
-        .filter(r => r.class_date)
-        .map(r => r.class_date)
-    )
-    return lessonPlans.filter(plan => 
-      plan.plan_date && 
-      plan.plan_date < today && 
-      !executedDates.has(plan.plan_date)
-    )
-  }, [lessonPlans, recordsWithPlan])
   
   const loadAIConfig = async () => {
     const url = await settingsDb.get('ai_api_url')
@@ -169,6 +157,11 @@ export function StudentDetail() {
   const handleAddHours = async () => {
     const hours = parseFloat(billingForm.total_hours)
     if (isNaN(hours) || hours <= 0) return
+    
+    // 确认保护：显示即将增加的课时数，防止误操作
+    const confirmMessage = `确定要增加 ${hours} 课时吗？\n\n当前购买课时：${formatHours(currentBilling?.total_hours || 0)}\n增加后：${formatHours((currentBilling?.total_hours || 0) + hours)}`
+    if (!confirm(confirmMessage)) return
+    
     await updateBilling(id!, { total_hours: (currentBilling?.total_hours || 0) + hours })
     setBillingForm({ ...billingForm, total_hours: '' })
   }
@@ -176,6 +169,16 @@ export function StudentDetail() {
   const handleCreateRecord = async (data: any) => {
     await createClassRecord(data)
     setShowRecordForm(false)
+    // 刷新带计划关联的记录
+    if (id) {
+      loadRecordsWithPlan(id)
+    }
+  }
+  
+  const handleUpdateRecord = async (data: any) => {
+    if (!editingRecord) return
+    await updateClassRecord(editingRecord.id, data)
+    setEditingRecord(null)
     // 刷新带计划关联的记录
     if (id) {
       loadRecordsWithPlan(id)
@@ -205,9 +208,12 @@ export function StudentDetail() {
         extraInstruction
       })
       
+      // 获取当前生效的系统提示词
+      const systemPrompt = await getSystemPrompt()
+      
       // 流式调用 AI
       let fullContent = ''
-      for await (const chunk of sendAIRequestStream(aiConfig, SYSTEM_PROMPT, userInput)) {
+      for await (const chunk of sendAIRequestStream(aiConfig, systemPrompt, userInput)) {
         fullContent += chunk
         setStreamContent(fullContent)
       }
@@ -260,7 +266,7 @@ export function StudentDetail() {
       loadClassRecords(id)
       loadLessonPlans(id)
       loadAIConfig()
-      // 移除 loadExpiredPlans(id)，expiredPlans 现在从 lessonPlans 派生计算
+      // expiredPlans 已在 loadLessonPlans 中一并加载
       loadRecordsWithPlan(id)
       loadLearningPhases(id)
       
@@ -582,14 +588,32 @@ export function StudentDetail() {
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-sm">{progress.wordbank_label}</CardTitle>
-                        <span className={cn(
-                          "text-xs px-2 py-0.5 rounded",
-                          progress.status === 'completed' && "bg-success/10 text-success",
-                          progress.status === 'active' && "bg-progress/10 text-progress",
-                          progress.status === 'paused' && "bg-muted text-muted-foreground"
-                        )}>
-                          {progress.status === 'completed' ? '已完成' : progress.status === 'active' ? '进行中' : '已暂停'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "text-xs px-2 py-0.5 rounded",
+                            progress.status === 'completed' && "bg-success/10 text-success",
+                            progress.status === 'active' && "bg-progress/10 text-progress",
+                            progress.status === 'paused' && "bg-muted text-muted-foreground"
+                          )}>
+                            {progress.status === 'completed' ? '已完成' : progress.status === 'active' ? '进行中' : '已暂停'}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            title="删除词库进度"
+                            onClick={async () => {
+                              const confirmMessage = progress.status === 'completed'
+                                ? `确定要删除已完成的词库「${progress.wordbank_label}」吗？`
+                                : `确定要删除词库「${progress.wordbank_label}」的进度记录吗？\n\n删除后进度将无法恢复。`
+                              if (confirm(confirmMessage)) {
+                                await deleteProgress(id!, progress.wordbank_id)
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -680,6 +704,14 @@ export function StudentDetail() {
                 wordbanks={wordbanks}
                 onSave={handleCreateRecord}
                 onCancel={() => setShowRecordForm(false)}
+              />
+            ) : editingRecord ? (
+              <ClassRecordForm
+                studentId={id!}
+                wordbanks={wordbanks}
+                onSave={handleUpdateRecord}
+                onCancel={() => setEditingRecord(null)}
+                initialData={editingRecord}
               />
             ) : (
               <>
@@ -861,22 +893,34 @@ export function StudentDetail() {
                               )}
                             </div>
                             
-                            {/* 删除按钮 */}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-muted-foreground hover:text-destructive"
-                              onClick={async () => {
-                                if (confirm('确定删除此课堂记录？')) {
-                                  await deleteClassRecord(record.id)
-                                  if (id) {
-                                    loadRecordsWithPlan(id)
+                            {/* 操作按钮 */}
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-muted-foreground hover:text-foreground"
+                                title="编辑"
+                                onClick={() => setEditingRecord(record)}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-muted-foreground hover:text-destructive"
+                                title="删除"
+                                onClick={async () => {
+                                  if (confirm('确定删除此课堂记录？')) {
+                                    await deleteClassRecord(record.id)
+                                    if (id) {
+                                      loadRecordsWithPlan(id)
+                                    }
                                   }
-                                }
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>

@@ -2,9 +2,12 @@ import type { Billing } from '@/types'
 import { ipcQuery, ipcQueryOne } from './utils'
 
 // 课时操作
+// 注意：remaining_hours 是 SQLite 生成列（v11 迁移添加），会自动计算 total_hours - used_hours
+// 直接 SELECT * 即可获取 remaining_hours，无需手动计算
 export const billingDb = {
   async getByStudentId(studentId: string): Promise<Billing | undefined> {
-    const billing = await ipcQueryOne<Billing>(`SELECT *, total_hours - used_hours as remaining_hours FROM billing WHERE student_id = ?`, [studentId])
+    // remaining_hours 是生成列，会自动计算
+    const billing = await ipcQueryOne<Billing>(`SELECT * FROM billing WHERE student_id = ?`, [studentId])
     return billing
   },
   
@@ -41,8 +44,9 @@ export const billingDb = {
   },
 
   async getAll(): Promise<(Billing & { remaining_hours: number })[]> {
+    // remaining_hours 是生成列，会自动计算
     const results = await ipcQuery<(Billing & { remaining_hours: number })[]>(
-      `SELECT *, total_hours - used_hours as remaining_hours FROM billing`
+      `SELECT * FROM billing`
     )
     return results
   }

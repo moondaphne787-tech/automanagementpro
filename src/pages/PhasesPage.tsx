@@ -80,10 +80,15 @@ export function PhasesPage() {
       )
       
       // 批量获取所有学员的课堂记录和考试成绩（解决 N+1 查询问题）
+      // 只拉取近 12 个月的数据，避免加载全部历史记录
       const studentIds = allStudents.map(s => s.id)
+      const yearAgo = new Date()
+      yearAgo.setFullYear(yearAgo.getFullYear() - 1)
+      const startDate = yearAgo.toISOString().split('T')[0]
+      
       const [allRecordsMap, allScoresMap] = await Promise.all([
-        classRecordDb.getAllForStudents(studentIds),
-        examScoreDb.getAllForStudents(studentIds)
+        classRecordDb.getAllForStudents(studentIds, { startDate }),
+        examScoreDb.getAllForStudents(studentIds, { startDate })
       ])
       
       // 为每个学员生成自动阶段

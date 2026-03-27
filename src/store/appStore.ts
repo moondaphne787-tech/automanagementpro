@@ -432,13 +432,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     // 同步助教累计课时
     if (data.teacher_name && data.duration_hours) {
       const allTeachers = await teacherDb.getAll()
-      const matchedTeacher = allTeachers.find(t => 
-        t.name === data.teacher_name || 
-        t.name.includes(data.teacher_name!) || 
-        data.teacher_name!.includes(t.name)
+      // 优先精确匹配
+      const exactMatch = allTeachers.find(t => t.name === data.teacher_name)
+      // 模糊匹配作为备选，要求输入长度至少为2个字符以避免误匹配
+      const fuzzyMatch = exactMatch ?? allTeachers.find(t => 
+        t.name.includes(data.teacher_name!) && data.teacher_name!.length >= 2
       )
-      if (matchedTeacher) {
-        await teacherDb.addTeachingHours(matchedTeacher.id, data.duration_hours)
+      if (!exactMatch && fuzzyMatch) {
+        console.warn(`[Teacher Match] 模糊匹配: "${data.teacher_name}" → "${fuzzyMatch.name}"`)
+      }
+      if (fuzzyMatch) {
+        await teacherDb.addTeachingHours(fuzzyMatch.id, data.duration_hours)
       }
     }
     
@@ -456,10 +460,68 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   // 更新课堂记录
   updateClassRecord: async (id, data) => {
+    // 获取原记录用于课时调整
+    const oldRecord = await classRecordDb.getById(id)
+    if (!oldRecord) return undefined
+    
+    // 更新记录
     const record = await classRecordDb.update(id, data)
-    if (record && get().currentStudent?.id === record.student_id) {
-      await get().loadClassRecords(record.student_id)
+    if (!record) return undefined
+    
+    // 处理课时调整：如果时长变化，需要先减旧值再加新值
+    if (data.duration_hours !== undefined && oldRecord.duration_hours !== data.duration_hours) {
+      const billing = await billingDb.getByStudentId(record.student_id)
+      if (billing) {
+        // 先减去旧课时，再加上新课时
+        const newUsedHours = Math.max(0, billing.used_hours - oldRecord.duration_hours + data.duration_hours)
+        await billingDb.update(record.student_id, {
+          used_hours: newUsedHours
+        })
+      }
     }
+    
+    // 处理助教课时调整：如果助教或时长变化
+    if (data.duration_hours !== undefined || data.teacher_name !== undefined) {
+      const oldTeacherName = oldRecord.teacher_name
+      // 如果没有指定新的助教，则使用原助教（处理只更新时长的情况）
+      const newTeacherName = data.teacher_name !== undefined ? data.teacher_name : oldRecord.teacher_name
+      const oldDuration = oldRecord.duration_hours
+      const newDuration = data.duration_hours ?? oldRecord.duration_hours
+      
+      const allTeachers = await teacherDb.getAll()
+      
+      // 如果助教变更或时长变更，需要调整课时
+      if (oldTeacherName !== newTeacherName || oldDuration !== newDuration) {
+        // 回退原助教课时
+        if (oldTeacherName && oldDuration) {
+          const oldTeacher = allTeachers.find(t => t.name === oldTeacherName)
+          if (oldTeacher) {
+            await teacherDb.update(oldTeacher.id, {
+              total_teaching_hours: Math.max(0, oldTeacher.total_teaching_hours - oldDuration)
+            })
+          }
+        }
+        
+        // 累加新助教课时
+        if (newTeacherName && newDuration) {
+          // 重新获取最新数据（因为上面的回退操作可能已修改）
+          const updatedTeachers = await teacherDb.getAll()
+          const newTeacher = updatedTeachers.find(t => t.name === newTeacherName)
+          if (newTeacher) {
+            await teacherDb.addTeachingHours(newTeacher.id, newDuration)
+          }
+        }
+      }
+    }
+    
+    // 刷新数据
+    if (get().currentStudent?.id === record.student_id) {
+      await get().loadClassRecords(record.student_id)
+      const billing = await billingDb.getByStudentId(record.student_id)
+      set({ currentBilling: billing ?? null })
+    }
+    await get().loadStudents()
+    
     return record
   },
   
@@ -467,10 +529,36 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteClassRecord: async (id) => {
     const record = await classRecordDb.getById(id)
     if (record) {
+      // 回退学员课时
+      if (record.duration_hours) {
+        const billing = await billingDb.getByStudentId(record.student_id)
+        if (billing) {
+          await billingDb.update(record.student_id, {
+            used_hours: Math.max(0, billing.used_hours - record.duration_hours)
+          })
+        }
+      }
+      
+      // 回退助教课时
+      if (record.teacher_name && record.duration_hours) {
+        const allTeachers = await teacherDb.getAll()
+        const teacher = allTeachers.find(t => t.name === record.teacher_name)
+        if (teacher) {
+          await teacherDb.update(teacher.id, {
+            total_teaching_hours: Math.max(0, teacher.total_teaching_hours - record.duration_hours)
+          })
+        }
+      }
+      
       await classRecordDb.delete(id)
+      
+      // 刷新数据
       if (get().currentStudent?.id === record.student_id) {
         await get().loadClassRecords(record.student_id)
+        const billing = await billingDb.getByStudentId(record.student_id)
+        set({ currentBilling: billing ?? null })
       }
+      await get().loadStudents()
     }
   },
   
@@ -497,16 +585,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     
-    // 同步词库进度
+    // ✅ 性能优化：在循环前批量获取词库（避免 N+1 查询）
+    const wordbanks = await wordbankDb.getAll()
+    const wordbankMap = new Map(wordbanks.map(w => [w.name, w]))
+    
+    // ✅ 性能优化：预加载所有涉及学员的进度（避免 N+1 查询）
+    const uniqueStudentIds = [...new Set(records.map(r => r.student_id))]
+    const progressMap = new Map<string, StudentWordbankProgress[]>()
+    for (const sid of uniqueStudentIds) {
+      progressMap.set(sid, await progressDb.getByStudentId(sid))
+    }
+    
+    // 同步词库进度（使用预加载的数据）
     for (const record of records) {
       for (const task of record.tasks) {
         const effectiveLevel = task.level_reached ?? task.level_to
         if ((task.type === 'vocab_new' || task.type === 'vocab_review') && 
             task.wordbank_label && effectiveLevel) {
-          const wordbanks = await wordbankDb.getAll()
-          const wordbank = wordbanks.find(w => w.name === task.wordbank_label)
+          // ✅ 使用预加载的词库 Map
+          const wordbank = wordbankMap.get(task.wordbank_label)
           if (wordbank) {
-            const existingProgress = await progressDb.getByStudentId(record.student_id)
+            // ✅ 使用预加载的进度 Map
+            const existingProgress = progressMap.get(record.student_id) || []
             const currentProgress = existingProgress.find(p => p.wordbank_id === wordbank.id)
             
             if (!currentProgress || effectiveLevel > currentProgress.current_level) {
@@ -521,10 +621,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         
         // 九宫格进度同步
         if (task.type === 'nine_grid' && task.wordbank_label) {
-          const wordbanks = await wordbankDb.getAll()
-          const wordbank = wordbanks.find(w => w.name === task.wordbank_label)
+          // ✅ 使用预加载的词库 Map
+          const wordbank = wordbankMap.get(task.wordbank_label)
           if (wordbank) {
-            const existingProgress = await progressDb.getByStudentId(record.student_id)
+            // ✅ 使用预加载的进度 Map
+            const existingProgress = progressMap.get(record.student_id) || []
             const currentProgress = existingProgress.find(p => p.wordbank_id === wordbank.id)
             if (currentProgress) {
               await progressDb.upsert({
@@ -552,11 +653,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (teacherHoursMap.size > 0) {
       const allTeachers = await teacherDb.getAll()
       for (const [teacherName, hours] of teacherHoursMap) {
-        const teacher = allTeachers.find(t => 
-          t.name === teacherName || t.name.includes(teacherName) || teacherName.includes(t.name)
+        // 优先精确匹配
+        const exactMatch = allTeachers.find(t => t.name === teacherName)
+        // 模糊匹配作为备选，要求输入长度至少为2个字符以避免误匹配
+        const fuzzyMatch = exactMatch ?? allTeachers.find(t => 
+          t.name.includes(teacherName) && teacherName.length >= 2
         )
-        if (teacher) {
-          await teacherDb.addTeachingHours(teacher.id, hours)
+        if (!exactMatch && fuzzyMatch) {
+          console.warn(`[Teacher Match] 模糊匹配: "${teacherName}" → "${fuzzyMatch.name}"`)
+        }
+        if (fuzzyMatch) {
+          await teacherDb.addTeachingHours(fuzzyMatch.id, hours)
         }
       }
     }

@@ -187,9 +187,164 @@ export const migrations: Migration[] = [
     }
   },
   
+  // ===== 版本 9: 整合所有 ALTER TABLE ADD COLUMN 到迁移系统 =====
+  // 此迁移将 createTables() 中的 ALTER TABLE 逻辑统一迁移到迁移系统
+  // 解决 createTables() 与迁移系统重复且可能冲突的问题
+  {
+    version: 9,
+    description: '整合所有表结构变更到迁移系统，移除 createTables 中的 ALTER TABLE 逻辑',
+    up: (db: Database.Database) => {
+      // ===== billing 表：添加缺失的列 =====
+      const billingInfo = db.prepare('PRAGMA table_info(billing)').all() as Array<{ name: string }>
+      const billingColumns = billingInfo.map(col => col.name)
+      
+      if (!billingColumns.includes('last_payment_date')) {
+        db.exec(`ALTER TABLE billing ADD COLUMN last_payment_date TEXT`)
+        console.log('Migration v9: Added last_payment_date column to billing table')
+      }
+      if (!billingColumns.includes('created_at')) {
+        db.exec(`ALTER TABLE billing ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP`)
+        console.log('Migration v9: Added created_at column to billing table')
+      }
+      if (!billingColumns.includes('updated_at')) {
+        db.exec(`ALTER TABLE billing ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP`)
+        console.log('Migration v9: Added updated_at column to billing table')
+      }
+      // 为现有记录设置默认值
+      db.exec(`UPDATE billing SET created_at = datetime('now') WHERE created_at IS NULL`)
+      db.exec(`UPDATE billing SET updated_at = datetime('now') WHERE updated_at IS NULL`)
+      
+      // ===== student_wordbank_progress 表：添加缺失的列 =====
+      const progressInfo = db.prepare('PRAGMA table_info(student_wordbank_progress)').all() as Array<{ name: string }>
+      const progressColumns = progressInfo.map(col => col.name)
+      
+      if (!progressColumns.includes('created_at')) {
+        db.exec(`ALTER TABLE student_wordbank_progress ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP`)
+        console.log('Migration v9: Added created_at column to student_wordbank_progress table')
+      }
+      if (!progressColumns.includes('updated_at')) {
+        db.exec(`ALTER TABLE student_wordbank_progress ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP`)
+        console.log('Migration v9: Added updated_at column to student_wordbank_progress table')
+      }
+      
+      // ===== class_records 表：添加缺失的列 =====
+      const classRecordsInfo = db.prepare('PRAGMA table_info(class_records)').all() as Array<{ name: string }>
+      const classRecordsColumns = classRecordsInfo.map(col => col.name)
+      
+      if (!classRecordsColumns.includes('plan_id')) {
+        db.exec(`ALTER TABLE class_records ADD COLUMN plan_id TEXT`)
+        console.log('Migration v9: Added plan_id column to class_records table')
+      }
+      
+      // ===== teachers 表：添加缺失的列 =====
+      const teachersInfo = db.prepare('PRAGMA table_info(teachers)').all() as Array<{ name: string }>
+      const teachersColumns = teachersInfo.map(col => col.name)
+      
+      if (!teachersColumns.includes('training_stage')) {
+        db.exec(`ALTER TABLE teachers ADD COLUMN training_stage TEXT DEFAULT 'probation'`)
+        console.log('Migration v9: Added training_stage column to teachers table')
+      }
+      if (!teachersColumns.includes('teacher_types')) {
+        db.exec(`ALTER TABLE teachers ADD COLUMN teacher_types TEXT DEFAULT '[]'`)
+        console.log('Migration v9: Added teacher_types column to teachers table')
+      }
+      if (!teachersColumns.includes('total_teaching_hours')) {
+        db.exec(`ALTER TABLE teachers ADD COLUMN total_teaching_hours REAL DEFAULT 0`)
+        console.log('Migration v9: Added total_teaching_hours column to teachers table')
+      }
+      // 为现有记录设置默认值
+      db.exec(`UPDATE teachers SET training_stage = 'probation' WHERE training_stage IS NULL`)
+      db.exec(`UPDATE teachers SET teacher_types = '[]' WHERE teacher_types IS NULL`)
+      db.exec(`UPDATE teachers SET total_teaching_hours = 0 WHERE total_teaching_hours IS NULL`)
+      
+      console.log('Migration v9: All table structure changes consolidated into migration system')
+    }
+  },
+  
+  // ===== 版本 10: 补充关键业务查询索引 =====
+  // 根据代码审查报告，添加缺失的高频查询索引
+  {
+    version: 10,
+    description: '补充关键业务查询索引：学员姓名、课堂日期、排课状态等',
+    up: (db: Database.Database) => {
+      // 1. 学员姓名索引（Home页搜索功能）
+      const studentsNameIndexExists = db.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type = 'index' AND name = 'idx_students_name'
+      `).get()
+      
+      if (!studentsNameIndexExists) {
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_students_name ON students(name)`)
+        console.log('Migration v10: Added index on students(name)')
+      }
+      
+      // 2. 课堂记录按日期索引（Dashboard加载时按日期范围查询）
+      // 注意：v5已有idx_class_records_student_date，这里补充纯日期索引
+      const classRecordsDateIndexExists = db.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type = 'index' AND name = 'idx_class_records_date'
+      `).get()
+      
+      if (!classRecordsDateIndexExists) {
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_class_records_date ON class_records(class_date)`)
+        console.log('Migration v10: Added index on class_records(class_date)')
+      }
+      
+      // 3. 已排课程按日期和状态组合索引
+      const scheduledClassesDateStatusIndexExists = db.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type = 'index' AND name = 'idx_scheduled_classes_date_status'
+      `).get()
+      
+      if (!scheduledClassesDateStatusIndexExists) {
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_scheduled_classes_date_status ON scheduled_classes(class_date, status)`)
+        console.log('Migration v10: Added index on scheduled_classes(class_date, status)')
+      }
+      
+      // 4. 过期计划查询索引（确保有合适的组合索引）
+      // 注意：v4已有idx_lesson_plans_student_date，这里补充纯plan_date索引用于过期查询
+      const lessonPlansDateIndexExists = db.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type = 'index' AND name = 'idx_lesson_plans_date'
+      `).get()
+      
+      if (!lessonPlansDateIndexExists) {
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_lesson_plans_date ON lesson_plans(plan_date)`)
+        console.log('Migration v10: Added index on lesson_plans(plan_date)')
+      }
+      
+      console.log('Migration v10: All critical query indexes added successfully')
+    }
+  },
+  
+  // ===== 版本 11: 添加 billing.remaining_hours 生成列 =====
+  // 解决问题 3：remaining_hours 作为计算列存在隐患
+  // 添加 SQLite 生成列确保 remaining_hours 永远与 total_hours - used_hours 同步
+  {
+    version: 11,
+    description: '为 billing 表添加 remaining_hours 生成列，确保数据一致性',
+    up: (db: Database.Database) => {
+      // 注意：PRAGMA table_info() 不返回生成列，所以需要检查表定义 SQL
+      const tableDef = db.prepare(
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'billing'`
+      ).get() as { sql: string } | undefined
+      
+      // 检查表定义中是否已包含 remaining_hours 生成列
+      if (tableDef?.sql && tableDef.sql.includes('remaining_hours')) {
+        console.log('Migration v11: remaining_hours generated column already exists, skipping')
+        return
+      }
+      
+      // SQLite 生成列语法：GENERATED ALWAYS AS (expr) VIRTUAL
+      // VIRTUAL 表示该列不存储在磁盘上，每次查询时计算
+      db.exec(`ALTER TABLE billing ADD COLUMN remaining_hours REAL GENERATED ALWAYS AS (total_hours - used_hours) VIRTUAL`)
+      console.log('Migration v11: Added remaining_hours generated column to billing table')
+    }
+  },
+  
   // ===== 后续迁移在此添加 =====
   // {
-  //   version: 9,
+  //   version: 12,
   //   description: '描述此次迁移的目的',
   //   up: (db: Database.Database) => {
   //     // 迁移逻辑
@@ -302,6 +457,89 @@ export function hasPendingMigrations(db: Database.Database): boolean {
 }
 
 /**
+ * 执行 WAL checkpoint 操作
+ * 将 WAL 文件中的更改合并回主数据库文件，减少 WAL 文件大小
+ * @param db 数据库实例
+ * @param mode checkpoint 模式：'PASSIVE' | 'RESTART' | 'TRUNCATE' | 'FULL'
+ * @returns checkpoint 结果信息
+ */
+export function runWalCheckpoint(
+  db: Database.Database, 
+  mode: 'PASSIVE' | 'RESTART' | 'TRUNCATE' | 'FULL' = 'TRUNCATE'
+): { success: boolean; walSize: number; checkpointedCount: number; message: string } {
+  try {
+    // 执行 WAL checkpoint
+    // PASSIVE: 不阻塞写入，尽可能多地 checkpoint
+    // RESTART: 阻塞写入，确保所有 WAL 内容被 checkpoint
+    // TRUNCATE: 类似 RESTART，但会将 WAL 文件截断为 0 字节
+    // FULL: 类似 RESTART，但不会截断 WAL 文件
+    const result = db.pragma(`wal_checkpoint(${mode})`) as Array<{ checkpoint: number; busy: number; log: number; checkpointed: number }>
+    
+    const checkpointInfo = result[0]
+    
+    // log: WAL 文件中的总页数
+    // checkpointed: 已 checkpoint 的页数
+    const walPages = checkpointInfo?.log ?? 0
+    const checkpointedPages = checkpointInfo?.checkpointed ?? 0
+    
+    // 计算预估的 WAL 文件大小（每页约 4KB）
+    const estimatedWalSizeKB = walPages * 4
+    
+    console.log(`WAL checkpoint completed (${mode}): ${checkpointedPages}/${walPages} pages checkpointed`)
+    
+    return {
+      success: true,
+      walSize: estimatedWalSizeKB,
+      checkpointedCount: checkpointedPages,
+      message: `Checkpoint 完成，处理了 ${checkpointedPages} 页，WAL 文件约 ${estimatedWalSizeKB} KB`
+    }
+  } catch (error) {
+    console.error('WAL checkpoint failed:', error)
+    return {
+      success: false,
+      walSize: 0,
+      checkpointedCount: 0,
+      message: `Checkpoint 失败: ${(error as Error).message}`
+    }
+  }
+}
+
+/**
+ * 获取 WAL 文件信息
+ * @param dbPath 数据库文件路径
+ * @returns WAL 文件信息
+ */
+export function getWalFileInfo(dbPath: string): { exists: boolean; size: number; path: string } {
+  const walPath = `${dbPath}-wal`
+  const shmPath = `${dbPath}-shm`
+  
+  try {
+    const fs = require('fs')
+    let walSize = 0
+    let walExists = false
+    
+    if (fs.existsSync(walPath)) {
+      walExists = true
+      const stats = fs.statSync(walPath)
+      walSize = stats.size
+    }
+    
+    return {
+      exists: walExists,
+      size: walSize,
+      path: walPath
+    }
+  } catch (error) {
+    console.error('Failed to get WAL file info:', error)
+    return {
+      exists: false,
+      size: 0,
+      path: walPath
+    }
+  }
+}
+
+/**
  * 自动备份功能
  * 在应用启动时检查并执行每日自动备份
  * @param db 数据库实例
@@ -364,6 +602,14 @@ export function runAutoBackup(db: Database.Database, dbPath: string): void {
     
     // 清理旧的自动备份（只保留最近7个）
     cleanupOldBackups(db, backupDir, 7)
+    
+    // 执行 WAL checkpoint，减少 WAL 文件大小
+    const checkpointResult = runWalCheckpoint(db, 'TRUNCATE')
+    if (checkpointResult.success) {
+      console.log('✓ WAL checkpoint completed after backup:', checkpointResult.message)
+    } else {
+      console.warn('WAL checkpoint warning:', checkpointResult.message)
+    }
     
   } catch (error) {
     console.error('Auto backup failed:', error)

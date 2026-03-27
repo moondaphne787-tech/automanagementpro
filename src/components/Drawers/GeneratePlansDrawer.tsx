@@ -10,9 +10,10 @@ import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { useAppStore } from '@/store/appStore'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
 import { sendAIRequest } from '@/ai/client'
-import { SYSTEM_PROMPT, buildUserInput, parseAIResponse, formatTasksSummary } from '@/ai/prompts'
+import { SYSTEM_PROMPT, buildUserInput, parseAIResponse, formatTasksSummary, getSystemPrompt } from '@/ai/prompts'
 import { cn } from '@/lib/utils'
-import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock as TaskBlockType, AIConfig } from '@/types'
+import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock as TaskBlockType, AIConfig, GradeType } from '@/types'
+import { GRADE_OPTIONS } from '@/types'
 
 interface GeneratePlansDrawerProps {
   open: boolean
@@ -32,6 +33,7 @@ interface StudentPlanState {
   error: string | null
   expanded: boolean
   editing: boolean  // 是否处于编辑模式
+  extraNote: string  // 该学员的临时附加提示词
 }
 
 export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps) {
@@ -93,7 +95,8 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
           plan: null,
           error: null,
           expanded: false,
-          editing: false
+          editing: false,
+          extraNote: ''
         }]
       }
     })
@@ -110,7 +113,8 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
         plan: null,
         error: null,
         expanded: false,
-        editing: false
+        editing: false,
+        extraNote: ''
       })))
     }
   }
@@ -140,7 +144,8 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
             plan: null,
             error: null,
             expanded: false,
-            editing: false
+            editing: false,
+            extraNote: ''
           })
         }
       })
@@ -191,18 +196,21 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
         const recentRecords = await classRecordDb.getByStudentId(item.student.id, 3)
         const lastPlanSummary = await lessonPlanDb.getLastPlanSummary(item.student.id)
         
-        // 构建用户输入
+        // 构建用户输入 - 合并全局提示和本学员专属提示
         const userInput = buildUserInput({
           student: item.student,
           wordbankProgress: progress,
           wordbanks,
           recentRecords,
           lastPlanSummary,
-          extraInstruction
+          extraInstruction: [extraInstruction, item.extraNote].filter(Boolean).join('；') || undefined
         })
         
+        // 获取当前生效的系统提示词
+        const systemPrompt = await getSystemPrompt()
+        
         // 调用 AI（非流式，批量生成时更可靠）
-        const response = await sendAIRequest(aiConfig, SYSTEM_PROMPT, userInput)
+        const response = await sendAIRequest(aiConfig, systemPrompt, userInput)
         
         // 解析响应
         const parsed = parseAIResponse(response)
@@ -259,10 +267,11 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
         wordbanks,
         recentRecords,
         lastPlanSummary,
-        extraInstruction
+        extraInstruction: [extraInstruction, item.extraNote].filter(Boolean).join('；') || undefined
       })
       
-      const response = await sendAIRequest(aiConfig, SYSTEM_PROMPT, userInput)
+      const systemPrompt = await getSystemPrompt()
+      const response = await sendAIRequest(aiConfig, systemPrompt, userInput)
       const parsed = parseAIResponse(response)
       
       if (parsed) {
@@ -394,6 +403,13 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
     }))
   }
   
+  // 更新学员附加提示词
+  const updateStudentExtraNote = (studentId: string, note: string) => {
+    setSelectedStudents(prev => prev.map(s =>
+      s.student.id === studentId ? { ...s, extraNote: note } : s
+    ))
+  }
+  
   // 关闭并重置
   const handleClose = () => {
     setSelectedStudents([])
@@ -455,17 +471,7 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                       value={filterGrade}
                       options={[
                         { value: 'all', label: '全部年级' },
-                        { value: '三年级', label: '三年级' },
-                        { value: '四年级', label: '四年级' },
-                        { value: '五年级', label: '五年级' },
-                        { value: '六年级', label: '六年级' },
-                        { value: '初一', label: '初一' },
-                        { value: '初二', label: '初二' },
-                        { value: '初三', label: '初三' },
-                        { value: '高一', label: '高一' },
-                        { value: '高二', label: '高二' },
-                        { value: '高三', label: '高三' },
-                        { value: '大学', label: '大学' }
+                        ...GRADE_OPTIONS.map(g => ({ value: g, label: g }))
                       ]}
                       onChange={(e) => setFilterGrade(e.target.value)}
                       className="w-28"
@@ -482,7 +488,7 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                   >
                     {selectedStudents.length === filteredStudents.length ? '取消全选' : '全选'}
                   </Button>
-                  {['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三', '大学'].map(grade => {
+                  {GRADE_OPTIONS.map(grade => {
                     const fullySelected = isGradeFullySelected(grade)
                     const partiallySelected = isGradePartiallySelected(grade)
                     const gradeCount = filteredStudents.filter(s => s.grade === grade).length
@@ -633,6 +639,20 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                             </div>
                             
                             <div className="flex items-center gap-2">
+                              {/* 附加提示词输入 - 仅在 pending/failed 状态显示 */}
+                              {(item.status === 'pending' || item.status === 'failed') && (
+                                <div className="flex items-center gap-2 flex-1 max-w-[300px]">
+                                  <span className="text-xs text-muted-foreground whitespace-nowrap">附加提示：</span>
+                                  <Input
+                                    value={item.extraNote}
+                                    onChange={(e) => updateStudentExtraNote(item.student.id, e.target.value)}
+                                    placeholder="可选，如：本次重点推进词库"
+                                    className="h-7 text-xs"
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                              )}
                               {item.status === 'success' && (
                                 <>
                                   <Button

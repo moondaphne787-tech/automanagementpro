@@ -60,14 +60,26 @@ export const examScoreDb = {
   },
   
   // 批量获取多个学员的考试成绩（解决 N+1 查询问题）
-  async getAllForStudents(studentIds: string[]): Promise<Map<string, ExamScore[]>> {
+  async getAllForStudents(studentIds: string[], options?: { startDate?: string; endDate?: string }): Promise<Map<string, ExamScore[]>> {
     if (studentIds.length === 0) return new Map()
     
     const placeholders = studentIds.map(() => '?').join(',')
-    const scores = await ipcQuery<ExamScore[]>(
-      `SELECT * FROM exam_scores WHERE student_id IN (${placeholders}) ORDER BY exam_date DESC`,
-      studentIds
-    )
+    let sql = `SELECT * FROM exam_scores WHERE student_id IN (${placeholders})`
+    const params: unknown[] = [...studentIds]
+    
+    // 添加日期范围过滤
+    if (options?.startDate) {
+      sql += ` AND exam_date >= ?`
+      params.push(options.startDate)
+    }
+    if (options?.endDate) {
+      sql += ` AND exam_date <= ?`
+      params.push(options.endDate)
+    }
+    
+    sql += ` ORDER BY exam_date DESC`
+    
+    const scores = await ipcQuery<ExamScore[]>(sql, params)
     
     const result = new Map<string, ExamScore[]>()
     for (const score of scores) {

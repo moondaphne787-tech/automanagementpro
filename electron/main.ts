@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
 import Database from 'better-sqlite3'
 import * as fs from 'fs'
+import { v4 as uuidv4 } from 'uuid'
 import {
   runMigrations,
   runAutoBackup,
@@ -11,6 +12,8 @@ import {
   getMigrationHistory,
   getCurrentVersion,
   getDatabaseStats,
+  getWalFileInfo,
+  runWalCheckpoint,
   migrations
 } from './migrations'
 
@@ -118,23 +121,7 @@ function createTables() {
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
     )
   `)
-  
-  // 为旧数据库添加缺失的列
-  const billingInfo = db.prepare('PRAGMA table_info(billing)').all() as Array<{ name: string }>
-  const billingColumns = billingInfo.map(col => col.name)
-  
-  if (!billingColumns.includes('last_payment_date')) {
-    db.exec(`ALTER TABLE billing ADD COLUMN last_payment_date TEXT`)
-  }
-  if (!billingColumns.includes('created_at')) {
-    db.exec(`ALTER TABLE billing ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP`)
-  }
-  if (!billingColumns.includes('updated_at')) {
-    db.exec(`ALTER TABLE billing ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP`)
-  }
-  // 为现有记录设置默认值
-  db.exec(`UPDATE billing SET created_at = datetime('now') WHERE created_at IS NULL`)
-  db.exec(`UPDATE billing SET updated_at = datetime('now') WHERE updated_at IS NULL`)
+  // 注：ALTER TABLE 逻辑已迁移到迁移系统 (v9)
 
   // 词库配置表
   db.exec(`
@@ -171,17 +158,7 @@ function createTables() {
       UNIQUE(student_id, wordbank_id)
     )
   `)
-  
-  // 为旧数据库 student_wordbank_progress 添加缺失的列
-  const progressInfo = db.prepare('PRAGMA table_info(student_wordbank_progress)').all() as Array<{ name: string }>
-  const progressColumns = progressInfo.map(col => col.name)
-  
-  if (!progressColumns.includes('created_at')) {
-    db.exec(`ALTER TABLE student_wordbank_progress ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP`)
-  }
-  if (!progressColumns.includes('updated_at')) {
-    db.exec(`ALTER TABLE student_wordbank_progress ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP`)
-  }
+  // 注：ALTER TABLE 逻辑已迁移到迁移系统 (v9)
 
   // 课堂记录表
   db.exec(`
@@ -207,14 +184,7 @@ function createTables() {
       FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
     )
   `)
-  
-  // 为旧数据库 class_records 添加缺失的列
-  const classRecordsInfo = db.prepare('PRAGMA table_info(class_records)').all() as Array<{ name: string }>
-  const classRecordsColumns = classRecordsInfo.map(col => col.name)
-  
-  if (!classRecordsColumns.includes('plan_id')) {
-    db.exec(`ALTER TABLE class_records ADD COLUMN plan_id TEXT`)
-  }
+  // 注：ALTER TABLE 逻辑已迁移到迁移系统 (v9)
 
   // 课程计划表
   db.exec(`
@@ -302,24 +272,7 @@ function createTables() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `)
-  
-  // 为旧数据库 teachers 添加缺失的列
-  const teachersInfo = db.prepare('PRAGMA table_info(teachers)').all() as Array<{ name: string }>
-  const teachersColumns = teachersInfo.map(col => col.name)
-  
-  if (!teachersColumns.includes('training_stage')) {
-    db.exec(`ALTER TABLE teachers ADD COLUMN training_stage TEXT DEFAULT 'probation'`)
-  }
-  if (!teachersColumns.includes('teacher_types')) {
-    db.exec(`ALTER TABLE teachers ADD COLUMN teacher_types TEXT DEFAULT '[]'`)
-  }
-  if (!teachersColumns.includes('total_teaching_hours')) {
-    db.exec(`ALTER TABLE teachers ADD COLUMN total_teaching_hours REAL DEFAULT 0`)
-  }
-  // 为现有记录设置默认值
-  db.exec(`UPDATE teachers SET training_stage = 'probation' WHERE training_stage IS NULL`)
-  db.exec(`UPDATE teachers SET teacher_types = '[]' WHERE teacher_types IS NULL`)
-  db.exec(`UPDATE teachers SET total_teaching_hours = 0 WHERE total_teaching_hours IS NULL`)
+  // 注：ALTER TABLE 逻辑已迁移到迁移系统 (v9)
 
   // 老师可用时段表
   db.exec(`
@@ -412,7 +365,6 @@ function createTables() {
       ['大学四级', 40, 20, 'college_cet4', 7],
     ]
     
-    const { v4: uuidv4 } = require('uuid')
     defaultWordbanks.forEach(([name, total, interval, category, order]) => {
       insertWordbank.run(uuidv4(), name, total, interval, category, order)
     })
@@ -645,9 +597,27 @@ ipcMain.handle('db:openBackupDir', async () => {
     fs.mkdirSync(backupDir, { recursive: true })
   }
   
-  const { shell } = require('electron')
   shell.openPath(backupDir)
   return { success: true }
+})
+
+// === WAL Checkpoint 相关 IPC 处理程序 ===
+
+// 获取 WAL 文件信息
+ipcMain.handle('db:getWalInfo', () => {
+  return getWalFileInfo(dbPath)
+})
+
+// 执行 WAL checkpoint
+ipcMain.handle('db:checkpoint', async (_event, mode?: 'PASSIVE' | 'RESTART' | 'TRUNCATE' | 'FULL') => {
+  if (!db) throw new Error('Database not initialized')
+  try {
+    const result = runWalCheckpoint(db, mode ?? 'TRUNCATE')
+    return result
+  } catch (error) {
+    console.error('Checkpoint error:', error)
+    throw error
+  }
 })
 
 // 打印课程计划
@@ -675,10 +645,18 @@ ipcMain.handle('print-lesson-plans', async (_event, htmlContent: string) => {
       printWindow.webContents.on('did-finish-load', () => resolve())
     })
     
-    // 调用打印对话框
-    await printWindow.webContents.print({
-      silent: false,
-      printBackground: true
+    // 调用打印对话框（使用回调形式，因为 print() 不返回 Promise）
+    await new Promise<void>((resolve, reject) => {
+      printWindow.webContents.print(
+        { silent: false, printBackground: true },
+        (success, failureReason) => {
+          if (success) {
+            resolve()
+          } else {
+            reject(new Error(failureReason || '打印失败'))
+          }
+        }
+      )
     })
     
     // 打印完成后销毁窗口
