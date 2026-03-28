@@ -323,6 +323,7 @@ export interface FilterOptions {
   level: LevelType | 'all'
   grade: string | 'all'
   search: string
+  day_of_week: DayOfWeek | 'all'  // 按周几筛选有课学员
 }
 
 // 排序选项

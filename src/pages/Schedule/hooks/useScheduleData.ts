@@ -31,7 +31,7 @@ export function useScheduleData({ scheduleDates }: UseScheduleDataProps): UseSch
     try {
       setLoading(true)
       const [studentsData, teachersData] = await Promise.all([
-        studentDb.getAllWithBilling({ status: 'active', student_type: 'all', level: 'all', grade: 'all', search: '' }, { field: 'student_no', direction: 'asc' }),
+        studentDb.getAllWithBilling({ status: 'active', student_type: 'all', level: 'all', grade: 'all', search: '', day_of_week: 'all' }, { field: 'student_no', direction: 'asc' }),
         teacherDb.getActive()
       ])
 

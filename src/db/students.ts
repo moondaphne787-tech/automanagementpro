@@ -1,5 +1,11 @@
-import type { Student, Billing, FilterOptions, SortOptions } from '@/types'
+import type { Student, Billing, FilterOptions, SortOptions, DayOfWeek } from '@/types'
 import { generateId, ipcQuery, ipcQueryOne } from './utils'
+
+// 获取当前日期对应的星期
+function getDayOfWeekFromDate(date: Date): DayOfWeek {
+  const days: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  return days[date.getDay()]
+}
 
 // 学员操作
 export const studentDb = {
@@ -64,6 +70,12 @@ export const studentDb = {
     if (filters.search) {
       sql += ` AND s.name LIKE ?`
       params.push(`%${filters.search}%`)
+    }
+    
+    // 按周几筛选有课学员
+    if (filters.day_of_week !== 'all') {
+      sql += ` AND EXISTS (SELECT 1 FROM student_schedule_preferences ssp WHERE ssp.student_id = s.id AND ssp.day_of_week = ?)`
+      params.push(filters.day_of_week)
     }
     
     // 排序

@@ -661,6 +661,18 @@ export function createManualBackup(db: Database.Database, dbPath: string, backup
   // 确保备份目录存在
   if (!fs.existsSync(backupDir)) {
     fs.mkdirSync(backupDir, { recursive: true })
+    console.log('Created backup directory:', backupDir)
+  }
+  
+  // 验证备份目录是否可写
+  try {
+    const testFile = path.join(backupDir, '.write_test')
+    fs.writeFileSync(testFile, 'test')
+    fs.unlinkSync(testFile)
+    console.log('Backup directory is writable:', backupDir)
+  } catch (writeError) {
+    console.error('Backup directory is not writable:', writeError)
+    throw new Error(`备份目录无法写入: ${backupDir}`)
   }
   
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('_').slice(0, 19)
@@ -669,18 +681,88 @@ export function createManualBackup(db: Database.Database, dbPath: string, backup
     : `manual_backup_${timestamp}.db`
   const backupPath = path.join(backupDir, fileName)
   
-  // 执行备份
-  db.backup(backupPath)
+  console.log('Database path:', dbPath)
+  console.log('Backup path:', backupPath)
+  console.log('Database file exists:', fs.existsSync(dbPath))
+  
+  // 验证源数据库文件存在
+  if (!fs.existsSync(dbPath)) {
+    throw new Error(`源数据库文件不存在: ${dbPath}`)
+  }
+  
+  // 获取数据库文件大小
+  const dbStats = fs.statSync(dbPath)
+  console.log('Source database size:', dbStats.size, 'bytes')
+  
+  console.log('Attempting to backup database...')
+  
+  // 执行备份（better-sqlite3 的 backup 是同步方法）
+  // 注意：backup() 方法返回 undefined，但会创建文件
+  try {
+    const result = db.backup(backupPath)
+    console.log('Database backup() returned:', result)
+    console.log('Backup operation call completed (sync)')
+  } catch (backupError) {
+    console.error('Database backup operation threw error:', backupError)
+    throw backupError
+  }
+  
+  // 等待一小段时间确保文件系统同步（虽然 backup 是同步的）
+  // 某些情况下文件系统可能需要时间来完成写入
+  const startWait = Date.now()
+  let fileExists = false
+  const maxWaitMs = 5000 // 最多等待5秒
+  
+  while (!fileExists && (Date.now() - startWait) < maxWaitMs) {
+    fileExists = fs.existsSync(backupPath)
+    if (!fileExists) {
+      // 等待100ms再检查
+      const waitMs = 100
+      const endTime = Date.now() + waitMs
+      while (Date.now() < endTime) {
+        // 简单的忙等待
+      }
+    }
+  }
+  
+  console.log('Waited', Date.now() - startWait, 'ms for file to appear')
+  console.log('Backup file exists after wait:', fileExists)
+  
+  // 验证备份文件是否成功创建
+  if (!fileExists) {
+    // 尝试使用文件复制方式备份作为备选方案
+    console.log('db.backup() did not create file, trying file copy fallback...')
+    try {
+      fs.copyFileSync(dbPath, backupPath)
+      console.log('File copy fallback succeeded')
+    } catch (copyError) {
+      console.error('File copy fallback failed:', copyError)
+      throw new Error(`备份失败：db.backup() 未创建文件，且文件复制也失败。路径: ${backupPath}`)
+    }
+  }
+  
+  // 再次验证
+  if (!fs.existsSync(backupPath)) {
+    throw new Error(`备份文件创建失败：文件不存在 ${backupPath}`)
+  }
   
   // 记录备份历史
   const stats = fs.statSync(backupPath)
   const backupId = `backup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  db.prepare(`
-    INSERT INTO backup_history (id, backup_path, backup_type, file_size) 
-    VALUES (?, ?, 'manual', ?)
-  `).run(backupId, backupPath, stats.size)
   
-  console.log('✓ Manual backup created:', backupPath)
+  console.log('Backup file size:', stats.size, 'bytes')
+  
+  try {
+    db.prepare(`
+      INSERT INTO backup_history (id, backup_path, backup_type, file_size) 
+      VALUES (?, ?, 'manual', ?)
+    `).run(backupId, backupPath, stats.size)
+  } catch (historyError) {
+    console.warn('Failed to record backup history:', historyError)
+    // 备份历史记录失败不影响备份本身
+  }
+  
+  console.log('✓ Manual backup created successfully:', backupPath)
   
   return backupPath
 }

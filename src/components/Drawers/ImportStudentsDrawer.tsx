@@ -191,7 +191,7 @@ export function ImportStudentsDrawer({ open, onClose }: ImportStudentsDrawerProp
       // 导入词库进度（需要重新加载学员列表以获取新创建的学员）
       await loadStudents()
       const updatedStudents = await studentDb.getAllWithBilling(
-        { status: 'all', student_type: 'all', level: 'all', grade: 'all', search: '' },
+        { status: 'all', student_type: 'all', level: 'all', grade: 'all', search: '', day_of_week: 'all' },
         { field: 'student_no', direction: 'asc' }
       )
       

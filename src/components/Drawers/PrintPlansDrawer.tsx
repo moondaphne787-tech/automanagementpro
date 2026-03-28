@@ -26,7 +26,6 @@ interface StudentWithPlan {
 const LAYOUT_OPTIONS = [
   { value: '2', label: '每行 2 人（宽松）' },
   { value: '3', label: '每行 3 人（标准）' },
-  { value: '4', label: '每行 4 人（紧凑）' },
 ]
 
 // 每位学员卡片内显示的计划数选项
@@ -127,8 +126,8 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
   
   // 获取布局参数（按每行学员数计算）
   const getLayoutParams = (cols: number) => {
-    // A4纸高度可容纳约3行学员卡片
-    return { cols, rows: 3 }
+    // A4纸高度可容纳的行数（字号变大后，每页可容纳4行）
+    return { cols, rows: 4 }
   }
   
   // 生成打印HTML
@@ -168,8 +167,8 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     
     body {
       font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      font-size: 11px;
-      line-height: 1.5;
+      font-size: 15px;
+      line-height: 1.6;
       background: white;
     }
     
@@ -187,22 +186,22 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     }
     
     .plan-card {
-      border: 1px solid #333;
+      border: 2px solid #333;
       border-radius: 6px;
-      padding: 8px 10px;
+      padding: 14px 16px;
       page-break-inside: avoid;
       overflow: hidden;
-      font-size: 11px;
-      min-height: 60px;
+      font-size: 15px;
+      min-height: 80px;
     }
     
     .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 6px;
+      padding-bottom: 8px;
       border-bottom: 1px solid #ddd;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
     
     .student-name {
@@ -212,7 +211,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     }
     
     .plan-date {
-      font-size: 10px;
+      font-size: 8px;
       color: #666;
     }
     
@@ -220,14 +219,14 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
       display: flex;
       align-items: flex-start;
       gap: 4px;
-      font-size: 11px;
-      line-height: 1.5;
-      margin-bottom: 2px;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 4px;
     }
     
     .task-no {
       color: #333;
-      min-width: 16px;
+      min-width: 18px;
       font-weight: 500;
     }
     
@@ -239,15 +238,16 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     .no-plan {
       color: #999;
       text-align: center;
-      padding: 15px;
+      padding: 20px;
+      font-size: 12px;
     }
     
     .plan-label {
-      font-size: 9px;
+      font-size: 11px;
       color: #888;
       background: #f5f5f5;
-      padding: 1px 4px;
-      border-radius: 2px;
+      padding: 2px 6px;
+      border-radius: 3px;
     }
     
     @media print {
@@ -380,7 +380,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed right-0 top-0 h-full w-[800px] bg-background border-l shadow-xl z-50 flex flex-col"
+            className="fixed right-0 top-0 h-full w-[700px] bg-background border-l shadow-xl z-50 flex flex-col"
           >
             {/* 头部 */}
             <div className="h-16 border-b flex items-center justify-between px-6">
@@ -533,11 +533,10 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                     请选择学员以预览打印效果
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {/* 模拟 A4 纸张预览 - 每个计划独立一个卡片 */}
+                  <div className="flex flex-col items-center">
                     {(() => {
                       const previewCards: Array<{ student: Student, plan: LessonPlan | null, planIndex: number }> = []
-                      selectedStudents.slice(0, 6).forEach(item => {
+                      selectedStudents.slice(0, 8).forEach(item => {
                         if (item.plans.length === 0) {
                           previewCards.push({ student: item.student, plan: null, planIndex: 0 })
                         } else {
@@ -552,68 +551,75 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                       }, 0) / (layout * 5))
                       
                       return (
-                        <>
-                          <div className="bg-white border rounded-lg shadow-sm mx-auto" 
-                               style={{ 
-                                 width: '100%', 
-                                 maxWidth: '595px',
-                                 aspectRatio: '210/297',
-                                 padding: '8px',
-                                 display: 'grid',
-                                 gridTemplateColumns: layout === 2 ? '1fr' : layout === 4 ? '1fr 1fr 1fr 1fr' : '1fr 1fr 1fr',
-                                 gap: '6px'
-                               }}>
-                            {previewCards.slice(0, layout * 4).map((card, idx) => (
+                        <div className="space-y-3">
+                          {/* A4预览容器 - 严格按照A4比例 210:297 */}
+                          <div 
+                            className="bg-white border-2 border-gray-400 shadow-lg mx-auto"
+                            style={{ 
+                              width: '297px',
+                              height: '420px',
+                              padding: '6px',
+                              display: 'grid',
+                              gridTemplateColumns: layout === 2 ? '1fr 1fr' : '1fr 1fr 1fr',
+                              gridAutoRows: '1fr',
+                              gap: '5px',
+                              alignContent: 'start',
+                              boxSizing: 'border-box',
+                            }}>
+                            {previewCards.slice(0, layout * 5).map((card, idx) => (
                               <div 
                                 key={idx}
-                                className="border border-solid border-gray-400 rounded p-2 overflow-hidden text-[7px]"
+                                className="border border-gray-400 rounded overflow-hidden flex flex-col"
                               >
-                                <div className="flex justify-between items-center border-b border-gray-300 pb-1 mb-1">
-                                  <span className="font-semibold text-[9px]">{card.student.name} {card.student.grade || ''}</span>
+                                <div className="flex justify-between items-center border-b border-gray-300 px-2 py-1 bg-gray-50">
+                                  <span className="font-bold text-[11px]">{card.student.name}</span>
                                   {card.plan && (
-                                    <span className="text-[6px] text-gray-500">
+                                    <span className="text-[8px] text-gray-500">
                                       {card.plan.plan_date || '未定'}
-                                      {plansPerStudent === 2 && (card.planIndex === 1 ? ' (一)' : ' (二)')}
                                     </span>
                                   )}
                                 </div>
                                 
-                                {card.plan ? (
-                                  <div className="space-y-0.5">
-                                    {parseTasks(card.plan.tasks).slice(0, 4).map((task: TaskBlockType, tIdx: number) => {
-                                      const typeLabel = TASK_TYPE_LABELS[task.type] || task.type
-                                      let taskContent = ''
-                                      if (['vocab_new', 'vocab_review', 'nine_grid'].includes(task.type)) {
-                                        if (task.wordbank_label) {
-                                          taskContent = task.wordbank_label
-                                          if (task.level_from && task.level_to) {
-                                            taskContent += ` ${task.level_from}-${task.level_to}关`
+                                <div className="flex-1 p-1.5 overflow-hidden">
+                                  {card.plan ? (
+                                    <div className="space-y-0.5">
+                                      {parseTasks(card.plan.tasks).slice(0, 3).map((task: TaskBlockType, tIdx: number) => {
+                                        const typeLabel = TASK_TYPE_LABELS[task.type] || task.type
+                                        let taskContent = ''
+                                        if (['vocab_new', 'vocab_review', 'nine_grid'].includes(task.type)) {
+                                          if (task.wordbank_label) {
+                                            taskContent = task.wordbank_label
                                           }
+                                        } else {
+                                          taskContent = task.content || ''
                                         }
-                                      } else {
-                                        taskContent = task.content || ''
-                                      }
-                                      return (
-                                        <div key={tIdx} className="flex items-start gap-0.5">
-                                          <span className="text-[6px] font-medium shrink-0">{tIdx + 1}.</span>
-                                          <span className="text-[6px] leading-tight">{typeLabel}{taskContent ? `：${taskContent}` : ''}</span>
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                ) : (
-                                  <div className="text-gray-400 text-center text-[7px]">暂无计划</div>
-                                )}
+                                        return (
+                                          <div key={tIdx} className="flex items-start gap-0.5">
+                                            <span className="text-[8px] font-medium shrink-0">{tIdx + 1}.</span>
+                                            <span className="text-[8px] leading-tight">{typeLabel}{taskContent ? `：${taskContent}` : ''}</span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="text-[8px] text-gray-400 text-center py-2">暂无计划</div>
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>
                           
-                          {totalPages > 1 && (
-                            <p className="text-sm text-muted-foreground text-center">
-                              共 {totalPages} 页，显示第 1 页预览
+                          <div className="text-center">
+                            <p className="text-xs text-muted-foreground">
+                              预览（A4纸比例缩放）
                             </p>
-                          )}
-                        </>
+                            {totalPages > 1 && (
+                              <p className="text-sm text-muted-foreground">
+                                共 {totalPages} 页，显示第 1 页预览
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       )
                     })()}
                   </div>

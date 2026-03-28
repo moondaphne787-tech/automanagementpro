@@ -188,7 +188,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     student_type: 'all',
     level: 'all',
     grade: 'all',
-    search: ''
+    search: '',
+    day_of_week: 'all'
   },
   sort: {
     field: 'student_no',
@@ -240,10 +241,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   
   // 设置筛选条件
-  setFilters: (filters) => {
-    set(state => ({
-      filters: { ...state.filters, ...filters }
-    }))
+  setFilters: (newFilters) => {
+    const current = get().filters
+    const updated: FilterOptions = {
+      status: newFilters.status ?? current.status,
+      student_type: newFilters.student_type ?? current.student_type,
+      level: newFilters.level ?? current.level,
+      grade: newFilters.grade ?? current.grade,
+      search: newFilters.search ?? current.search,
+      day_of_week: newFilters.day_of_week ?? current.day_of_week
+    }
+    set({ filters: updated })
     get().loadStudents()
   },
   

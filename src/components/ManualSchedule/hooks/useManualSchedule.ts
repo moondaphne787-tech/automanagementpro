@@ -134,7 +134,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
       
       // 加载学生（带偏好）
       const studentsData = await studentDb.getAllWithBilling(
-        { status: 'active', student_type: 'all', level: 'all', grade: 'all', search: '' },
+        { status: 'active', student_type: 'all', level: 'all', grade: 'all', search: '', day_of_week: 'all' },
         { field: 'student_no', direction: 'asc' }
       )
       

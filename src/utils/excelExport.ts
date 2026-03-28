@@ -92,7 +92,7 @@ function downloadBlob(blob: Blob, filename: string): void {
  */
 async function exportStudents(workbook: XLSX.WorkBook): Promise<void> {
   const students = await studentDb.getAllWithBilling(
-    { status: 'all', student_type: 'all', level: 'all', grade: 'all', search: '' },
+    { status: 'all', student_type: 'all', level: 'all', grade: 'all', search: '', day_of_week: 'all' },
     { field: 'student_no', direction: 'asc' }
   )
   

@@ -170,7 +170,7 @@ export function Settings() {
     try {
       // 获取所有学员
       const allStudents = await studentDb.getAllWithBilling(
-        { status: 'all', student_type: 'all', level: 'all', grade: 'all', search: '' },
+        { status: 'all', student_type: 'all', level: 'all', grade: 'all', search: '', day_of_week: 'all' },
         { field: 'student_no', direction: 'asc' }
       )
       

@@ -14,11 +14,11 @@ import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { ClassRecordForm } from '@/components/ClassRecord/ClassRecordForm'
 import { GrowthPanel } from '@/components/Growth/GrowthPanel'
 import { StudentForm } from '@/components/Student/StudentForm'
-import { settingsDb, progressDb, classRecordDb, lessonPlanDb, learningPhaseDb } from '@/db'
+import { settingsDb, progressDb, classRecordDb, lessonPlanDb, learningPhaseDb, studentSchedulePreferenceDb } from '@/db'
 import { sendAIRequestStream } from '@/ai/client'
 import { SYSTEM_PROMPT, buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { exportLessonPlanPDF, printLessonPlan } from '@/utils/pdfExport'
-import type { Student, Billing, ClassRecord, LessonPlan, AIConfig, TaskBlock as TaskBlockType, LearningPhase, PhaseType } from '@/types'
+import type { Student, Billing, ClassRecord, LessonPlan, AIConfig, TaskBlock as TaskBlockType, LearningPhase, PhaseType, StudentSchedulePreference, DayOfWeek } from '@/types'
 import { cn } from '@/lib/utils'
 import { formatDate as formatDateUtil } from '@/lib/utils'
 
@@ -65,6 +65,12 @@ export function StudentDetail() {
   const [extraInstruction, setExtraInstruction] = useState('')
   const [showPlanGenerator, setShowPlanGenerator] = useState(false)
   
+  // 课程计划编辑状态
+  const [editingPlan, setEditingPlan] = useState<LessonPlan | null>(null)
+  const [editingPlanTasks, setEditingPlanTasks] = useState<TaskBlockType[]>([])
+  const [editingPlanNotes, setEditingPlanNotes] = useState('')
+  const [editingPlanDate, setEditingPlanDate] = useState('')
+  
   // 过期计划状态（通过 plan_id 关联判断，从后端加载）
   const [expiredPlans, setExpiredPlans] = useState<LessonPlan[]>([])
   
@@ -76,6 +82,17 @@ export function StudentDetail() {
   
   // 学习阶段状态
   const [learningPhases, setLearningPhases] = useState<LearningPhase[]>([])
+  
+  // 偏好时段状态
+  const [schedulePreferences, setSchedulePreferences] = useState<StudentSchedulePreference[]>([])
+  const [showPreferenceForm, setShowPreferenceForm] = useState(false)
+  const [editingPreference, setEditingPreference] = useState<StudentSchedulePreference | null>(null)
+  const [preferenceForm, setPreferenceForm] = useState({
+    day_of_week: 'monday' as DayOfWeek,
+    preferred_start: '09:00',
+    preferred_end: '11:00',
+    notes: ''
+  })
   const [showPhaseForm, setShowPhaseForm] = useState(false)
   const [editingPhase, setEditingPhase] = useState<LearningPhase | null>(null)
   const [phaseForm, setPhaseForm] = useState({
@@ -105,6 +122,12 @@ export function StudentDetail() {
   const loadLearningPhases = async (studentId: string) => {
     const phases = await learningPhaseDb.getByStudentId(studentId)
     setLearningPhases(phases)
+  }
+  
+  // 加载偏好时段
+  const loadSchedulePreferences = async (studentId: string) => {
+    const prefs = await studentSchedulePreferenceDb.getByStudentId(studentId)
+    setSchedulePreferences(prefs)
   }
   
   const loadRecordsWithPlan = async (studentId: string) => {
@@ -269,6 +292,7 @@ export function StudentDetail() {
       // expiredPlans 已在 loadLessonPlans 中一并加载
       loadRecordsWithPlan(id)
       loadLearningPhases(id)
+      loadSchedulePreferences(id)
       
       // 检查是否需要跳转到特定 tab
       const targetTab = sessionStorage.getItem('studentDetailTab')
@@ -341,6 +365,59 @@ export function StudentDetail() {
     })
   }
   
+  // 偏好时段操作
+  const handleCreatePreference = async () => {
+    if (!id) return
+    await studentSchedulePreferenceDb.create({
+      student_id: id,
+      day_of_week: preferenceForm.day_of_week,
+      preferred_start: preferenceForm.preferred_start || undefined,
+      preferred_end: preferenceForm.preferred_end || undefined,
+      notes: preferenceForm.notes || undefined
+    })
+    loadSchedulePreferences(id)
+    setShowPreferenceForm(false)
+    resetPreferenceForm()
+  }
+  
+  const handleUpdatePreference = async () => {
+    if (!editingPreference || !id) return
+    await studentSchedulePreferenceDb.update(editingPreference.id, {
+      day_of_week: preferenceForm.day_of_week,
+      preferred_start: preferenceForm.preferred_start || undefined,
+      preferred_end: preferenceForm.preferred_end || undefined,
+      notes: preferenceForm.notes || undefined
+    })
+    loadSchedulePreferences(id)
+    setEditingPreference(null)
+    resetPreferenceForm()
+  }
+  
+  const handleDeletePreference = async (prefId: string) => {
+    if (!confirm('确定要删除这个偏好时段吗？')) return
+    await studentSchedulePreferenceDb.delete(prefId)
+    if (id) loadSchedulePreferences(id)
+  }
+  
+  const resetPreferenceForm = () => {
+    setPreferenceForm({
+      day_of_week: 'monday',
+      preferred_start: '09:00',
+      preferred_end: '11:00',
+      notes: ''
+    })
+  }
+  
+  const openEditPreference = (pref: StudentSchedulePreference) => {
+    setEditingPreference(pref)
+    setPreferenceForm({
+      day_of_week: pref.day_of_week,
+      preferred_start: pref.preferred_start || '09:00',
+      preferred_end: pref.preferred_end || '11:00',
+      notes: pref.notes || ''
+    })
+  }
+  
   const openEditPhase = (phase: LearningPhase) => {
     setEditingPhase(phase)
     setPhaseForm({
@@ -353,6 +430,45 @@ export function StudentDetail() {
       vocab_end: phase.vocab_end?.toString() || '',
       summary: phase.summary || ''
     })
+  }
+  
+  // 课程计划编辑操作
+  const openEditPlan = (plan: LessonPlan) => {
+    setEditingPlan(plan)
+    setEditingPlanTasks([...plan.tasks])
+    setEditingPlanNotes(plan.notes || '')
+    setEditingPlanDate(plan.plan_date || '')
+  }
+  
+  const handleUpdatePlan = async () => {
+    if (!editingPlan || !id) return
+    
+    await lessonPlanDb.update(editingPlan.id, {
+      plan_date: editingPlanDate || null,
+      tasks: editingPlanTasks,
+      notes: editingPlanNotes || null
+    })
+    
+    loadLessonPlans(id)
+    setEditingPlan(null)
+    setEditingPlanTasks([])
+    setEditingPlanNotes('')
+    setEditingPlanDate('')
+  }
+  
+  const handleAddPlanTask = () => {
+    setEditingPlanTasks([...editingPlanTasks, { type: 'vocab_new' }])
+  }
+  
+  const handleUpdatePlanTask = (index: number, updatedTask: TaskBlockType) => {
+    const newTasks = [...editingPlanTasks]
+    newTasks[index] = updatedTask
+    setEditingPlanTasks(newTasks)
+  }
+  
+  const handleDeletePlanTask = (index: number) => {
+    const newTasks = editingPlanTasks.filter((_, i) => i !== index)
+    setEditingPlanTasks(newTasks)
   }
   
   const tabs: { key: TabType; label: string }[] = [
@@ -547,6 +663,146 @@ export function StudentDetail() {
                       </Button>
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 偏好时段 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    偏好时段
+                  </span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setShowPreferenceForm(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    添加
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {schedulePreferences.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-4">
+                    暂无偏好时段设置
+                  </div>
+                ) : (
+                  schedulePreferences.map((pref) => {
+                    const dayLabels: Record<DayOfWeek, string> = {
+                      monday: '周一',
+                      tuesday: '周二',
+                      wednesday: '周三',
+                      thursday: '周四',
+                      friday: '周五',
+                      saturday: '周六',
+                      sunday: '周日'
+                    }
+                    return (
+                      <div key={pref.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium">{dayLabels[pref.day_of_week]}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {pref.preferred_start?.slice(0, 5) || '09:00'} - {pref.preferred_end?.slice(0, 5) || '11:00'}
+                          </span>
+                          {pref.notes && (
+                            <span className="text-xs text-muted-foreground">({pref.notes})</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            onClick={() => openEditPreference(pref)}
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeletePreference(pref.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+                
+                {/* 添加/编辑偏好时段表单 */}
+                {(showPreferenceForm || editingPreference) && (
+                  <div className="border rounded-lg p-4 space-y-3 bg-blue-50/30">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground">星期</label>
+                        <select
+                          value={preferenceForm.day_of_week}
+                          onChange={(e) => setPreferenceForm({ ...preferenceForm, day_of_week: e.target.value as DayOfWeek })}
+                          className="w-full h-9 px-2 rounded border text-sm"
+                        >
+                          <option value="monday">周一</option>
+                          <option value="tuesday">周二</option>
+                          <option value="wednesday">周三</option>
+                          <option value="thursday">周四</option>
+                          <option value="friday">周五</option>
+                          <option value="saturday">周六</option>
+                          <option value="sunday">周日</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">开始时间</label>
+                        <Input
+                          type="time"
+                          value={preferenceForm.preferred_start}
+                          onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_start: e.target.value })}
+                          className="h-9"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">结束时间</label>
+                        <Input
+                          type="time"
+                          value={preferenceForm.preferred_end}
+                          onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_end: e.target.value })}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">备注（可选）</label>
+                      <Input
+                        value={preferenceForm.notes}
+                        onChange={(e) => setPreferenceForm({ ...preferenceForm, notes: e.target.value })}
+                        placeholder="如：固定时段"
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm"
+                        onClick={editingPreference ? handleUpdatePreference : handleCreatePreference}
+                      >
+                        {editingPreference ? '保存' : '添加'}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setShowPreferenceForm(false)
+                          setEditingPreference(null)
+                          resetPreferenceForm()
+                        }}
+                      >
+                        取消
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1192,6 +1448,15 @@ export function StudentDetail() {
                               <Button
                                 variant="outline"
                                 size="sm"
+                                title="编辑计划"
+                                onClick={() => openEditPlan(plan)}
+                              >
+                                <Edit className="w-4 h-4 mr-1" />
+                                编辑
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 title="复制为新计划"
                                 onClick={async () => {
                                   await createLessonPlan({
@@ -1205,7 +1470,7 @@ export function StudentDetail() {
                                 }}
                               >
                                 <Copy className="w-4 h-4 mr-1" />
-                                复制为新计划
+                                复制
                               </Button>
                               <Button
                                 variant="ghost"
@@ -1243,6 +1508,91 @@ export function StudentDetail() {
                       )
                     })}
                   </div>
+                )}
+                
+                {/* 编辑课程计划表单 */}
+                {editingPlan && (
+                  <Card className="border-blue-300 bg-blue-50/30">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Edit className="w-4 h-4" />
+                        编辑课程计划
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* 计划日期 */}
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-1 block">计划日期</label>
+                        <Input
+                          type="date"
+                          value={editingPlanDate}
+                          onChange={(e) => setEditingPlanDate(e.target.value)}
+                        />
+                      </div>
+                      
+                      {/* 任务列表 */}
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">任务列表</label>
+                        <div className="space-y-3">
+                          {editingPlanTasks.map((task, index) => (
+                            <TaskBlock
+                              key={index}
+                              task={task}
+                              index={index}
+                              editable
+                              onChange={(updatedTask) => handleUpdatePlanTask(index, updatedTask)}
+                              onDelete={() => handleDeletePlanTask(index)}
+                              wordbanks={wordbanks}
+                            />
+                          ))}
+                          
+                          {editingPlanTasks.length === 0 && (
+                            <div className="text-sm text-muted-foreground text-center py-4 border rounded-lg">
+                              暂无任务，请添加任务
+                            </div>
+                          )}
+                        </div>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-3"
+                          onClick={handleAddPlanTask}
+                        >
+                          <Plus className="w-4 h-4 mr-1" />
+                          添加任务
+                        </Button>
+                      </div>
+                      
+                      {/* 助教提示 */}
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-1 block">助教提示（可选）</label>
+                        <Input
+                          value={editingPlanNotes}
+                          onChange={(e) => setEditingPlanNotes(e.target.value)}
+                          placeholder="输入助教提示或备注"
+                        />
+                      </div>
+                      
+                      {/* 操作按钮 */}
+                      <div className="flex gap-3">
+                        <Button onClick={handleUpdatePlan}>
+                          保存修改
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setEditingPlan(null)
+                            setEditingPlanTasks([])
+                            setEditingPlanNotes('')
+                            setEditingPlanDate('')
+                          }}
+                        >
+                          取消
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
               </>
             )}
