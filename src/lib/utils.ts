@@ -1,8 +1,55 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import type { Teacher } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+/**
+ * 助教姓名匹配工具函数
+ * 匹配优先级：精确匹配 > 唯一前缀匹配 > 唯一包含匹配
+ * 如果匹配到多个候选，记录警告并返回 null
+ * 
+ * @param name 输入的助教姓名
+ * @param teachers 助教列表
+ * @returns 匹配到的助教对象，如果无法唯一匹配则返回 null
+ */
+export function matchTeacherByName(name: string, teachers: Teacher[]): Teacher | null {
+  if (!name || !teachers.length) return null
+  
+  // 1. 精确匹配
+  const exactMatch = teachers.find(t => t.name === name)
+  if (exactMatch) {
+    return exactMatch
+  }
+  
+  // 2. 唯一前缀匹配
+  const prefixMatches = teachers.filter(t => t.name.startsWith(name))
+  if (prefixMatches.length === 1) {
+    console.warn(`[TeacherMatch] 前缀匹配: "${name}" → "${prefixMatches[0].name}"`)
+    return prefixMatches[0]
+  }
+  if (prefixMatches.length > 1) {
+    console.warn(`[TeacherMatch] 无法唯一匹配助教"${name}"，前缀匹配到 ${prefixMatches.length} 个候选: ${prefixMatches.map(t => t.name).join(', ')}，跳过课时累加`)
+    return null
+  }
+  
+  // 3. 唯一包含匹配（名称≥2字）
+  if (name.length >= 2) {
+    const containsMatches = teachers.filter(t => t.name.includes(name))
+    if (containsMatches.length === 1) {
+      console.warn(`[TeacherMatch] 包含匹配: "${name}" → "${containsMatches[0].name}"`)
+      return containsMatches[0]
+    }
+    if (containsMatches.length > 1) {
+      console.warn(`[TeacherMatch] 无法唯一匹配助教"${name}"，包含匹配到 ${containsMatches.length} 个候选: ${containsMatches.map(t => t.name).join(', ')}，跳过课时累加`)
+      return null
+    }
+  }
+  
+  console.warn(`[TeacherMatch] 无法唯一匹配助教"${name}"，跳过课时累加`)
+  return null
 }
 
 // 格式化日期

@@ -16,7 +16,9 @@ import type {
   StudentType,
   TaskBlock
 } from '@/types'
+import type { DashboardData } from '@/hooks/useDashboard'
 import { studentDb, billingDb, wordbankDb, progressDb, classRecordDb, lessonPlanDb, examScoreDb, learningPhaseDb, trialConversionDb, settingsDb, teacherDb } from '@/db'
+import { matchTeacherByName } from '@/lib/utils'
 
 interface AppState {
   // 学员列表
@@ -53,6 +55,11 @@ interface AppState {
   // UI状态
   sidebarCollapsed: boolean
   theme: 'light' | 'dark'
+  
+  // Dashboard 缓存状态
+  dashboardData: DashboardData | null
+  dashboardLoadedAt: number | null
+  dashboardDateKey: string | null
   
   // 操作方法
   loadStudents: () => Promise<void>
@@ -177,6 +184,11 @@ interface AppState {
   // UI操作
   toggleSidebar: () => void
   setTheme: (theme: 'light' | 'dark') => void
+  
+  // Dashboard 缓存操作
+  setDashboardCache: (data: DashboardData, dateKey: string) => void
+  clearDashboardCache: () => void
+  isDashboardCacheValid: (staleTime: number) => boolean
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -208,6 +220,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   learningPhases: [],
   expiredPlansMap: new Map(),
   expiredPlansLoading: false,
+  
+  // Dashboard 缓存初始状态
+  dashboardData: null,
+  dashboardLoadedAt: null,
+  dashboardDateKey: null,
   
   // 加载学员列表（不含过期计划查询，提高性能）
   loadStudents: async () => {
@@ -437,20 +454,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     
-    // 同步助教累计课时
+    // 同步助教累计课时（使用精确匹配优先的匹配函数）
     if (data.teacher_name && data.duration_hours) {
       const allTeachers = await teacherDb.getAll()
-      // 优先精确匹配
-      const exactMatch = allTeachers.find(t => t.name === data.teacher_name)
-      // 模糊匹配作为备选，要求输入长度至少为2个字符以避免误匹配
-      const fuzzyMatch = exactMatch ?? allTeachers.find(t => 
-        t.name.includes(data.teacher_name!) && data.teacher_name!.length >= 2
-      )
-      if (!exactMatch && fuzzyMatch) {
-        console.warn(`[Teacher Match] 模糊匹配: "${data.teacher_name}" → "${fuzzyMatch.name}"`)
-      }
-      if (fuzzyMatch) {
-        await teacherDb.addTeachingHours(fuzzyMatch.id, data.duration_hours)
+      const matchedTeacher = matchTeacherByName(data.teacher_name, allTeachers)
+      if (matchedTeacher) {
+        await teacherDb.addTeachingHours(matchedTeacher.id, data.duration_hours)
       }
     }
     
@@ -657,21 +666,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     
-    // 批量更新助教课时
+    // 批量更新助教课时（使用精确匹配优先的匹配函数）
     if (teacherHoursMap.size > 0) {
       const allTeachers = await teacherDb.getAll()
       for (const [teacherName, hours] of teacherHoursMap) {
-        // 优先精确匹配
-        const exactMatch = allTeachers.find(t => t.name === teacherName)
-        // 模糊匹配作为备选，要求输入长度至少为2个字符以避免误匹配
-        const fuzzyMatch = exactMatch ?? allTeachers.find(t => 
-          t.name.includes(teacherName) && teacherName.length >= 2
-        )
-        if (!exactMatch && fuzzyMatch) {
-          console.warn(`[Teacher Match] 模糊匹配: "${teacherName}" → "${fuzzyMatch.name}"`)
-        }
-        if (fuzzyMatch) {
-          await teacherDb.addTeachingHours(fuzzyMatch.id, hours)
+        const matchedTeacher = matchTeacherByName(teacherName, allTeachers)
+        if (matchedTeacher) {
+          await teacherDb.addTeachingHours(matchedTeacher.id, hours)
         }
       }
     }
@@ -809,5 +810,41 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTheme: (theme) => {
     set({ theme })
     document.documentElement.classList.toggle('dark', theme === 'dark')
+  },
+  
+  // Dashboard 缓存操作
+  setDashboardCache: (data, dateKey) => {
+    set({
+      dashboardData: data,
+      dashboardLoadedAt: Date.now(),
+      dashboardDateKey: dateKey
+    })
+  },
+  
+  clearDashboardCache: () => {
+    set({
+      dashboardData: null,
+      dashboardLoadedAt: null,
+      dashboardDateKey: null
+    })
+  },
+  
+  isDashboardCacheValid: (staleTime) => {
+    const state = get()
+    if (!state.dashboardData || !state.dashboardLoadedAt || !state.dashboardDateKey) {
+      return false
+    }
+    
+    // 格式化本地日期为 YYYY-MM-DD 格式
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    
+    // 如果日期变化（跨天），缓存失效
+    if (state.dashboardDateKey !== today) return false
+    
+    // 如果超过新鲜时间，缓存失效
+    if (Date.now() - state.dashboardLoadedAt > staleTime) return false
+    
+    return true
   }
 }))

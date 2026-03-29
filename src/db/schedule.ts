@@ -104,6 +104,59 @@ export const studentSchedulePreferenceDb = {
     )
   },
   
+  // 获取所有学员的时段偏好（带学员信息）
+  async getAllWithStudents(): Promise<(StudentSchedulePreference & { student: Student })[]> {
+    const results = await ipcQuery<any[]>(`
+      SELECT ssp.*, s.id as student_id, s.name as student_name, s.grade, s.level, s.status, s.student_type
+      FROM student_schedule_preferences ssp
+      LEFT JOIN students s ON ssp.student_id = s.id
+      WHERE s.status = 'active'
+      ORDER BY ssp.day_of_week, ssp.preferred_start, s.name
+    `)
+    
+    return results.map(row => ({
+      id: row.id,
+      student_id: row.student_id,
+      day_of_week: row.day_of_week,
+      preferred_start: row.preferred_start,
+      preferred_end: row.preferred_end,
+      semester: row.semester,
+      notes: row.notes,
+      student: {
+        id: row.student_id,
+        name: row.student_name,
+        grade: row.grade,
+        level: row.level,
+        status: row.status,
+        student_type: row.student_type
+      } as Student
+    }))
+  },
+  
+  // 批量创建时段偏好（用于从排课历史复制）
+  async batchCreate(preferences: Array<{
+    student_id: string
+    day_of_week: DayOfWeek
+    preferred_start?: string
+    preferred_end?: string
+    notes?: string
+  }>): Promise<{ success: number; failed: number }> {
+    let success = 0
+    let failed = 0
+    
+    for (const pref of preferences) {
+      try {
+        await this.create(pref)
+        success++
+      } catch (error) {
+        console.error('Failed to create preference:', error)
+        failed++
+      }
+    }
+    
+    return { success, failed }
+  },
+  
   async update(id: string, data: Partial<StudentSchedulePreference>): Promise<StudentSchedulePreference | undefined> {
     const fields: string[] = []
     const values: unknown[] = []

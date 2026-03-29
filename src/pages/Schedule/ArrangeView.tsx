@@ -26,7 +26,9 @@ interface ArrangeViewProps {
   extraInstructions: string
   setExtraInstructions: React.Dispatch<React.SetStateAction<string>>
   onAISchedule: () => Promise<void>
-  onToggleAiResultSelection: (studentId: string) => void
+  onSelectAllAiResults: () => void
+  onClearAiResultSelection: () => void
+  onToggleAiResult: (studentId: string) => void
   onConfirmAISchedule: () => Promise<void>
   saving: boolean
 }
@@ -65,7 +67,9 @@ export function ArrangeView({
   extraInstructions,
   setExtraInstructions,
   onAISchedule,
-  onToggleAiResultSelection,
+  onSelectAllAiResults,
+  onClearAiResultSelection,
+  onToggleAiResult,
   onConfirmAISchedule,
   saving
 }: ArrangeViewProps) {
@@ -213,8 +217,8 @@ export function ArrangeView({
                 <div className="flex items-center justify-between">
                   <h3 className="font-medium">排课结果</h3>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => onToggleAiResultSelection('all')}>全选</Button>
-                    <Button variant="outline" size="sm" onClick={() => onToggleAiResultSelection('none')}>清空</Button>
+                    <Button variant="outline" size="sm" onClick={onSelectAllAiResults}>全选</Button>
+                    <Button variant="outline" size="sm" onClick={onClearAiResultSelection}>清空</Button>
                   </div>
                 </div>
 
@@ -235,7 +239,7 @@ export function ArrangeView({
                         className={`p-3 rounded-lg border ${
                           result.unmatched ? 'bg-red-50 border-red-200' : isSelected ? 'bg-primary/10 border-primary' : 'bg-muted/50 border-transparent'
                         } ${!result.unmatched ? 'cursor-pointer' : ''}`}
-                        onClick={() => !result.unmatched && onToggleAiResultSelection(result.student_id)}
+                        onClick={() => !result.unmatched && onToggleAiResult(result.student_id)}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">

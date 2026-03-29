@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Check, Loader2, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react'
+import { Check, Loader2, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DateInput } from '@/components/ui/date-input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { HOUR_WIDTH, DAY_LABELS } from './constants'
 import { useManualSchedule, getDayOfWeek, minutesToTime, formatDate } from './hooks/useManualSchedule'
 import { StudentRowComponent } from './StudentRow'
@@ -35,7 +36,8 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
     handleClearDay,
     handleSave,
     getTeacherAssignStatuses,
-    loadSchedulesForDate
+    loadSchedulesForDate,
+    handleAddPreference
   } = useManualSchedule({ initialDate })
   
   // 筛选状态：只显示有可用时段的助教
@@ -47,13 +49,17 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
   // 助教面板折叠状态
   const [teacherPanelCollapsed, setTeacherPanelCollapsed] = useState(false)
   
-  // 横向滚动位置（用于同步学生和助教面板）
-  const [scrollLeft, setScrollLeft] = useState(0)
+  // 横向滚动同步 - 使用原生 JS 直接操作 DOM，避免 React state 重渲染导致的抖动
+  // 滚动主控制器：学生面板时间轴头部
+  const headerScrollRef = useRef<HTMLDivElement>(null)
   
   // 分隔线拖动状态 - 学生区高度百分比
   const [studentPanelHeightPercent, setStudentPanelHeightPercent] = useState(60)
   const [isDragging, setIsDragging] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  
+  // 快速添加学员状态
+  const [quickAddTime, setQuickAddTime] = useState({ start: '09:00', end: '11:00' })
   
   // 分隔线拖动处理
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -102,23 +108,30 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
     loadSchedulesForDate(selectedDate)
   }, [selectedDate, loadSchedulesForDate])
   
-  // 横向滚动同步 - 只需要监听时间轴头部的滚动
-  const headerScrollRef = useRef<HTMLDivElement>(null)
-  
-  // 监听时间轴头部滚动，同步更新 scrollLeft 状态
+  // 高性能滚动同步：直接操作 DOM transform，不触发 React 重渲染
+  // 当时间轴头部滚动时，同步所有带有 data-scroll-sync 属性的元素的 transform
   useEffect(() => {
     const headerEl = headerScrollRef.current
-    if (!headerEl) return
+    const containerEl = containerRef.current
+    if (!headerEl || !containerEl) return
     
     const handleScroll = () => {
-      setScrollLeft(headerEl.scrollLeft)
+      const scrollLeft = headerEl.scrollLeft
+      
+      // 使用 querySelectorAll 找到所有需要同步的时间轴元素
+      const timelineElements = containerEl.querySelectorAll('[data-scroll-sync="timeline"]')
+      timelineElements.forEach((el) => {
+        // 直接设置 transform 样式，避免通过 state 引发重渲染
+        (el as HTMLElement).style.transform = `translateX(-${scrollLeft}px)`
+      })
     }
     
     headerEl.addEventListener('scroll', handleScroll)
+    
     return () => {
       headerEl.removeEventListener('scroll', handleScroll)
     }
-  }, [loading])
+  }, [loading, teacherPanelCollapsed])
   
   // 生成时间轴标签
   const timeLabels = useMemo(() => {
@@ -128,6 +141,17 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
     }
     return labels
   }, [timeRange])
+  
+  // 计算不在当前面板中的在读学员
+  const studentsNotInPanel = useMemo(() => {
+    const panelStudentIds = new Set(studentRows.map(row => row.student.id))
+    return students.filter(s => !panelStudentIds.has(s.id))
+  }, [students, studentRows])
+  
+  // 快速添加学员到今日排课
+  const handleQuickAddStudentToday = useCallback(async (studentId: string) => {
+    await handleAddPreference(studentId, selectedDate, quickAddTime.start, quickAddTime.end)
+  }, [handleAddPreference, selectedDate, quickAddTime])
   
   // 快捷日期列表（整周：周一到周日）
   const quickDates = useMemo(() => {
@@ -165,6 +189,9 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
     return dates
   }, [])
   
+  // 时间轴总宽度
+  const timelineWidth = ((timeRange.end - timeRange.start) / 60) * HOUR_WIDTH
+  
   return (
     <div className="h-full flex flex-col">
       {/* 顶部工具栏 */}
@@ -195,6 +222,54 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
         </div>
         
         <div className="flex items-center gap-2">
+          {/* 添加学员到今日排课 */}
+          {studentsNotInPanel.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <UserPlus className="h-4 w-4 mr-1" />
+                  添加学员 ({studentsNotInPanel.length})
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-3" align="end">
+                <div className="text-xs font-medium mb-2">添加学员到今日排课</div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  点击学员为其添加今日时段偏好
+                </div>
+                {/* 时间选择 */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs text-muted-foreground">时段:</span>
+                  <input 
+                    type="time" 
+                    value={quickAddTime.start}
+                    onChange={e => setQuickAddTime(p => ({ ...p, start: e.target.value }))}
+                    className="text-xs border rounded px-1.5 py-0.5 w-20"
+                  />
+                  <span className="text-xs">-</span>
+                  <input 
+                    type="time" 
+                    value={quickAddTime.end}
+                    onChange={e => setQuickAddTime(p => ({ ...p, end: e.target.value }))}
+                    className="text-xs border rounded px-1.5 py-0.5 w-20"
+                  />
+                </div>
+                {/* 学员列表 */}
+                <div className="max-h-64 overflow-y-auto space-y-0.5">
+                  {studentsNotInPanel.map(s => (
+                    <button 
+                      key={s.id}
+                      onClick={() => handleQuickAddStudentToday(s.id)}
+                      className="w-full text-left px-2 py-1.5 text-sm hover:bg-muted rounded flex items-center justify-between"
+                    >
+                      <span>{s.name}</span>
+                      <span className="text-xs text-muted-foreground">{s.grade}</span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+          
           <Button variant="outline" onClick={handleClearDay}>
             <Trash2 className="h-4 w-4 mr-2" />
             清空本日排课
@@ -222,7 +297,7 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
               className="flex flex-col overflow-hidden flex-shrink-0" 
               style={{ height: `${studentPanelHeightPercent}%` }}
             >
-              {/* 时间轴头部（带学生列标题） */}
+              {/* 时间轴头部（带学生列标题） - 滚动主控制器 */}
               <div className="h-10 border-b bg-muted/30 flex flex-shrink-0">
                 <div className="w-32 flex-shrink-0 border-r flex items-center justify-center text-sm font-medium text-muted-foreground">
                   学生
@@ -231,7 +306,7 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                   ref={headerScrollRef}
                   className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-none"
                 >
-                  <div className="flex" style={{ width: `${((timeRange.end - timeRange.start) / 60) * HOUR_WIDTH}px` }}>
+                  <div className="flex" style={{ width: `${timelineWidth}px` }}>
                     {timeLabels.map((time) => (
                       <div
                         key={time}
@@ -262,7 +337,8 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                       getTeacherAssignStatuses={getTeacherAssignStatuses}
                       onAssign={handleAssign}
                       onRemove={handleRemove}
-                      scrollLeft={scrollLeft}
+                      selectedDate={selectedDate}
+                      onAddPreference={handleAddPreference}
                     />
                   ))
                 )}
@@ -318,9 +394,12 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                   <div className="w-32 flex-shrink-0 border-r flex items-center px-2">
                     <span className="text-xs text-muted-foreground">助教</span>
                   </div>
-                  {/* 时间轴标签（只读，与上方同步显示） */}
-                  <div className="flex-1 overflow-hidden">
-                    <div className="flex" style={{ width: `${((timeRange.end - timeRange.start) / 60) * HOUR_WIDTH}px`, transform: `translateX(-${scrollLeft}px)` }}>
+                  {/* 时间轴标签 - 同步显示（这个不需要单独滚动，跟随 headerScrollRef） */}
+                  <div
+                    data-scroll-sync="timeline"
+                    className="flex-1 overflow-x-hidden overflow-y-hidden"
+                  >
+                    <div className="flex" style={{ width: `${timelineWidth}px` }}>
                       {timeLabels.map((time) => (
                         <div
                           key={time}
@@ -357,7 +436,6 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                         timeRangeEnd={timeRange.end}
                         scheduledClasses={scheduledClasses}
                         students={students}
-                        scrollLeft={scrollLeft}
                         selectedDate={selectedDate}
                         onClick={() => setSelectedTeacherCard(card)}
                       />

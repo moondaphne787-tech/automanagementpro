@@ -16,6 +16,7 @@ import { TeacherList } from '@/pages/TeacherList'
 import { TeacherDetail } from '@/pages/TeacherDetail'
 import { Schedule } from '@/pages/Schedule'
 import { PhasesPage } from '@/pages/PhasesPage'
+import { PreferenceManage } from '@/pages/PreferenceManage'
 
 function App() {
   const [importDrawerOpen, setImportDrawerOpen] = useState(false)
@@ -52,6 +53,7 @@ function App() {
           <Route path="/trial" element={<TrialList />} />
           <Route path="/trial/conversions" element={<TrialConversions />} />
           <Route path="/schedule" element={<Schedule />} />
+          <Route path="/preferences" element={<PreferenceManage />} />
           <Route path="/teachers" element={<TeacherList />} />
           <Route path="/teachers/:id" element={<TeacherDetail />} />
           <Route path="/phases" element={<PhasesPage />} />

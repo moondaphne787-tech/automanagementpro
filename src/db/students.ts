@@ -116,7 +116,7 @@ export const studentDb = {
           total_hours: row.total_hours || 0,
           used_hours: row.used_hours || 0,
           // remaining_hours 是生成列，直接从查询结果获取
-          remaining_hours: row.remaining_hours ?? (row.total_hours || 0) - (row.used_hours || 0),
+          remaining_hours: row.remaining_hours ?? 0,
           warning_threshold: row.warning_threshold || 10,
           last_payment_date: row.last_payment_date,
           notes: null,

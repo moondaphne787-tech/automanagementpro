@@ -10,7 +10,8 @@ import {
   Sparkles,
   FileDown,
   Zap,
-  LayoutDashboard
+  LayoutDashboard,
+  Clock
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/students', icon: Users, label: '学员管理' },
   { to: '/trial', icon: UserPlus, label: '体验生' },
   { to: '/schedule', icon: Calendar, label: '排课' },
+  { to: '/preferences', icon: Clock, label: '时段偏好' },
   { to: '/teachers', icon: GraduationCap, label: '助教' },
   { to: '/phases', icon: BookOpen, label: '学习阶段' },
   { to: '/settings', icon: Settings, label: '设置' },

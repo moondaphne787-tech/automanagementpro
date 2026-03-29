@@ -17,7 +17,6 @@ interface TeacherTimelineRowProps {
   timeRangeEnd: number
   scheduledClasses: (ScheduledClass & { student?: Teacher })[]
   students: (Student & { billing: Billing | null; preferences: StudentSchedulePreference[] })[]
-  scrollLeft: number
   selectedDate: string
   onClick: () => void
 }
@@ -28,7 +27,6 @@ export function TeacherTimelineRow({
   timeRangeEnd,
   scheduledClasses,
   students,
-  scrollLeft,
   selectedDate,
   onClick
 }: TeacherTimelineRowProps) {
@@ -51,7 +49,7 @@ export function TeacherTimelineRow({
       style={{ height: `${ROW_HEIGHT}px` }}
       onClick={onClick}
     >
-      {/* 助教名称列 */}
+      {/* 助教名称列 - 固定 */}
       <div className="w-32 flex-shrink-0 border-r px-2 flex flex-col justify-center">
         <div
           className="text-xs font-medium truncate"
@@ -64,13 +62,15 @@ export function TeacherTimelineRow({
         </div>
       </div>
       
-      {/* 时间轴区域（通过 translateX 同步滚动） */}
+      {/* 时间轴区域 - 通过原生 JS 同步滚动，添加 data 属性便于查询 */}
       <div className="flex-1 overflow-hidden">
+        {/* 内部内容容器 - 通过 transform 实现同步滚动 */}
         <div
+          data-scroll-sync="timeline"
           className="relative h-full"
           style={{
             width: `${totalWidth}px`,
-            transform: `translateX(-${scrollLeft}px)`,
+            transform: 'translateX(0px)',
           }}
         >
           {/* 可用时段背景 */}

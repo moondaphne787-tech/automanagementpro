@@ -6,9 +6,7 @@ import {
   CalendarPlus,
   Users,
   Hand,
-  X,
-  Sun,
-  Moon
+  X
 } from 'lucide-react'
 import { scheduledClassDb, studentSchedulePreferenceDb } from '@/db'
 import { generateId } from '@/db/utils'
@@ -37,7 +35,8 @@ import {
   DAY_LABELS,
   formatDate,
   formatDisplayDate,
-  getDayOfWeek
+  getDayOfWeek,
+  getDateTypeIcon
 } from './types'
 
 type StudentWithPrefs = Student & { billing: Billing | null; preferences: StudentSchedulePreference[] }
@@ -565,27 +564,19 @@ export function Schedule() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [activeMenu])
 
-  // 获取日期显示图标
-  const getDateIcon = (type: ScheduleDateConfig['type']) => {
-    switch (type) {
-      case 'friday_evening':
-        return <Moon className="h-4 w-4 text-indigo-500" />
-      case 'holiday':
-        return <Sun className="h-4 w-4 text-amber-500" />
-      default:
-        return <Sun className="h-4 w-4 text-orange-500" />
-    }
+  // 处理AI排课选择 - 全选
+  const handleSelectAllAiResults = () => {
+    setSelectedAiResults(new Set(aiResults.filter(r => !r.unmatched).map(r => r.student_id)))
   }
 
-  // 处理AI排课选择切换
+  // 处理AI排课选择 - 清空
+  const handleClearAiResultSelection = () => {
+    setSelectedAiResults(new Set())
+  }
+
+  // 处理AI排课选择 - 单个切换
   const handleToggleAiResult = (studentId: string) => {
-    if (studentId === 'all') {
-      setSelectedAiResults(new Set(aiResults.filter(r => !r.unmatched).map(r => r.student_id)))
-    } else if (studentId === 'none') {
-      setSelectedAiResults(new Set())
-    } else {
-      toggleAiResultSelection(studentId)
-    }
+    toggleAiResultSelection(studentId)
   }
 
   return (
@@ -701,7 +692,7 @@ export function Schedule() {
                 className="flex items-center gap-1 px-2 py-1 bg-background rounded-md border text-sm hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-colors"
                 title="点击跳转到人工排课"
               >
-                {getDateIcon(dateConfig.type)}
+                <span>{getDateTypeIcon(dateConfig.type)}</span>
                 <span>{dateConfig.label}</span>
                 <span className="text-muted-foreground">({formatDisplayDate(new Date(dateConfig.date))})</span>
                 {schedulePreset === 'custom' && (
@@ -770,7 +761,9 @@ export function Schedule() {
             extraInstructions={extraInstructions}
             setExtraInstructions={setExtraInstructions}
             onAISchedule={handleAISchedule}
-            onToggleAiResultSelection={handleToggleAiResult}
+            onSelectAllAiResults={handleSelectAllAiResults}
+            onClearAiResultSelection={handleClearAiResultSelection}
+            onToggleAiResult={handleToggleAiResult}
             onConfirmAISchedule={handleConfirmAISchedule}
             saving={aiSaving}
           />

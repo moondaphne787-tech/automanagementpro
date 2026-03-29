@@ -16,7 +16,7 @@ import * as path from 'path'
 export interface MigrationRecord {
   version: number
   applied_at: string
-  description?: string
+  description: string | null
 }
 
 // 迁移定义接口
@@ -514,7 +514,6 @@ export function getWalFileInfo(dbPath: string): { exists: boolean; size: number;
   const shmPath = `${dbPath}-shm`
   
   try {
-    const fs = require('fs')
     let walSize = 0
     let walExists = false
     

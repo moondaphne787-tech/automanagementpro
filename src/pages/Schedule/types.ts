@@ -1,4 +1,5 @@
 import type { DayOfWeek } from '@/types'
+import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
 
 // 视图模式类型
 export type ViewMode = 'week' | 'arrange' | 'manual'
@@ -52,4 +53,10 @@ export function getDayOfWeek(dateStr: string): DayOfWeek {
   const days: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
   const date = new Date(dateStr)
   return days[date.getDay()]
+}
+
+// 获取日期类型对应的图标（emoji 字符串）
+export function getDateTypeIcon(type: ScheduleDateConfig['type']): string {
+  if (type === 'friday_evening') return '🌙'
+  return '☀️'
 }

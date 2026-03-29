@@ -30,8 +30,10 @@ const LAYOUT_OPTIONS = [
 
 // 每位学员卡片内显示的计划数选项
 const PLANS_PER_STUDENT_OPTIONS = [
-  { value: '1', label: '只打印最新计划' },
-  { value: '2', label: '打印最近 2 次计划' },
+  { value: '1', label: '最近 1 次计划' },
+  { value: '2', label: '最近 2 次计划' },
+  { value: '3', label: '最近 3 次计划' },
+  { value: '4', label: '最近 4 次计划' },
 ]
 
 export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
@@ -40,7 +42,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
   const [studentsWithPlans, setStudentsWithPlans] = useState<StudentWithPlan[]>([])
   const [filterGrade, setFilterGrade] = useState<string>('all')
   const [searchName, setSearchName] = useState('')
-  const [layout, setLayout] = useState<number>(3)  // 默认每行3人
+  const [layout, setLayout] = useState<number>(2)  // 默认每行2人
   const [plansPerStudent, setPlansPerStudent] = useState<number>(2)  // 默认显示2条计划
   const [showAssistantTips, setShowAssistantTips] = useState(false)
   const [showNotes, setShowNotes] = useState(false)
@@ -68,7 +70,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     const results: StudentWithPlan[] = await Promise.all(
       activeStudents.map(async (student) => {
         const plans = await lessonPlanDb.getByStudentId(student.id)
-        const latestPlans = plans.slice(0, 2)  // 取最近 2 条计划
+        const latestPlans = plans.slice(0, 4)  // 取最近 4 条计划
         return {
           student,
           plans: latestPlans,
@@ -211,7 +213,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
     }
     
     .plan-date {
-      font-size: 8px;
+      font-size: 18px;
       color: #666;
     }
     
@@ -299,7 +301,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
       <div class="plan-card">
         <div class="card-header">
           <span class="student-name">${student.name} ${student.grade || ''}</span>
-          <span class="plan-date">${plan.plan_date || '未定'} ${planLabel}</span>
+          <span class="plan-date">Period      ______:  ${plan.plan_date || '未定'}</span>
         </div>
         <div class="tasks">${tasksHtml}</div>
         ${showAssistantTips && plan.notes ? `<div style="font-size: 9px; color: #666; margin-top: 4px; padding-top: 4px; border-top: 1px dashed #ddd;">提示：${plan.notes}</div>` : ''}
@@ -574,8 +576,8 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                                 <div className="flex justify-between items-center border-b border-gray-300 px-2 py-1 bg-gray-50">
                                   <span className="font-bold text-[11px]">{card.student.name}</span>
                                   {card.plan && (
-                                    <span className="text-[8px] text-gray-500">
-                                      {card.plan.plan_date || '未定'}
+                                    <span className="text-[10px] text-gray-500">
+                                      Period      ______:  {card.plan.plan_date || '未定'}
                                     </span>
                                   )}
                                 </div>

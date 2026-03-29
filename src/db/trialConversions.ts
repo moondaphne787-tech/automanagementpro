@@ -76,7 +76,7 @@ export const trialConversionDb = {
     const results = await ipcQuery<any[]>(`
       SELECT s.*, 
              tc.id as conversion_id, tc.trial_date, tc.conversion_date, tc.converted, tc.commission_note as tc_commission_note, tc.notes as tc_notes, tc.created_at as tc_created_at,
-             b.id as billing_id, b.total_hours, b.used_hours, b.warning_threshold
+             b.id as billing_id, b.total_hours, b.used_hours, b.remaining_hours, b.warning_threshold
       FROM students s
       LEFT JOIN trial_conversions tc ON s.id = tc.student_id
       LEFT JOIN billing b ON s.id = b.student_id
@@ -118,7 +118,8 @@ export const trialConversionDb = {
         student_id: row.id,
         total_hours: row.total_hours || 0,
         used_hours: row.used_hours || 0,
-        remaining_hours: (row.total_hours || 0) - (row.used_hours || 0),
+        // remaining_hours 是生成列，直接从查询结果获取
+        remaining_hours: row.remaining_hours ?? 0,
         warning_threshold: row.warning_threshold || 3,
         last_payment_date: null,
         notes: null,

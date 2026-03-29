@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Settings2 } from 'lucide-react'
 import {
   Popover,
   PopoverContent,
@@ -18,7 +18,8 @@ interface StudentRowProps {
   getTeacherAssignStatuses: (slot: StudentSlot) => TeacherAssignStatus[]
   onAssign: (slotId: string, teacherId: string) => void
   onRemove: (slotId: string) => void
-  scrollLeft: number
+  selectedDate: string
+  onAddPreference: (studentId: string, date: string, startTime: string, endTime: string) => Promise<void>
 }
 
 // 学生时段色块组件
@@ -107,8 +108,17 @@ export function StudentRowComponent({
   getTeacherAssignStatuses,
   onAssign,
   onRemove,
-  scrollLeft
+  selectedDate,
+  onAddPreference
 }: StudentRowProps) {
+  // 快速偏好编辑状态
+  const [prefPopoverOpen, setPrefPopoverOpen] = useState(false)
+  const [quickPrefForm, setQuickPrefForm] = useState({
+    start_time: '09:00',
+    end_time: '11:00'
+  })
+  const [isAddingPref, setIsAddingPref] = useState(false)
+  
   const totalWidth = ((timeRangeEnd - timeRangeStart) / 60) * HOUR_WIDTH
   
   // 检查是否需要显示课时警告
@@ -129,10 +139,70 @@ export function StudentRowComponent({
   
   return (
     <div className={`flex border-b ${getRowBackgroundClass()}`}>
-      {/* 学生信息列 */}
-      <div className="w-32 flex-shrink-0 border-r p-2 flex flex-col justify-center">
+      {/* 学生信息列 - 固定 */}
+      <div className="w-32 flex-shrink-0 border-r p-2 flex flex-col justify-center group">
         <div className="flex items-center gap-1">
           <span className="font-medium text-sm truncate">{row.student.name}</span>
+          
+          {/* 快速偏好编辑按钮 */}
+          <Popover open={prefPopoverOpen} onOpenChange={setPrefPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-muted-foreground transition-opacity flex-shrink-0"
+                onClick={e => e.stopPropagation()}
+                title="快速添加今日时段偏好"
+              >
+                <Settings2 className="h-3 w-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-3" align="start">
+              <div className="text-xs font-medium mb-2">快速添加时段偏好</div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">开始时间</label>
+                    <input 
+                      type="time" 
+                      value={quickPrefForm.start_time}
+                      onChange={e => setQuickPrefForm(p => ({ ...p, start_time: e.target.value }))}
+                      className="w-full text-xs border rounded px-1.5 py-1 mt-0.5" 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">结束时间</label>
+                    <input 
+                      type="time" 
+                      value={quickPrefForm.end_time}
+                      onChange={e => setQuickPrefForm(p => ({ ...p, end_time: e.target.value }))}
+                      className="w-full text-xs border rounded px-1.5 py-1 mt-0.5" 
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (isAddingPref) return
+                    setIsAddingPref(true)
+                    try {
+                      await onAddPreference(row.student.id, selectedDate, quickPrefForm.start_time, quickPrefForm.end_time)
+                      setPrefPopoverOpen(false)
+                      // 重置表单
+                      setQuickPrefForm({ start_time: '09:00', end_time: '11:00' })
+                    } catch (error) {
+                      console.error('Failed to add preference:', error)
+                      alert('添加偏好失败')
+                    } finally {
+                      setIsAddingPref(false)
+                    }
+                  }}
+                  disabled={isAddingPref}
+                  className="w-full text-xs bg-primary text-primary-foreground rounded py-1.5 hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {isAddingPref ? '添加中...' : '添加'}
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+          
           {shouldShowWarning && (
             <Popover>
               <PopoverTrigger asChild>
@@ -176,14 +246,16 @@ export function StudentRowComponent({
         </div>
       </div>
       
-      {/* 时间轴区域 - 使用 transform 同步滚动，与助教区域保持一致 */}
+      {/* 时间轴区域 - 通过原生 JS 同步滚动，添加 data 属性便于查询 */}
       <div className="flex-1 overflow-hidden">
+        {/* 内部内容容器 - 通过 transform 实现同步滚动 */}
         <div
+          data-scroll-sync="timeline"
           className="relative"
           style={{
             width: `${totalWidth}px`,
             height: `${ROW_HEIGHT}px`,
-            transform: `translateX(-${scrollLeft}px)`,
+            transform: 'translateX(0px)',
           }}
         >
           {/* 时间网格线 */}

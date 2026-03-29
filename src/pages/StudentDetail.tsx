@@ -16,7 +16,7 @@ import { GrowthPanel } from '@/components/Growth/GrowthPanel'
 import { StudentForm } from '@/components/Student/StudentForm'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb, learningPhaseDb, studentSchedulePreferenceDb } from '@/db'
 import { sendAIRequestStream } from '@/ai/client'
-import { SYSTEM_PROMPT, buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
+import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { exportLessonPlanPDF, printLessonPlan } from '@/utils/pdfExport'
 import type { Student, Billing, ClassRecord, LessonPlan, AIConfig, TaskBlock as TaskBlockType, LearningPhase, PhaseType, StudentSchedulePreference, DayOfWeek } from '@/types'
 import { cn } from '@/lib/utils'
@@ -32,7 +32,6 @@ export function StudentDetail() {
     currentBilling, 
     currentProgress,
     wordbanks,
-    classRecords,
     selectStudent, 
     updateStudent, 
     deleteStudent,
@@ -40,7 +39,6 @@ export function StudentDetail() {
     loadWordbanks,
     upsertProgress,
     deleteProgress,
-    loadClassRecords,
     createClassRecord,
     updateClassRecord,
     deleteClassRecord,
@@ -286,7 +284,6 @@ export function StudentDetail() {
     if (id) {
       selectStudent(id)
       loadWordbanks()
-      loadClassRecords(id)
       loadLessonPlans(id)
       loadAIConfig()
       // expiredPlans 已在 loadLessonPlans 中一并加载
@@ -670,81 +667,134 @@ export function StudentDetail() {
             {/* 偏好时段 */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4" />
-                    偏好时段
-                  </span>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => setShowPreferenceForm(true)}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    添加
-                  </Button>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  偏好时段
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {schedulePreferences.length === 0 ? (
+              <CardContent className="space-y-1">
+                {schedulePreferences.length === 0 && !showPreferenceForm ? (
                   <div className="text-sm text-muted-foreground text-center py-4">
                     暂无偏好时段设置
                   </div>
                 ) : (
-                  schedulePreferences.map((pref) => {
-                    const dayLabels: Record<DayOfWeek, string> = {
-                      monday: '周一',
-                      tuesday: '周二',
-                      wednesday: '周三',
-                      thursday: '周四',
-                      friday: '周五',
-                      saturday: '周六',
-                      sunday: '周日'
-                    }
-                    return (
-                      <div key={pref.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium">{dayLabels[pref.day_of_week]}</span>
-                          <span className="text-sm text-muted-foreground">
-                            {pref.preferred_start?.slice(0, 5) || '09:00'} - {pref.preferred_end?.slice(0, 5) || '11:00'}
+                  <div className="space-y-1">
+                    {schedulePreferences.map((pref) => {
+                      const dayLabels: Record<DayOfWeek, string> = {
+                        monday: '周一',
+                        tuesday: '周二',
+                        wednesday: '周三',
+                        thursday: '周四',
+                        friday: '周五',
+                        saturday: '周六',
+                        sunday: '周日'
+                      }
+                      
+                      // 如果正在编辑这个偏好，显示内联编辑表单
+                      if (editingPreference?.id === pref.id) {
+                        return (
+                          <div key={pref.id} className="border rounded-lg p-3 bg-blue-50/30 space-y-2">
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-muted-foreground">星期</label>
+                                <select
+                                  value={preferenceForm.day_of_week}
+                                  onChange={(e) => setPreferenceForm({ ...preferenceForm, day_of_week: e.target.value as DayOfWeek })}
+                                  className="w-full h-8 px-2 rounded border text-sm"
+                                >
+                                  <option value="monday">周一</option>
+                                  <option value="tuesday">周二</option>
+                                  <option value="wednesday">周三</option>
+                                  <option value="thursday">周四</option>
+                                  <option value="friday">周五</option>
+                                  <option value="saturday">周六</option>
+                                  <option value="sunday">周日</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-xs text-muted-foreground">开始</label>
+                                <Input
+                                  type="time"
+                                  value={preferenceForm.preferred_start}
+                                  onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_start: e.target.value })}
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-muted-foreground">结束</label>
+                                <Input
+                                  type="time"
+                                  value={preferenceForm.preferred_end}
+                                  onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_end: e.target.value })}
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-xs text-muted-foreground">备注</label>
+                              <Input
+                                value={preferenceForm.notes}
+                                onChange={(e) => setPreferenceForm({ ...preferenceForm, notes: e.target.value })}
+                                placeholder="可选"
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={handleUpdatePreference}>保存</Button>
+                              <Button variant="outline" size="sm" onClick={() => {
+                                setEditingPreference(null)
+                                resetPreferenceForm()
+                              }}>取消</Button>
+                            </div>
+                          </div>
+                        )
+                      }
+                      
+                      // 正常显示偏好项
+                      return (
+                        <div key={pref.id} className="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors">
+                          <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded min-w-[40px] text-center">
+                            {dayLabels[pref.day_of_week]}
+                          </span>
+                          <span className="text-sm">
+                            {pref.preferred_start?.slice(0,5) || '09:00'} - {pref.preferred_end?.slice(0,5) || '11:00'}
                           </span>
                           {pref.notes && (
-                            <span className="text-xs text-muted-foreground">({pref.notes})</span>
+                            <span className="text-xs text-muted-foreground truncate flex-1">({pref.notes})</span>
                           )}
+                          <div className="ml-auto opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
+                            <button 
+                              onClick={() => openEditPreference(pref)}
+                              className="p-1 hover:bg-muted rounded"
+                              title="编辑"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeletePreference(pref.id)} 
+                              className="p-1 hover:bg-muted rounded text-destructive"
+                              title="删除"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                            onClick={() => openEditPreference(pref)}
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                            onClick={() => handleDeletePreference(pref.id)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  })
+                      )
+                    })}
+                  </div>
                 )}
                 
-                {/* 添加/编辑偏好时段表单 */}
-                {(showPreferenceForm || editingPreference) && (
-                  <div className="border rounded-lg p-4 space-y-3 bg-blue-50/30">
-                    <div className="grid grid-cols-3 gap-3">
+                {/* 添加新偏好 - 底部折叠表单 */}
+                {showPreferenceForm ? (
+                  <div className="border rounded-lg p-3 bg-blue-50/30 space-y-2 mt-2">
+                    <div className="text-xs font-medium text-muted-foreground">添加新偏好时段</div>
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="text-xs text-muted-foreground">星期</label>
                         <select
                           value={preferenceForm.day_of_week}
                           onChange={(e) => setPreferenceForm({ ...preferenceForm, day_of_week: e.target.value as DayOfWeek })}
-                          className="w-full h-9 px-2 rounded border text-sm"
+                          className="w-full h-8 px-2 rounded border text-sm"
                         >
                           <option value="monday">周一</option>
                           <option value="tuesday">周二</option>
@@ -756,53 +806,49 @@ export function StudentDetail() {
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">开始时间</label>
+                        <label className="text-xs text-muted-foreground">开始</label>
                         <Input
                           type="time"
                           value={preferenceForm.preferred_start}
                           onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_start: e.target.value })}
-                          className="h-9"
+                          className="h-8 text-sm"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">结束时间</label>
+                        <label className="text-xs text-muted-foreground">结束</label>
                         <Input
                           type="time"
                           value={preferenceForm.preferred_end}
                           onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_end: e.target.value })}
-                          className="h-9"
+                          className="h-8 text-sm"
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs text-muted-foreground">备注（可选）</label>
+                      <label className="text-xs text-muted-foreground">备注</label>
                       <Input
                         value={preferenceForm.notes}
                         onChange={(e) => setPreferenceForm({ ...preferenceForm, notes: e.target.value })}
-                        placeholder="如：固定时段"
-                        className="h-9"
+                        placeholder="可选"
+                        className="h-8 text-sm"
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        size="sm"
-                        onClick={editingPreference ? handleUpdatePreference : handleCreatePreference}
-                      >
-                        {editingPreference ? '保存' : '添加'}
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => {
-                          setShowPreferenceForm(false)
-                          setEditingPreference(null)
-                          resetPreferenceForm()
-                        }}
-                      >
-                        取消
-                      </Button>
+                      <Button size="sm" onClick={handleCreatePreference}>添加</Button>
+                      <Button variant="outline" size="sm" onClick={() => {
+                        setShowPreferenceForm(false)
+                        resetPreferenceForm()
+                      }}>取消</Button>
                     </div>
                   </div>
+                ) : (
+                  <button
+                    onClick={() => setShowPreferenceForm(true)}
+                    className="w-full mt-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    添加时段偏好
+                  </button>
                 )}
               </CardContent>
             </Card>

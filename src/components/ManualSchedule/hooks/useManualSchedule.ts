@@ -102,6 +102,7 @@ export interface UseManualScheduleReturn {
   getTeacherAssignStatuses: (slot: StudentSlot) => import('../types').TeacherAssignStatus[]
   checkTeacherConflict: (teacherId: string, slot: StudentSlot) => ConflictInfo
   loadSchedulesForDate: (date: string) => Promise<void>
+  handleAddPreference: (studentId: string, date: string, startTime: string, endTime: string) => Promise<void>
 }
 
 export function useManualSchedule(options: UseManualScheduleOptions = {}): UseManualScheduleReturn {
@@ -123,6 +124,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
   const [scheduledClasses, setScheduledClasses] = useState<(ScheduledClass & { teacher?: Teacher })[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [staticDataLoaded, setStaticDataLoaded] = useState(false)
   
   // 本地排课状态（未保存）
   const [localSchedules, setLocalSchedules] = useState<Map<string, string>>(new Map())
@@ -162,6 +164,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
       
       setStudents(studentsWithPrefs)
       setTeachers(teachersWithColor)
+      setStaticDataLoaded(true)
       
     } catch (error) {
       console.error('Failed to load static data:', error)
@@ -189,10 +192,10 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
   
   // 日期切换时只加载排课数据
   useEffect(() => {
-    if (students.length > 0 || teachers.length > 0) {
+    if (staticDataLoaded) {
       loadSchedulesForDate(selectedDate)
     }
-  }, [selectedDate])
+  }, [selectedDate, staticDataLoaded])
   
   // 构建学生行数据
   const studentRows = useMemo((): StudentRow[] => {
@@ -587,6 +590,30 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     setSelectedDate(formatDate(new Date()))
   }
   
+  // 快速添加时段偏好
+  const handleAddPreference = useCallback(async (
+    studentId: string,
+    date: string,
+    startTime: string,
+    endTime: string
+  ) => {
+    const dayOfWeek = getDayOfWeek(date)
+    
+    // 创建偏好记录
+    await studentSchedulePreferenceDb.create({
+      student_id: studentId,
+      day_of_week: dayOfWeek,
+      preferred_start: startTime,
+      preferred_end: endTime,
+    })
+    
+    // 重新加载静态数据（更新学生偏好）
+    await loadStaticData()
+    
+    // 重新加载排课数据
+    await loadSchedulesForDate(date)
+  }, [])
+  
   return {
     // 状态
     selectedDate,
@@ -611,6 +638,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     handleSave,
     getTeacherAssignStatuses,
     checkTeacherConflict,
-    loadSchedulesForDate
+    loadSchedulesForDate,
+    handleAddPreference
   }
 }

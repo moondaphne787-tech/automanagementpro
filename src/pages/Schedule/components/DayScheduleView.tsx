@@ -7,14 +7,12 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
-  CalendarDays,
-  Sun,
-  Moon
+  CalendarDays
 } from 'lucide-react'
 import type { Student, Teacher, ScheduledClass } from '@/types'
 import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
 import { Button } from '@/components/ui/button'
-import { formatDate, formatDisplayDate, DAYTIME_SLOTS, EVENING_SLOTS } from '../types'
+import { formatDate, formatDisplayDate, DAYTIME_SLOTS, EVENING_SLOTS, getDateTypeIcon } from '../types'
 
 interface DayScheduleViewProps {
   scheduleDates: ScheduleDateConfig[]
@@ -31,18 +29,6 @@ interface DayScheduleViewProps {
   onReschedule: (cls: ScheduledClass) => void
   onCancel: (cls: ScheduledClass) => void
   onDeleteClass: (cls: ScheduledClass) => void
-}
-
-// 获取日期显示图标
-function getDateIcon(type: ScheduleDateConfig['type']) {
-  switch (type) {
-    case 'friday_evening':
-      return <Moon className="h-4 w-4 text-indigo-500" />
-    case 'holiday':
-      return <Sun className="h-4 w-4 text-amber-500" />
-    default:
-      return <Sun className="h-4 w-4 text-orange-500" />
-  }
 }
 
 // 获取时间槽
@@ -97,7 +83,7 @@ export function DayScheduleView({
         </Button>
 
         <div className="flex items-center gap-3">
-          {getDateIcon(dateConfig.type)}
+          <span>{getDateTypeIcon(dateConfig.type)}</span>
           <div className="text-center">
             <div className="text-lg font-semibold">{dateConfig.label}</div>
             <div className="text-sm text-muted-foreground">

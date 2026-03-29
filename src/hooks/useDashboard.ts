@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAppStore } from '../store/appStore'
 import { studentDb } from '../db/students'
 import { lessonPlanDb } from '../db/lessonPlans'
 import { classRecordDb } from '../db/classRecords'
@@ -91,16 +92,6 @@ const DEFAULT_CACHE_CONFIG: CacheConfig = {
   cacheTime: 5 * 60 * 1000,  // 5 分钟后缓存失效
 }
 
-// 缓存项
-interface CacheEntry<T> {
-  data: T
-  timestamp: number
-  dateKey: string  // 用于判断日期是否变化（跨天需要刷新）
-}
-
-// 全局缓存存储
-let dashboardCache: CacheEntry<DashboardData> | null = null
-
 // 格式化本地日期为 YYYY-MM-DD 格式（避免时区问题）
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear()
@@ -138,58 +129,52 @@ function getWeekRange(offsetWeeks: number = 0): { start: string; end: string; la
   return { start, end, label }
 }
 
+// 获取今日日期字符串（使用本地时区）
 function getTodayStr(): string {
-  return new Date().toISOString().split('T')[0]
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
-// 检查缓存是否有效
-function isCacheValid(cache: CacheEntry<DashboardData> | null, config: CacheConfig): boolean {
-  if (!cache) return false
-  
-  const now = Date.now()
-  const today = getTodayStr()
-  
-  // 如果日期变化（跨天），缓存失效
-  if (cache.dateKey !== today) return false
-  
-  // 如果超过新鲜时间，缓存失效
-  if (now - cache.timestamp > config.staleTime) return false
-  
-  return true
-}
-
-// 清除缓存
-export function clearDashboardCache(): void {
-  dashboardCache = null
-}
-
-// 获取缓存状态（用于调试和测试）
+// 获取缓存状态（用于调试和测试）- 从 store 获取
 export function getDashboardCacheStatus(): { hasCache: boolean; timestamp: number | null; isStale: boolean } {
-  if (!dashboardCache) {
+  const state = useAppStore.getState()
+  
+  if (!state.dashboardData || !state.dashboardLoadedAt) {
     return { hasCache: false, timestamp: null, isStale: true }
   }
   
-  const now = Date.now()
-  const isStale = now - dashboardCache.timestamp > DEFAULT_CACHE_CONFIG.staleTime
+  const isStale = Date.now() - state.dashboardLoadedAt > DEFAULT_CACHE_CONFIG.staleTime
   
   return {
     hasCache: true,
-    timestamp: dashboardCache.timestamp,
+    timestamp: state.dashboardLoadedAt,
     isStale
   }
+}
+
+// 清除缓存 - 使用 store 的方法
+export function clearDashboardCache(): void {
+  useAppStore.getState().clearDashboardCache()
 }
 
 export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
   const config = { ...DEFAULT_CACHE_CONFIG, ...cacheConfig }
   
+  // 从 store 获取缓存状态和方法
+  const dashboardData = useAppStore(state => state.dashboardData)
+  const dashboardLoadedAt = useAppStore(state => state.dashboardLoadedAt)
+  const dashboardDateKey = useAppStore(state => state.dashboardDateKey)
+  const setDashboardCache = useAppStore(state => state.setDashboardCache)
+  const isDashboardCacheValid = useAppStore(state => state.isDashboardCacheValid)
+  
   const [data, setData] = useState<DashboardData | null>(() => {
     // 初始化时检查是否有有效缓存
-    if (isCacheValid(dashboardCache, config)) {
-      return dashboardCache!.data
+    if (isDashboardCacheValid(config.staleTime)) {
+      return dashboardData
     }
     return null
   })
-  const [loading, setLoading] = useState(() => !isCacheValid(dashboardCache, config))
+  const [loading, setLoading] = useState(() => !isDashboardCacheValid(config.staleTime))
   const [error, setError] = useState<string | null>(null)
   
   // 使用 ref 追踪是否正在进行请求
@@ -197,8 +182,8 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
 
   const loadData = useCallback(async (forceRefresh: boolean = false) => {
     // 如果有有效缓存且不是强制刷新，直接返回缓存数据
-    if (!forceRefresh && isCacheValid(dashboardCache, config)) {
-      setData(dashboardCache!.data)
+    if (!forceRefresh && isDashboardCacheValid(config.staleTime)) {
+      setData(dashboardData!)
       setLoading(false)
       setError(null)
       return
@@ -239,13 +224,12 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
       ])
 
       const activeStudents = allStudents.filter((s: Student) => s.status === 'active')
-      const today7DaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
 
       // ---------- 顶部统计卡片 ----------
       const lowHoursStudents = allBillings.filter((b: Billing & { remaining_hours: number }) => (b.remaining_hours ?? 0) <= 3)
+      // 统计所有在读的体验生（trial_followup_date 字段不存在于 Student 类型，已移除相关逻辑）
       const trialStudents = allStudents.filter((s: Student) =>
-        s.student_type === 'trial' &&
-        (!(s as any).trial_followup_date || (s as any).trial_followup_date < today7DaysAgo)
+        s.student_type === 'trial' && s.status === 'active'
       )
 
       // 本周缺计划：本周有排课但没有有效计划的学员数
@@ -462,7 +446,7 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
       const thisMonthStart = new Date()
       thisMonthStart.setDate(1)
       thisMonthStart.setHours(0, 0, 0, 0)
-      const thisMonthStartStr = thisMonthStart.toISOString().split('T')[0]
+      const thisMonthStartStr = formatLocalDate(thisMonthStart)
 
       const studentOverview: StudentOverviewData = {
         total: allStudents.length,
@@ -489,12 +473,8 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
         todos: allTodos,
       }
       
-      // 更新缓存
-      dashboardCache = {
-        data: result,
-        timestamp: Date.now(),
-        dateKey: today
-      }
+      // 更新缓存到 store
+      setDashboardCache(result, today)
       
       setData(result)
     } catch (err) {
@@ -503,24 +483,24 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
       setLoading(false)
       isLoadingRef.current = false
     }
-  }, [config])
+  }, [config.staleTime, isDashboardCacheValid, dashboardData, setDashboardCache])
 
   useEffect(() => {
     // 检查缓存有效性
-    if (isCacheValid(dashboardCache, config)) {
-      setData(dashboardCache!.data)
+    if (isDashboardCacheValid(config.staleTime)) {
+      setData(dashboardData!)
       setLoading(false)
       return
     }
     
     loadData()
-  }, [loadData, config])
+  }, [loadData, config.staleTime, isDashboardCacheValid, dashboardData])
 
   return { 
     data, 
     loading, 
     error, 
     refresh: () => loadData(true),  // 强制刷新
-    clearCache: clearDashboardCache  // 清除缓存
+    clearCache: clearDashboardCache  // 清除缓存（使用 store 方法）
   }
 }
