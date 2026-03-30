@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, Trash2, Clock, Calendar, Phone, GraduationCap, Award, Edit, AlertTriangle, Check, TrendingUp, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 import { teacherDb, teacherAvailabilityDb, scheduledClassDb } from '@/db'
 import type { Teacher, TeacherAvailability, ScheduledClass, DayOfWeek, TrainingStage } from '@/types'
-import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, SUITABLE_GRADE_OPTIONS } from '@/types'
+import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, SUITABLE_GRADE_OPTIONS, TEACHER_UPGRADE_THRESHOLDS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -68,12 +68,6 @@ const TRAINING_STAGE_OPTIONS: { value: TrainingStage; label: string }[] = [
   { value: 'intern', label: '实习期' },
   { value: 'formal', label: '正式助教' }
 ]
-
-// 升级阈值配置
-const UPGRADE_THRESHOLDS = {
-  probation: { hours: 2, nextStage: 'intern' as TrainingStage, nextLabel: '实习期' },
-  intern: { hours: 10, nextStage: 'formal' as TrainingStage, nextLabel: '正式助教' }
-}
 
 export function TeacherDetail() {
   const { id } = useParams<{ id: string }>()
@@ -349,7 +343,7 @@ export function TeacherDetail() {
     if (stage === 'formal') return null
     
     const hours = teacher.total_teaching_hours || 0
-    const threshold = UPGRADE_THRESHOLDS[stage]
+    const threshold = TEACHER_UPGRADE_THRESHOLDS[stage]
     const progress = Math.min((hours / threshold.hours) * 100, 100)
     const canUpgrade = hours >= threshold.hours
     

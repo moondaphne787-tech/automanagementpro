@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom'
-import type { AlertStudentItem } from '../../hooks/useDashboard'
+import type { AlertStudentItem } from '@/types'
 
 const alertTypeConfig = {
-  low_hours: { emoji: '', color: 'text-red-500' },
-  absent: { emoji: '', color: 'text-orange-500' },
-  no_record: { emoji: '', color: 'text-yellow-500' },
-  trial_followup: { emoji: '', color: 'text-purple-500' },
-  expired_plans: { emoji: '', color: 'text-orange-500' },
+  low_hours:      { emoji: '⚡', color: 'text-red-500' },
+  absent:         { emoji: '📅', color: 'text-orange-500' },
+  no_record:      { emoji: '📝', color: 'text-yellow-500' },
+  trial_followup: { emoji: '👤', color: 'text-purple-500' },
+  expired_plans:  { emoji: '🗓️', color: 'text-orange-500' },
 }
 
 interface AlertStudentsProps {

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { User, CheckCircle2, AlertCircle, FileText } from 'lucide-react'
-import type { TodayScheduleItem } from '../../hooks/useDashboard'
+import type { TodayScheduleItem } from '@/types'
 
 interface TodaySchedulePanelProps {
   schedules: TodayScheduleItem[]

@@ -52,13 +52,9 @@ export async function exportToExcel(): Promise<void> {
         return // 用户取消
       }
       
-      // 写入文件
-      const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-      const blob = new Blob([xlsxData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-      
-      // 在 Electron 中，我们需要通过 IPC 保存文件
-      // 由于没有直接的 API，我们使用下载方式
-      downloadBlob(blob, result.filePath)
+      // 通过主进程 fs 模块写入到用户选择的路径
+      const xlsxData = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' })
+      await window.electronAPI.writeFile(result.filePath, xlsxData)
       alert(`导出成功！\n文件已保存到：${result.filePath}`)
     } else {
       // 浏览器环境，使用下载

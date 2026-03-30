@@ -24,7 +24,7 @@ let db: Database.Database | null = null
 const dbPath = path.join(app.getPath('documents'), 'EduManager', 'edumanager.db')
 
 // 初始化数据库
-function initDatabase() {
+async function initDatabase() {
   try {
     const dbDir = path.dirname(dbPath)
     // 确保目录存在
@@ -60,7 +60,7 @@ function initDatabase() {
       
       // 执行自动备份
       try {
-        runAutoBackup(db, dbPath)
+        await runAutoBackup(db, dbPath)
       } catch (backupError) {
         console.error('Auto backup error:', backupError)
         // 备份失败不阻塞应用
@@ -381,7 +381,7 @@ function createTables() {
   }
 }
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -401,7 +401,26 @@ function createWindow() {
   const isDev = !app.isPackaged
   
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
+    // 尝试多个可能的端口（Vite 可能因为端口占用而自动切换）
+    const ports = [5173, 5174, 5175, 5176, 5177]
+    let loaded = false
+    
+    for (const port of ports) {
+      try {
+        await mainWindow.loadURL(`http://localhost:${port}`)
+        console.log(`Successfully loaded from port ${port}`)
+        loaded = true
+        break
+      } catch (err) {
+        console.log(`Port ${port} not available, trying next...`)
+      }
+    }
+    
+    if (!loaded) {
+      // 如果所有端口都失败，使用默认端口
+      await mainWindow.loadURL('http://localhost:5173')
+    }
+    
     mainWindow.webContents.openDevTools()
   } else {
     // 生产环境：加载打包后的文件
@@ -535,7 +554,7 @@ ipcMain.handle('db:getStats', () => {
 ipcMain.handle('db:createBackup', async (_event, backupName?: string) => {
   if (!db) throw new Error('Database not initialized')
   try {
-    const backupPath = createManualBackup(db, dbPath, backupName)
+    const backupPath = await createManualBackup(db, dbPath, backupName)
     return { success: true, path: backupPath }
   } catch (error) {
     console.error('Create backup error:', error)
@@ -620,6 +639,18 @@ ipcMain.handle('db:checkpoint', async (_event, mode?: 'PASSIVE' | 'RESTART' | 'T
   }
 })
 
+// 写入文件到指定路径（供 Excel 导出等使用）
+ipcMain.handle('fs:writeFile', async (_event, filePath: string, base64Data: string) => {
+  try {
+    const buffer = Buffer.from(base64Data, 'base64')
+    fs.writeFileSync(filePath, buffer)
+    return { success: true }
+  } catch (error) {
+    console.error('Write file error:', error)
+    throw error
+  }
+})
+
 // 打印课程计划
 ipcMain.handle('print-lesson-plans', async (_event, htmlContent: string) => {
   try {
@@ -672,8 +703,8 @@ ipcMain.handle('print-lesson-plans', async (_event, htmlContent: string) => {
   }
 })
 
-app.whenReady().then(() => {
-  initDatabase()
+app.whenReady().then(async () => {
+  await initDatabase()
   createWindow()
 
   app.on('activate', () => {

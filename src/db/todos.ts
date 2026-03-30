@@ -1,16 +1,8 @@
 import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import type { Todo } from '@/types'
 
-export interface Todo {
-  id: string
-  content: string
-  student_id?: string
-  student_name?: string
-  due_date?: string
-  completed: boolean
-  completed_at?: string
-  created_at: string
-  sort_order: number
-}
+// 向后兼容：re-export Todo 类型
+export type { Todo } from '@/types'
 
 export const todoDb = {
   async getAll(): Promise<Todo[]> {
@@ -49,8 +41,8 @@ export const todoDb = {
        VALUES (?, ?, ?, ?, ?, ?)`,
       [id, data.content, data.student_id ?? null, data.student_name ?? null, data.due_date ?? null, data.sort_order ?? 0]
     )
-    const rows = await ipcQuery<any[]>(`SELECT * FROM todos WHERE id = ?`, [id])
-    return { ...rows[0], completed: false }
+    const row = await ipcQueryOne<any>(`SELECT * FROM todos WHERE id = ?`, [id])
+    return { ...row, completed: false }
   },
 
   async toggleComplete(id: string, completed: boolean): Promise<void> {

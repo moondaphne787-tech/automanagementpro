@@ -305,6 +305,15 @@ export const TRAINING_STAGE_LABELS: Record<TrainingStage, string> = {
   formal: '正式助教'
 }
 
+// 助教培训阶段升级阈值
+export const TEACHER_UPGRADE_THRESHOLDS: Record<
+  Exclude<TrainingStage, 'formal'>,
+  { hours: number; nextStage: TrainingStage; nextLabel: string }
+> = {
+  probation: { hours: 2, nextStage: 'intern', nextLabel: '实习期' },
+  intern: { hours: 10, nextStage: 'formal', nextLabel: '正式助教' },
+}
+
 // 助教类型显示名称
 export const TEACHER_TYPE_LABELS: Record<TeacherType, string> = {
   regular: '平时助教',
@@ -415,6 +424,89 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   other: '其他'
 }
 
+// ===== Todo 类型 =====
+
+export interface Todo {
+  id: string
+  content: string
+  student_id?: string
+  student_name?: string
+  due_date?: string
+  completed: boolean
+  completed_at?: string
+  created_at: string
+  sort_order: number
+}
+
+// ===== Dashboard 类型 =====
+
+export interface DashboardStats {
+  todayScheduleCount: number
+  missingPlanCount: number
+  lowHoursCount: number
+  trialStudentCount: number
+}
+
+export interface TodayScheduleItem {
+  studentId: string
+  studentName: string
+  grade?: string
+  startTime: string
+  endTime: string
+  teacherName?: string
+  hasPlan: boolean
+  hasClassRecord: boolean
+}
+
+export interface PlanStatusItem {
+  studentId: string
+  studentName: string
+  grade?: string
+  scheduledCount: number
+  planCount: number
+  expiredCount: number
+  issue: 'missing' | 'expired' | 'partial'
+}
+
+export interface WeeklySummary {
+  label: string  // 显示标签，如"本周"、"上周"
+  dateRange: string  // 日期范围，如"3/24 - 3/30"
+  totalLessons: number
+  totalHours: number
+  avgCompletionRate: number
+  attendanceRate: number
+  unrecordedCount: number
+}
+
+export interface AlertStudentItem {
+  studentId: string
+  studentName: string
+  grade?: string
+  alerts: Array<{
+    type: 'low_hours' | 'absent' | 'no_record' | 'trial_followup' | 'expired_plans'
+    message: string
+  }>
+}
+
+export interface StudentOverviewData {
+  total: number
+  active: number
+  paused: number
+  graduated: number
+  trialThisMonth: number
+  convertedThisMonth: number
+}
+
+export interface DashboardData {
+  stats: DashboardStats
+  todaySchedules: TodayScheduleItem[]
+  problemPlanStudents: PlanStatusItem[]
+  weeklySummary: WeeklySummary
+  alertStudents: AlertStudentItem[]
+  studentOverview: StudentOverviewData
+  todos: Todo[]
+}
+
 // Electron API 类型声明
 export interface ElectronAPI {
   // 基础数据库操作
@@ -452,6 +544,9 @@ export interface ElectronAPI {
   // 对话框
   showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => 
     Promise<{ canceled: boolean; filePath?: string }>
+  
+  // 文件写入
+  writeFile: (filePath: string, base64Data: string) => Promise<{ success: boolean }>
   
   // 其他
   getWasmPath: (filename: string) => Promise<string>

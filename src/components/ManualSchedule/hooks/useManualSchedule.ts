@@ -591,28 +591,32 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
   }
   
   // 快速添加时段偏好
-  const handleAddPreference = useCallback(async (
-    studentId: string,
-    date: string,
-    startTime: string,
-    endTime: string
-  ) => {
-    const dayOfWeek = getDayOfWeek(date)
-    
-    // 创建偏好记录
-    await studentSchedulePreferenceDb.create({
-      student_id: studentId,
-      day_of_week: dayOfWeek,
-      preferred_start: startTime,
-      preferred_end: endTime,
-    })
-    
-    // 重新加载静态数据（更新学生偏好）
-    await loadStaticData()
-    
-    // 重新加载排课数据
-    await loadSchedulesForDate(date)
-  }, [])
+  const handleAddPreference = useCallback(
+    async (
+      studentId: string,
+      date: string,
+      startTime: string,
+      endTime: string
+    ) => {
+      const dayOfWeek = getDayOfWeek(date)
+
+      await studentSchedulePreferenceDb.create({
+        student_id: studentId,
+        day_of_week: dayOfWeek,
+        preferred_start: startTime,
+        preferred_end: endTime,
+      })
+
+      // 只刷新受影响学员的偏好，不重新加载全部静态数据
+      const updatedPrefs = await studentSchedulePreferenceDb.getByStudentId(studentId)
+      setStudents(prev =>
+        prev.map(s => (s.id === studentId ? { ...s, preferences: updatedPrefs } : s))
+      )
+
+      await loadSchedulesForDate(date)
+    },
+    [loadSchedulesForDate]
+  )
   
   return {
     // 状态

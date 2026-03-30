@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Plus, Pencil, Trash2, Phone, GraduationCap, Search, Clock, Award, AlertTriangle, Check, X } from 'lucide-react'
 import { teacherDb } from '@/db'
 import type { Teacher, TeacherStatus, OralLevel, TrainingStage, TeacherType } from '@/types'
-import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, SUITABLE_GRADE_OPTIONS } from '@/types'
+import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, SUITABLE_GRADE_OPTIONS, TEACHER_UPGRADE_THRESHOLDS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -42,12 +42,6 @@ const TRAINING_STAGE_OPTIONS: { value: TrainingStage; label: string }[] = [
   { value: 'intern', label: '实习期' },
   { value: 'formal', label: '正式助教' }
 ]
-
-// 升级阈值配置
-const UPGRADE_THRESHOLDS = {
-  probation: { hours: 2, nextStage: 'intern' as TrainingStage },
-  intern: { hours: 10, nextStage: 'formal' as TrainingStage }
-}
 
 interface TeacherFormData {
   name: string
@@ -140,24 +134,24 @@ export function TeacherList() {
       const stage = teacher.training_stage || 'probation'
       
       // 实训期满2小时 → 提醒升级实习期
-      if (stage === 'probation' && hours >= UPGRADE_THRESHOLDS.probation.hours) {
+      if (stage === 'probation' && hours >= TEACHER_UPGRADE_THRESHOLDS.probation.hours) {
         reminders.push({
           teacher,
-          newStage: 'intern',
-          message: `${teacher.name} 已累计教学 ${hours} 小时，建议从实训期升级为实习期`,
+          newStage: TEACHER_UPGRADE_THRESHOLDS.probation.nextStage,
+          message: `${teacher.name} 已累计教学 ${hours} 小时，建议从实训期升级为${TEACHER_UPGRADE_THRESHOLDS.probation.nextLabel}`,
           currentHours: hours,
-          threshold: UPGRADE_THRESHOLDS.probation.hours
+          threshold: TEACHER_UPGRADE_THRESHOLDS.probation.hours
         })
       }
       
       // 实习期满10小时 → 提醒升级正式助教
-      if (stage === 'intern' && hours >= UPGRADE_THRESHOLDS.intern.hours) {
+      if (stage === 'intern' && hours >= TEACHER_UPGRADE_THRESHOLDS.intern.hours) {
         reminders.push({
           teacher,
-          newStage: 'formal',
-          message: `${teacher.name} 已累计教学 ${hours} 小时，建议从实习期升级为正式助教`,
+          newStage: TEACHER_UPGRADE_THRESHOLDS.intern.nextStage,
+          message: `${teacher.name} 已累计教学 ${hours} 小时，建议从实习期升级为${TEACHER_UPGRADE_THRESHOLDS.intern.nextLabel}`,
           currentHours: hours,
-          threshold: UPGRADE_THRESHOLDS.intern.hours
+          threshold: TEACHER_UPGRADE_THRESHOLDS.intern.hours
         })
       }
     }

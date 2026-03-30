@@ -544,7 +544,7 @@ export function getWalFileInfo(dbPath: string): { exists: boolean; size: number;
  * @param db 数据库实例
  * @param dbPath 数据库文件路径
  */
-export function runAutoBackup(db: Database.Database, dbPath: string): void {
+export async function runAutoBackup(db: Database.Database, dbPath: string): Promise<void> {
   const backupDir = path.join(path.dirname(dbPath), 'backups')
   
   // 确保备份目录存在
@@ -581,7 +581,7 @@ export function runAutoBackup(db: Database.Database, dbPath: string): void {
     }
     
     // 执行数据库备份
-    db.backup(backupPath)
+    await db.backup(backupPath)
     
     // 记录备份历史
     const stats = fs.statSync(backupPath)
@@ -654,7 +654,7 @@ function cleanupOldBackups(db: Database.Database, backupDir: string, keepCount: 
  * @param backupName 备份名称（可选）
  * @returns 备份文件路径
  */
-export function createManualBackup(db: Database.Database, dbPath: string, backupName?: string): string {
+export async function createManualBackup(db: Database.Database, dbPath: string, backupName?: string): Promise<string> {
   const backupDir = path.join(path.dirname(dbPath), 'backups')
   
   // 确保备份目录存在
@@ -694,38 +694,15 @@ export function createManualBackup(db: Database.Database, dbPath: string, backup
   console.log('Source database size:', dbStats.size, 'bytes')
   
   console.log('Attempting to backup database...')
-  
-  // 执行备份（better-sqlite3 的 backup 是同步方法）
-  // 注意：backup() 方法返回 undefined，但会创建文件
   try {
-    const result = db.backup(backupPath)
-    console.log('Database backup() returned:', result)
-    console.log('Backup operation call completed (sync)')
+    await db.backup(backupPath)
+    console.log('Database backup completed successfully')
   } catch (backupError) {
     console.error('Database backup operation threw error:', backupError)
     throw backupError
   }
-  
-  // 等待一小段时间确保文件系统同步（虽然 backup 是同步的）
-  // 某些情况下文件系统可能需要时间来完成写入
-  const startWait = Date.now()
-  let fileExists = false
-  const maxWaitMs = 5000 // 最多等待5秒
-  
-  while (!fileExists && (Date.now() - startWait) < maxWaitMs) {
-    fileExists = fs.existsSync(backupPath)
-    if (!fileExists) {
-      // 等待100ms再检查
-      const waitMs = 100
-      const endTime = Date.now() + waitMs
-      while (Date.now() < endTime) {
-        // 简单的忙等待
-      }
-    }
-  }
-  
-  console.log('Waited', Date.now() - startWait, 'ms for file to appear')
-  console.log('Backup file exists after wait:', fileExists)
+
+  const fileExists = fs.existsSync(backupPath)
   
   // 验证备份文件是否成功创建
   if (!fileExists) {

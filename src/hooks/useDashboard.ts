@@ -5,81 +5,24 @@ import { lessonPlanDb } from '../db/lessonPlans'
 import { classRecordDb } from '../db/classRecords'
 import { scheduledClassDb } from '../db/schedule'
 import { billingDb } from '../db/billing'
-import { todoDb, Todo } from '../db/todos'
-import type { Student, Billing, LessonPlan, ClassRecord, ScheduledClass } from '../types'
+import { todoDb } from '../db/todos'
+import type { 
+  Student, 
+  Billing, 
+  LessonPlan, 
+  ClassRecord, 
+  ScheduledClass,
+  DashboardStats,
+  TodayScheduleItem,
+  PlanStatusItem,
+  WeeklySummary,
+  AlertStudentItem,
+  StudentOverviewData,
+  DashboardData
+} from '../types'
 
-// 顶部统计卡片数据
-export interface DashboardStats {
-  todayScheduleCount: number
-  missingPlanCount: number
-  lowHoursCount: number
-  trialStudentCount: number
-}
-
-// 今日排课
-export interface TodayScheduleItem {
-  studentId: string
-  studentName: string
-  grade?: string
-  startTime: string
-  endTime: string
-  teacherName?: string
-  hasPlan: boolean
-  hasClassRecord: boolean
-}
-
-// 本周计划状态
-export interface PlanStatusItem {
-  studentId: string
-  studentName: string
-  grade?: string
-  scheduledCount: number
-  planCount: number
-  expiredCount: number
-  issue: 'missing' | 'expired' | 'partial'
-}
-
-// 本周课堂总结
-export interface WeeklySummary {
-  label: string  // 显示标签，如"本周"、"上周"
-  dateRange: string  // 日期范围，如"3/24 - 3/30"
-  totalLessons: number
-  totalHours: number
-  avgCompletionRate: number
-  attendanceRate: number
-  unrecordedCount: number
-}
-
-// 需关注学员
-export interface AlertStudentItem {
-  studentId: string
-  studentName: string
-  grade?: string
-  alerts: Array<{
-    type: 'low_hours' | 'absent' | 'no_record' | 'trial_followup' | 'expired_plans'
-    message: string
-  }>
-}
-
-// 学员总览
-export interface StudentOverviewData {
-  total: number
-  active: number
-  paused: number
-  graduated: number
-  trialThisMonth: number
-  convertedThisMonth: number
-}
-
-export interface DashboardData {
-  stats: DashboardStats
-  todaySchedules: TodayScheduleItem[]
-  problemPlanStudents: PlanStatusItem[]
-  weeklySummary: WeeklySummary
-  alertStudents: AlertStudentItem[]
-  studentOverview: StudentOverviewData
-  todos: Todo[]
-}
+// 向后兼容：re-export DashboardData 类型（如有其他地方从此 hook 导入）
+export type { DashboardData } from '../types'
 
 // 缓存配置
 interface CacheConfig {

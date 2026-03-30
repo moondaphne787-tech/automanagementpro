@@ -1,5 +1,5 @@
 import { Users, UserCheck, UserX, GraduationCap, UserPlus, ArrowRightLeft } from 'lucide-react'
-import type { StudentOverviewData } from '../../hooks/useDashboard'
+import type { StudentOverviewData } from '@/types'
 import { useNavigate } from 'react-router-dom'
 
 interface StudentOverviewProps {

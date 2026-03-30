@@ -56,6 +56,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) =>
     ipcRenderer.invoke('dialog:showSaveDialog', options),
 
+  // 写入文件到指定路径
+  writeFile: (filePath: string, base64Data: string) =>
+    ipcRenderer.invoke('fs:writeFile', filePath, base64Data),
+
   // 获取 WASM 文件路径
   getWasmPath: (filename: string) => 
     ipcRenderer.invoke('getWasmPath', filename),
@@ -107,6 +111,9 @@ export interface ElectronAPI {
   // 对话框
   showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => 
     Promise<{ canceled: boolean; filePath?: string }>
+  
+  // 文件写入
+  writeFile: (filePath: string, base64Data: string) => Promise<{ success: boolean }>
   
   // 打印
   printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>

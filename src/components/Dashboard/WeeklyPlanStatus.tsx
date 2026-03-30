@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, XCircle, Clock } from 'lucide-react'
-import type { PlanStatusItem } from '../../hooks/useDashboard'
+import type { PlanStatusItem } from '@/types'
 
 const issueConfig = {
   missing: { icon: <XCircle className="w-3 h-3 text-red-500" />, label: '无计划', bg: 'bg-red-50/50 dark:bg-red-950/20' },

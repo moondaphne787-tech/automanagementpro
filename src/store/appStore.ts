@@ -14,9 +14,9 @@ import type {
   LevelType,
   StudentStatus,
   StudentType,
-  TaskBlock
+  TaskBlock,
+  DashboardData
 } from '@/types'
-import type { DashboardData } from '@/hooks/useDashboard'
 import { studentDb, billingDb, wordbankDb, progressDb, classRecordDb, lessonPlanDb, examScoreDb, learningPhaseDb, trialConversionDb, settingsDb, teacherDb } from '@/db'
 import { matchTeacherByName } from '@/lib/utils'
 

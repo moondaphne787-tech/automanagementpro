@@ -1,5 +1,5 @@
 import { TrendingUp, Clock, CheckCircle, Users, AlertTriangle } from 'lucide-react'
-import type { WeeklySummary } from '../../hooks/useDashboard'
+import type { WeeklySummary } from '@/types'
 
 interface WeeklyClassSummaryProps {
   summary: WeeklySummary | null
