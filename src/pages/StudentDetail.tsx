@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit, Trash2, Clock, Plus, Calendar, FileText, Sparkles, Download, Printer, Loader2, CalendarX, RefreshCw, Copy, Link, Columns, Target, TrendingUp, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { PromptDialog } from '@/components/ui/dialog'
+import { DatePicker } from '@/components/ui/date-picker'
 import { useAppStore } from '@/store/appStore'
 import { formatDate, formatHours, isHoursWarning, getLevelColor } from '@/lib/utils'
 import { extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
@@ -75,6 +76,15 @@ export function StudentDetail() {
   // 课堂记录与计划关联状态
   const [recordsWithPlan, setRecordsWithPlan] = useState<(ClassRecord & { plan?: LessonPlan })[]>([])
   
+  // 课堂记录日期筛选状态
+  const [recordFilter, setRecordFilter] = useState<{
+    startDate: string
+    endDate: string
+  }>({
+    startDate: '',
+    endDate: ''
+  })
+  
   // 学情反馈原文展开状态
   const [expandedFeedbackId, setExpandedFeedbackId] = useState<string | null>(null)
   
@@ -116,6 +126,33 @@ export function StudentDetail() {
     setPromptState({ open: true, title, defaultValue, onConfirm })
   }
 
+  // 课堂记录日期筛选辅助函数
+  function getThisMonthRange() {
+    const now = new Date()
+    const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const end = new Date().toISOString().split('T')[0]
+    return { startDate: start, endDate: end }
+  }
+
+  function getLast3MonthsRange() {
+    const end = new Date()
+    const start = new Date()
+    start.setMonth(start.getMonth() - 3)
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: end.toISOString().split('T')[0]
+    }
+  }
+
+  // 派生过滤后的记录（useMemo）
+  const filteredRecords = useMemo(() => {
+    return recordsWithPlan.filter(r => {
+      if (recordFilter.startDate && r.class_date < recordFilter.startDate) return false
+      if (recordFilter.endDate && r.class_date > recordFilter.endDate) return false
+      return true
+    })
+  }, [recordsWithPlan, recordFilter])
+
   // 加载学习阶段
   const loadLearningPhases = async (studentId: string) => {
     const phases = await learningPhaseDb.getByStudentId(studentId)
@@ -131,6 +168,10 @@ export function StudentDetail() {
   const loadRecordsWithPlan = async (studentId: string) => {
     const records = await classRecordDb.getWithPlan(studentId)
     setRecordsWithPlan(records)
+    // 如果记录超过 50 条，默认只显示近 3 个月
+    if (records.length > 50) {
+      setRecordFilter(getLast3MonthsRange())
+    }
   }
   
   const loadLessonPlans = async (studentId: string) => {
@@ -290,6 +331,9 @@ export function StudentDetail() {
       loadRecordsWithPlan(id)
       loadLearningPhases(id)
       loadSchedulePreferences(id)
+      
+      // 切换学员时重置筛选状态
+      setRecordFilter({ startDate: '', endDate: '' })
       
       // 检查是否需要跳转到特定 tab
       const targetTab = sessionStorage.getItem('studentDetailTab')
@@ -1025,6 +1069,58 @@ export function StudentDetail() {
                   </Button>
                 </div>
                 
+                {/* 日期筛选栏 */}
+                <div className="space-y-2">
+                  {recordsWithPlan.length > 50 && (
+                    <p className="text-xs text-muted-foreground">
+                      默认显示近 3 个月，点击【全部】查看所有记录
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 flex-wrap p-3 bg-muted/30 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-muted-foreground">起始日期</label>
+                      <DatePicker
+                        value={recordFilter.startDate}
+                        onChange={(val) => setRecordFilter(prev => ({ ...prev, startDate: val }))}
+                        placeholder="选择起始日期"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-muted-foreground">结束日期</label>
+                      <DatePicker
+                        value={recordFilter.endDate}
+                        onChange={(val) => setRecordFilter(prev => ({ ...prev, endDate: val }))}
+                        placeholder="选择结束日期"
+                      />
+                    </div>
+                    <div className="flex gap-2 ml-auto">
+                      <Button
+                        variant="outline" size="sm"
+                        onClick={() => setRecordFilter(getThisMonthRange())}
+                      >
+                        本月
+                      </Button>
+                      <Button
+                        variant="outline" size="sm"
+                        onClick={() => setRecordFilter(getLast3MonthsRange())}
+                      >
+                        近三个月
+                      </Button>
+                      <Button
+                        variant="ghost" size="sm"
+                        onClick={() => setRecordFilter({ startDate: '', endDate: '' })}
+                      >
+                        全部
+                      </Button>
+                    </div>
+                    {(recordFilter.startDate || recordFilter.endDate) && (
+                      <span className="text-xs text-muted-foreground">
+                        共 {filteredRecords.length} 条记录
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
                 {/* 课堂记录列表 */}
                 {recordsWithPlan.length === 0 ? (
                   <div className="text-center text-muted-foreground py-12">
@@ -1032,9 +1128,15 @@ export function StudentDetail() {
                     <p>暂无课堂记录</p>
                     <p className="text-sm mt-1">点击上方按钮创建第一条记录</p>
                   </div>
+                ) : filteredRecords.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-12">
+                    <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>当前日期范围内无记录</p>
+                    <p className="text-sm mt-1">点击【全部】查看所有记录</p>
+                  </div>
                 ) : (
                   <div className="space-y-4">
-                    {recordsWithPlan.map((record) => (
+                    {filteredRecords.map((record) => (
                       <Card key={record.id}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
