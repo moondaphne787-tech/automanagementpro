@@ -267,6 +267,20 @@ export const classRecordDb = {
     })
   },
 
+  // 获取所有课堂记录（用于导出）
+  async getAll(): Promise<ClassRecord[]> {
+    const records = await ipcQuery<any[]>(
+      `SELECT * FROM class_records ORDER BY class_date DESC`
+    )
+    return records.map(record => {
+      record.tasks = JSON.parse(record.tasks || '[]')
+      record.checkin_completed = !!record.checkin_completed
+      record.imported_from_excel = !!record.imported_from_excel
+      record.plan_id = record.plan_id || null
+      return record as ClassRecord
+    })
+  },
+
   // 获取完成率统计（用于成长档案趋势图）
   async getCompletionRateStats(studentId: string, months: number = 6): Promise<{ date: string; total: number; completed: number; rate: number }[]> {
     const startDate = new Date()
@@ -285,15 +299,12 @@ export const classRecordDb = {
     
     records.forEach(record => {
       const date = new Date(record.class_date)
-      // 获取周起始日（周六）
+      // 获取周起始日（周一）
       const day = date.getDay()
-      const saturday = new Date(date)
-      if (day === 0) {
-        saturday.setDate(date.getDate() - 1)
-      } else if (day !== 6) {
-        saturday.setDate(date.getDate() + (6 - day))
-      }
-      const weekKey = saturday.toISOString().split('T')[0]
+      const monday = new Date(date)
+      const daysToMonday = day === 0 ? 6 : day - 1
+      monday.setDate(date.getDate() - daysToMonday)
+      const weekKey = monday.toISOString().split('T')[0]
       
       const current = weeklyStats.get(weekKey) || { total: 0, completed: 0 }
       current.total += 1

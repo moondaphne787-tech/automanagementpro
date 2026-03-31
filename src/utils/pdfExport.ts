@@ -1,9 +1,9 @@
 import type { LessonPlan, Student, TaskBlock } from '@/types'
-import { TASK_TYPE_NAMES } from '@/ai/prompts'
+import { TASK_TYPE_LABELS } from '@/types'
 
 // 格式化任务为文本
 function formatTaskText(task: TaskBlock): string {
-  const typeName = TASK_TYPE_NAMES[task.type] || task.type
+  const typeName = TASK_TYPE_LABELS[task.type] || task.type
   
   if ((task.type === 'vocab_new' || task.type === 'vocab_review') && task.wordbank_label) {
     if (task.level_from && task.level_to) {

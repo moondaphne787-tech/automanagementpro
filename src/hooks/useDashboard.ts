@@ -78,23 +78,6 @@ function getTodayStr(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
-// 获取缓存状态（用于调试和测试）- 从 store 获取
-export function getDashboardCacheStatus(): { hasCache: boolean; timestamp: number | null; isStale: boolean } {
-  const state = useAppStore.getState()
-  
-  if (!state.dashboardData || !state.dashboardLoadedAt) {
-    return { hasCache: false, timestamp: null, isStale: true }
-  }
-  
-  const isStale = Date.now() - state.dashboardLoadedAt > DEFAULT_CACHE_CONFIG.staleTime
-  
-  return {
-    hasCache: true,
-    timestamp: state.dashboardLoadedAt,
-    isStale
-  }
-}
-
 // 清除缓存 - 使用 store 的方法
 export function clearDashboardCache(): void {
   useAppStore.getState().clearDashboardCache()
@@ -282,10 +265,15 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
         weekLabel: string,
         dateRange: string
       ): WeeklySummary => {
-        // 使用 task_completed 字段计算完成率（'completed' 表示 100% 完成）
-        const completedCount = records.filter((r: ClassRecord) => r.task_completed === 'completed').length
+        // 使用 task_completed 字段计算完成率
+        // 'completed' 表示 100% 完成，'partial' 表示部分完成（按 50% 权重计算）
+        const weightedCompleted = records.reduce((sum: number, r: ClassRecord) => {
+          if (r.task_completed === 'completed') return sum + 1
+          if (r.task_completed === 'partial') return sum + 0.5
+          return sum
+        }, 0)
         const avgCompletionRate = records.length > 0
-          ? Math.round(completedCount / records.length * 100)
+          ? Math.round(weightedCompleted / records.length * 100)
           : 0
 
         const totalHours = records.reduce((sum: number, r: ClassRecord) => sum + (r.duration_hours ?? 0), 0)

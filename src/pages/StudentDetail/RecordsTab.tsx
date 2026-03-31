@@ -15,6 +15,26 @@ interface RecordsTabProps {
   studentId: string
 }
 
+/** 获取本月的日期范围 */
+function getThisMonthRange() {
+  const now = new Date()
+  return {
+    startDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
+    endDate: new Date().toISOString().split('T')[0]
+  }
+}
+
+/** 获取近三个月的日期范围 */
+function getLast3MonthsRange() {
+  const end = new Date()
+  const start = new Date()
+  start.setMonth(start.getMonth() - 3)
+  return {
+    startDate: start.toISOString().split('T')[0],
+    endDate: end.toISOString().split('T')[0]
+  }
+}
+
 export function RecordsTab({ studentId }: RecordsTabProps) {
   const { wordbanks, createClassRecord, updateClassRecord, deleteClassRecord } = useAppStore()
 
@@ -46,24 +66,6 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
       return true
     })
   }, [recordsWithPlan, recordFilter])
-
-  function getThisMonthRange() {
-    const now = new Date()
-    return {
-      startDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
-      endDate: new Date().toISOString().split('T')[0]
-    }
-  }
-
-  function getLast3MonthsRange() {
-    const end = new Date()
-    const start = new Date()
-    start.setMonth(start.getMonth() - 3)
-    return {
-      startDate: start.toISOString().split('T')[0],
-      endDate: end.toISOString().split('T')[0]
-    }
-  }
 
   const handleCreateRecord = async (data: any) => {
     await createClassRecord(data)

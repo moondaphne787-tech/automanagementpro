@@ -415,7 +415,7 @@ export const STUDENT_TYPE_LABELS: Record<StudentType, string> = {
 // 任务类型显示名称
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   phonics: '语音训练',
-  vocab_new: '词库学习（新词）',
+  vocab_new: '词库学习',
   vocab_review: '词库复习',
   nine_grid: '九宫格清理',
   textbook: '课文梳理',
@@ -423,6 +423,17 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   picture_book: '绘本阅读',
   exercise: '专项练习',
   other: '其他'
+}
+
+// 星期显示名称
+export const DAY_LABELS: Record<DayOfWeek, string> = {
+  monday: '周一',
+  tuesday: '周二',
+  wednesday: '周三',
+  thursday: '周四',
+  friday: '周五',
+  saturday: '周六',
+  sunday: '周日'
 }
 
 // ===== Todo 类型 =====

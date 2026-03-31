@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAppStore } from '@/store/appStore'
 import { studentSchedulePreferenceDb } from '@/db'
 import { formatDate, formatHours, isHoursWarning, cn } from '@/lib/utils'
-import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS } from '@/types'
+import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS, DAY_LABELS } from '@/types'
 import type { StudentSchedulePreference, DayOfWeek } from '@/types'
 
 interface InfoTabProps {
@@ -123,11 +123,6 @@ export function InfoTab({ studentId }: InfoTabProps) {
   }
 
   if (!currentStudent) return null
-
-  const dayLabels: Record<DayOfWeek, string> = {
-    monday: '周一', tuesday: '周二', wednesday: '周三', thursday: '周四',
-    friday: '周五', saturday: '周六', sunday: '周日'
-  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -330,7 +325,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
                 return (
                   <div key={pref.id} className="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors">
                     <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded min-w-[40px] text-center">
-                      {dayLabels[pref.day_of_week]}
+                      {DAY_LABELS[pref.day_of_week]}
                     </span>
                     <span className="text-sm">
                       {pref.preferred_start?.slice(0,5) || '09:00'} - {pref.preferred_end?.slice(0,5) || '11:00'}

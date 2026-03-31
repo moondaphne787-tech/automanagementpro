@@ -68,5 +68,12 @@ export const learningPhaseDb = {
   
   async delete(id: string): Promise<void> {
     await ipcQuery(`DELETE FROM learning_phases WHERE id = ?`, [id])
+  },
+
+  // 获取所有学习阶段（用于导出）
+  async getAll(): Promise<LearningPhase[]> {
+    return ipcQuery<LearningPhase[]>(
+      `SELECT * FROM learning_phases ORDER BY created_at DESC`
+    )
   }
 }

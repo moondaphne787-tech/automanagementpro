@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react'
 import type { DayOfWeek, Student, Billing, StudentSchedulePreference } from '@/types'
+import { DAY_LABELS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -10,17 +11,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-
-// 星期标签
-const DAY_LABELS: Record<DayOfWeek, string> = {
-  monday: '周一',
-  tuesday: '周二',
-  wednesday: '周三',
-  thursday: '周四',
-  friday: '周五',
-  saturday: '周六',
-  sunday: '周日'
-}
 
 // 学生类型：preferences 改为可选，兼容 Home.tsx 的 students 数据
 // billing 也改为可选，兼容 StudentWithBilling 类型

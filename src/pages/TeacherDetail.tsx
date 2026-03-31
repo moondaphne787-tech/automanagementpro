@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, Trash2, Clock, Calendar, Phone, GraduationCap, Award, Edit, AlertTriangle, Check, TrendingUp, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 import { teacherDb, teacherAvailabilityDb, scheduledClassDb } from '@/db'
 import type { Teacher, TeacherAvailability, ScheduledClass, DayOfWeek, TrainingStage } from '@/types'
-import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, SUITABLE_GRADE_OPTIONS, TEACHER_UPGRADE_THRESHOLDS } from '@/types'
+import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, SUITABLE_GRADE_OPTIONS, TEACHER_UPGRADE_THRESHOLDS, DAY_LABELS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -17,16 +17,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 
-const DAY_LABELS: Record<DayOfWeek, string> = {
-  monday: '周一',
-  tuesday: '周二',
-  wednesday: '周三',
-  thursday: '周四',
-  friday: '周五',
-  saturday: '周六',
-  sunday: '周日'
-}
-
 const DAY_OPTIONS = [
   { value: 'monday', label: '周一' },
   { value: 'tuesday', label: '周二' },
@@ -36,11 +26,6 @@ const DAY_OPTIONS = [
   { value: 'saturday', label: '周六' },
   { value: 'sunday', label: '周日' }
 ]
-
-// 周末选项（用于快速筛选）
-const WEEKEND_DAYS: DayOfWeek[] = ['saturday', 'sunday']
-// 工作日选项
-const WEEKDAY_DAYS: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
 
 // 获取本周周一日期
 function getWeekStart(date: Date = new Date()): string {
@@ -93,7 +78,6 @@ export function TeacherDetail() {
   // 周选择
   const [selectedWeekStart, setSelectedWeekStart] = useState(getWeekStart())
   const [showGeneralSlots, setShowGeneralSlots] = useState(true)
-  const [showWeekSlots, setShowWeekSlots] = useState(true)
   
   // 编辑对话框
   const [editDialogOpen, setEditDialogOpen] = useState(false)

@@ -203,5 +203,17 @@ export const lessonPlanDb = {
       plan.generated_by_ai = !!plan.generated_by_ai
       return plan as LessonPlan
     })
+  },
+
+  // 获取所有课程计划（用于导出）
+  async getAll(): Promise<LessonPlan[]> {
+    const plans = await ipcQuery<any[]>(
+      `SELECT * FROM lesson_plans ORDER BY plan_date DESC`
+    )
+    return plans.map(plan => {
+      plan.tasks = JSON.parse(plan.tasks || '[]')
+      plan.generated_by_ai = !!plan.generated_by_ai
+      return plan as LessonPlan
+    })
   }
 }

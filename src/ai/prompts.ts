@@ -1,4 +1,5 @@
 import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock } from '@/types'
+import { TASK_TYPE_LABELS } from '@/types'
 
 // 系统提示词 - 包含李教授教学大纲规则
 // 默认系统提示词 - 作为兜底值
@@ -249,22 +250,9 @@ export function parseAIResponse(response: string): {
   }
 }
 
-// 任务类型的中文名称映射
-export const TASK_TYPE_NAMES: Record<string, string> = {
-  phonics: '语音训练',
-  vocab_new: '词库学习',
-  vocab_review: '词库复习',
-  nine_grid: '九宫格清理',
-  textbook: '课文梳理',
-  reading: '阅读训练',
-  picture_book: '绘本阅读',
-  exercise: '专项练习',
-  other: '其他'
-}
-
 // 格式化任务为可读文本
 export function formatTask(task: TaskBlock): string {
-  const typeName = TASK_TYPE_NAMES[task.type] || task.type
+  const typeName = TASK_TYPE_LABELS[task.type] || task.type
   
   if ((task.type === 'vocab_new' || task.type === 'vocab_review') && task.wordbank_label) {
     if (task.level_from && task.level_to) {

@@ -90,5 +90,12 @@ export const examScoreDb = {
     }
     
     return result
+  },
+
+  // 获取所有考试成绩（用于导出）
+  async getAll(): Promise<ExamScore[]> {
+    return ipcQuery<ExamScore[]>(
+      `SELECT * FROM exam_scores ORDER BY exam_date DESC`
+    )
   }
 }

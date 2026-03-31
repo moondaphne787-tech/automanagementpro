@@ -44,5 +44,12 @@ export const progressDb = {
   
   async delete(studentId: string, wordbankId: string): Promise<void> {
     await ipcQuery(`DELETE FROM student_wordbank_progress WHERE student_id = ? AND wordbank_id = ?`, [studentId, wordbankId])
+  },
+
+  // 获取所有词库进度（用于导出）
+  async getAll(): Promise<StudentWordbankProgress[]> {
+    return ipcQuery<StudentWordbankProgress[]>(
+      `SELECT * FROM student_wordbank_progress`
+    )
   }
 }

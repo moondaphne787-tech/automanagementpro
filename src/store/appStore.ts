@@ -517,9 +517,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       
       // 如果助教变更或时长变更，需要调整课时
       if (oldTeacherName !== newTeacherName || oldDuration !== newDuration) {
-        // 回退原助教课时
+        // 回退原助教课时（使用模糊匹配）
         if (oldTeacherName && oldDuration) {
-          const oldTeacher = allTeachers.find(t => t.name === oldTeacherName)
+          const oldTeacher = matchTeacherByName(oldTeacherName, allTeachers)
           if (oldTeacher) {
             await teacherDb.update(oldTeacher.id, {
               total_teaching_hours: Math.max(0, oldTeacher.total_teaching_hours - oldDuration)
@@ -527,11 +527,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         }
         
-        // 累加新助教课时
+        // 累加新助教课时（使用模糊匹配）
         if (newTeacherName && newDuration) {
           // 重新获取最新数据（因为上面的回退操作可能已修改）
           const updatedTeachers = await teacherDb.getAll()
-          const newTeacher = updatedTeachers.find(t => t.name === newTeacherName)
+          const newTeacher = matchTeacherByName(newTeacherName, updatedTeachers)
           if (newTeacher) {
             await teacherDb.addTeachingHours(newTeacher.id, newDuration)
           }
@@ -564,10 +564,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
       
-      // 回退助教课时
+      // 回退助教课时（使用与创建时相同的模糊匹配逻辑）
       if (record.teacher_name && record.duration_hours) {
         const allTeachers = await teacherDb.getAll()
-        const teacher = allTeachers.find(t => t.name === record.teacher_name)
+        const teacher = matchTeacherByName(record.teacher_name, allTeachers)
         if (teacher) {
           await teacherDb.update(teacher.id, {
             total_teaching_hours: Math.max(0, teacher.total_teaching_hours - record.duration_hours)

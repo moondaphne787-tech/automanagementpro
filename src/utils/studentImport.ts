@@ -154,12 +154,6 @@ export function generateStudentImportTemplate(wordbanks: Wordbank[]): void {
     20, 5
   ]
   
-  const studentSheetData = [
-    studentHeaders,
-    studentExample.map(v => ({ v, t: 's', s: { font: { color: { rgb: '808080' } } } })),
-    // 空行供填写
-  ]
-  
   // 创建学员信息工作表
   const studentSheet = XLSX.utils.aoa_to_sheet([
     studentHeaders,
@@ -595,9 +589,3 @@ export interface ImportResult {
   errors: string[]
 }
 
-/**
- * 生成学员 ID
- */
-function generateStudentId(): string {
-  return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-}

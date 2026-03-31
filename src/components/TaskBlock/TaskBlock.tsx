@@ -52,33 +52,7 @@ export function TaskBlock({
   }
   
   // 词库选项（从传入的 wordbanks 生成）
-  const wordbankOptions = wordbanks.length > 0 
-    ? wordbanks.map(w => ({ value: w.name, label: w.name }))
-    : [
-        { value: '小学考纲', label: '小学考纲' },
-        { value: '小学进阶', label: '小学进阶' },
-        { value: '初中考纲', label: '初中考纲' },
-        { value: '初中进阶', label: '初中进阶' },
-        { value: '高中考纲', label: '高中考纲' },
-        { value: '高中进阶', label: '高中进阶' },
-        { value: '大学四级', label: '大学四级' },
-        { value: '七上', label: '七上' },
-        { value: '七下', label: '七下' },
-        { value: '八上', label: '八上' },
-        { value: '八下', label: '八下' },
-        { value: '六上', label: '六上' },
-        { value: '六下', label: '六下' },
-        { value: '五上', label: '五上' },
-        { value: '五下', label: '五下' },
-        { value: '四上', label: '四上' },
-        { value: '四下', label: '四下' },
-        { value: '三上', label: '三上' },
-        { value: '三下', label: '三下' },
-        { value: '中考考纲', label: '中考考纲' },
-        { value: '高考考纲', label: '高考考纲' },
-        { value: 'KET', label: 'KET' },
-        { value: 'PET', label: 'PET' },
-      ]
+  const wordbankOptions = wordbanks.map(w => ({ value: w.name, label: w.name }))
   
   const maxLevel = getWordbankMaxLevel(task.wordbank_label)
   

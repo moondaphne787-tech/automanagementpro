@@ -12,18 +12,8 @@ import {
 } from 'lucide-react'
 import { studentSchedulePreferenceDb, studentDb } from '@/db'
 import type { StudentSchedulePreference, Student, DayOfWeek } from '@/types'
+import { DAY_LABELS } from '@/types'
 import { Button } from '@/components/ui/button'
-
-// 星期标签映射
-const DAY_LABELS: Record<DayOfWeek, string> = {
-  monday: '周一',
-  tuesday: '周二',
-  wednesday: '周三',
-  thursday: '周四',
-  friday: '周五',
-  saturday: '周六',
-  sunday: '周日'
-}
 
 // 星期排序
 const DAY_ORDER: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']

@@ -127,7 +127,7 @@ async function exportStudents(workbook: XLSX.WorkBook): Promise<void> {
  */
 async function exportClassRecords(workbook: XLSX.WorkBook): Promise<void> {
   // 获取所有课堂记录
-  const allRecords = await getAllClassRecords()
+  const allRecords = await classRecordDb.getAll()
   
   const data = allRecords.map(r => {
     const tasks = parseTasks(r.tasks)
@@ -159,7 +159,7 @@ async function exportClassRecords(workbook: XLSX.WorkBook): Promise<void> {
  * 导出课程计划
  */
 async function exportLessonPlans(workbook: XLSX.WorkBook): Promise<void> {
-  const allPlans = await getAllLessonPlans()
+  const allPlans = await lessonPlanDb.getAll()
   
   const data = allPlans.map(p => {
     const tasks = parseTasks(p.tasks)
@@ -213,7 +213,7 @@ async function exportTeachers(workbook: XLSX.WorkBook): Promise<void> {
  * 导出考试成绩
  */
 async function exportExamScores(workbook: XLSX.WorkBook): Promise<void> {
-  const allScores = await getAllExamScores()
+  const allScores = await examScoreDb.getAll()
   
   const data = allScores.map(e => ({
     '学员ID': e.student_id,
@@ -234,7 +234,7 @@ async function exportExamScores(workbook: XLSX.WorkBook): Promise<void> {
  * 导出学习阶段
  */
 async function exportLearningPhases(workbook: XLSX.WorkBook): Promise<void> {
-  const allPhases = await getAllLearningPhases()
+  const allPhases = await learningPhaseDb.getAll()
   
   const data = allPhases.map(p => ({
     '学员ID': p.student_id,
@@ -258,7 +258,7 @@ async function exportLearningPhases(workbook: XLSX.WorkBook): Promise<void> {
  * 导出词库进度
  */
 async function exportProgress(workbook: XLSX.WorkBook): Promise<void> {
-  const allProgress = await getAllProgress()
+  const allProgress = await progressDb.getAll()
   
   const data = allProgress.map(p => ({
     '学员ID': p.student_id,
@@ -378,53 +378,3 @@ function setColumnWidths(worksheet: XLSX.WorkSheet, data: Record<string, unknown
   worksheet['!cols'] = colWidths
 }
 
-/**
- * 获取所有课堂记录
- */
-async function getAllClassRecords(): Promise<any[]> {
-  const sql = `SELECT * FROM class_records ORDER BY class_date DESC`
-  const { ipcQuery } = await import('@/db/utils')
-  const records = await ipcQuery<any[]>(sql, [])
-  
-  return records.map(r => ({
-    ...r,
-    tasks: typeof r.tasks === 'string' ? r.tasks : JSON.stringify(r.tasks || []),
-    checkin_completed: !!r.checkin_completed
-  }))
-}
-
-/**
- * 获取所有课程计划
- */
-async function getAllLessonPlans(): Promise<any[]> {
-  const sql = `SELECT * FROM lesson_plans ORDER BY plan_date DESC`
-  const { ipcQuery } = await import('@/db/utils')
-  return ipcQuery<any[]>(sql, [])
-}
-
-/**
- * 获取所有考试成绩
- */
-async function getAllExamScores(): Promise<any[]> {
-  const sql = `SELECT * FROM exam_scores ORDER BY exam_date DESC`
-  const { ipcQuery } = await import('@/db/utils')
-  return ipcQuery<any[]>(sql, [])
-}
-
-/**
- * 获取所有学习阶段
- */
-async function getAllLearningPhases(): Promise<any[]> {
-  const sql = `SELECT * FROM learning_phases ORDER BY created_at DESC`
-  const { ipcQuery } = await import('@/db/utils')
-  return ipcQuery<any[]>(sql, [])
-}
-
-/**
- * 获取所有词库进度
- */
-async function getAllProgress(): Promise<any[]> {
-  const sql = `SELECT * FROM student_wordbank_progress`
-  const { ipcQuery } = await import('@/db/utils')
-  return ipcQuery<any[]>(sql, [])
-}

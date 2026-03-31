@@ -25,7 +25,7 @@ import { ClassDialog } from './components/ClassDialog'
 import { RescheduleDialog } from './components/RescheduleDialog'
 import { CancelDialog } from './components/CancelDialog'
 import { PreferenceDialog } from './components/PreferenceDialog'
-import { BatchPrefDialog } from './components/BatchPrefDialog'
+import { BatchPrefDialog } from '@/components/Preferences/BatchPrefDialog'
 import { AddDateDialog } from './components/AddDateDialog'
 import { ArrangeView } from './ArrangeView'
 import {

@@ -174,7 +174,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
   }
   
   // 加载指定日期的排课数据 - 随日期切换刷新
-  const loadSchedulesForDate = async (date: string) => {
+  const loadSchedulesForDate = useCallback(async (date: string) => {
     try {
       // 加载当天已排课程
       const classes = await scheduledClassDb.getByDate(date)
@@ -183,7 +183,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     } catch (error) {
       console.error('Failed to load schedules:', error)
     }
-  }
+  }, [])
   
   // 组件挂载时加载静态数据（只执行一次）
   useEffect(() => {
@@ -195,7 +195,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     if (staticDataLoaded) {
       loadSchedulesForDate(selectedDate)
     }
-  }, [selectedDate, staticDataLoaded])
+  }, [selectedDate, staticDataLoaded, loadSchedulesForDate])
   
   // 构建学生行数据
   const studentRows = useMemo((): StudentRow[] => {
@@ -516,10 +516,10 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
         return newMap
       })
     }
-  }, [studentRows, selectedDate])
+  }, [studentRows, selectedDate, loadSchedulesForDate])
   
   // 清空本日排课
-  const handleClearDay = async () => {
+  const handleClearDay = useCallback(async () => {
     if (!confirm('确定要清空本日所有排课吗？此操作不可恢复。')) return
     
     try {
@@ -534,10 +534,10 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
       console.error('Failed to clear day:', error)
       alert('清空失败')
     }
-  }
+  }, [scheduledClasses, selectedDate, loadSchedulesForDate])
   
   // 保存排课
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (localSchedules.size === 0) {
       alert('没有需要保存的排课')
       return
@@ -571,7 +571,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     } finally {
       setSaving(false)
     }
-  }
+  }, [localSchedules, studentRows, selectedDate, loadSchedulesForDate])
   
   // 切换日期
   const goToPrevDay = () => {

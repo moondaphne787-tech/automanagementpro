@@ -1,4 +1,5 @@
 import type { Student, Teacher, TeacherAvailability, StudentSchedulePreference, Billing, DayOfWeek } from '@/types'
+import { DAY_LABELS } from '@/types'
 
 // 获取周一日期（用于匹配特定周时段）
 function getWeekStartFromDate(dateStr: string): string {
@@ -7,17 +8,6 @@ function getWeekStartFromDate(dateStr: string): string {
   const diff = date.getDate() - day + (day === 0 ? -6 : 1)
   date.setDate(diff)
   return date.toISOString().split('T')[0]
-}
-
-// 星期显示名称
-const DAY_LABELS: Record<DayOfWeek, string> = {
-  monday: '周一',
-  tuesday: '周二',
-  wednesday: '周三',
-  thursday: '周四',
-  friday: '周五',
-  saturday: '周六',
-  sunday: '周日'
 }
 
 // 排课日期类型描述
@@ -41,10 +31,9 @@ export const AI_SCHEDULE_SYSTEM_PROMPT = `你是一位排课助手，为学员�
 1. 每位老师同一时段只能带一名学生（纯一对一）
 2. 课程时长必须完整包含在老师可用时段内
 3. 时段匹配和师生程度匹配同等重要，综合权衡
-4. 每位学生在每个日期只排一次课（如有多个日期可在不同日期各排一次）
-5. 优先安排时段完全匹配的组合
-6. 考虑学生的程度等级与老师的适合程度
-7. 注意区分不同日期类型的时间范围（白天/晚上）
+4. 优先安排时段完全匹配的组合
+5. 考虑学生的程度等级与老师的适合程度
+6. 注意区分不同日期类型的时间范围（白天/晚上）
 
 输出必须是合法 JSON 数组，格式：
 [{
