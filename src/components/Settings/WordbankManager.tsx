@@ -108,6 +108,12 @@ export function WordbankManager() {
       alert('请输入词库名称')
       return
     }
+    // 检查词库名称是否已存在
+    const existingWordbank = wordbanks.find(w => w.name === newWordbank.name.trim())
+    if (existingWordbank) {
+      alert(`词库「${newWordbank.name.trim()}」已存在，请使用其他名称`)
+      return
+    }
     if (isNaN(newWordbank.total_levels) || newWordbank.total_levels < 1) {
       alert('请输入有效的关数')
       return

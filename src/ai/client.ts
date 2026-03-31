@@ -1,7 +1,7 @@
 import type { AIConfig } from '@/types'
 
 // 默认超时时间（毫秒）
-const DEFAULT_TIMEOUT_MS = 60000 // 60 秒
+const DEFAULT_TIMEOUT_MS = 120000  // 120 秒
 
 // 自定义超时错误
 export class AITimeoutError extends Error {

@@ -342,9 +342,24 @@ export const migrations: Migration[] = [
     }
   },
   
+  // ===== 版本 12: 为 students 表添加阅读训练进度字段 =====
+  {
+    version: 12,
+    description: '为 students 表添加 reading_progress 字段，存储阅读训练进度',
+    up: (db: Database.Database) => {
+      const info = db.prepare('PRAGMA table_info(students)').all() as Array<{ name: string }>
+      const columns = info.map(col => col.name)
+      
+      if (!columns.includes('reading_progress')) {
+        db.exec(`ALTER TABLE students ADD COLUMN reading_progress TEXT`)
+        console.log('Migration v12: Added reading_progress column to students table')
+      }
+    }
+  },
+  
   // ===== 后续迁移在此添加 =====
   // {
-  //   version: 12,
+  //   version: 13,
   //   description: '描述此次迁移的目的',
   //   up: (db: Database.Database) => {
   //     // 迁移逻辑

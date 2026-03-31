@@ -71,6 +71,7 @@ export function StudentForm({ student, defaultType, onSubmit, onCancel }: Studen
         phonics_progress: formData.phonics_progress || null,
         phonics_completed: formData.phonics_completed,
         ipa_completed: formData.ipa_completed,
+        reading_progress: null,
         notes: formData.notes || null,
       })
     } finally {

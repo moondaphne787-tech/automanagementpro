@@ -93,6 +93,7 @@ export interface Student {
   phonics_progress: string | null
   phonics_completed: boolean
   ipa_completed: boolean
+  reading_progress: string | null  // 阅读训练进度，格式如 "初中B级,12"
   notes: string | null
   created_at: string
   updated_at: string

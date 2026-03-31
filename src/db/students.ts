@@ -14,9 +14,9 @@ export const studentDb = {
     const now = new Date().toISOString()
     
     await ipcQuery(
-      `INSERT INTO students (id, student_no, name, school, grade, account, enroll_date, student_type, status, level, initial_score, initial_vocab, phonics_progress, phonics_completed, ipa_completed, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.student_no, data.name, data.school, data.grade, data.account, data.enroll_date, data.student_type, data.status, data.level, data.initial_score, data.initial_vocab, data.phonics_progress, data.phonics_completed ? 1 : 0, data.ipa_completed ? 1 : 0, data.notes, now, now]
+      `INSERT INTO students (id, student_no, name, school, grade, account, enroll_date, student_type, status, level, initial_score, initial_vocab, phonics_progress, phonics_completed, ipa_completed, reading_progress, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, data.student_no, data.name, data.school, data.grade, data.account, data.enroll_date, data.student_type, data.status, data.level, data.initial_score, data.initial_vocab, data.phonics_progress, data.phonics_completed ? 1 : 0, data.ipa_completed ? 1 : 0, data.reading_progress, data.notes, now, now]
     )
     
     // 创建课时记录
@@ -107,6 +107,7 @@ export const studentDb = {
         phonics_progress: row.phonics_progress,
         phonics_completed: !!row.phonics_completed,
         ipa_completed: !!row.ipa_completed,
+        reading_progress: row.reading_progress,
         notes: row.notes,
         created_at: row.created_at,
         updated_at: row.updated_at,

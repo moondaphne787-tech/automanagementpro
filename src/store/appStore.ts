@@ -78,6 +78,7 @@ interface AppState {
   // 词库操作
   loadWordbanks: () => Promise<void>
   createWordbank: (wordbank: Omit<Wordbank, 'id'>) => Promise<Wordbank>
+  upsertWordbank: (wordbank: Omit<Wordbank, 'id'>) => Promise<Wordbank>
   updateWordbank: (id: string, data: Partial<Wordbank>) => Promise<Wordbank | undefined>
   deleteWordbank: (id: string) => Promise<void>
   
@@ -361,6 +362,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const newWordbank = await wordbankDb.create(wordbank)
     await get().loadWordbanks()
     return newWordbank
+  },
+  
+  // 创建或更新词库（防止重复）
+  upsertWordbank: async (wordbank) => {
+    const result = await wordbankDb.upsert(wordbank)
+    await get().loadWordbanks()
+    return result
   },
   
   // 更新词库

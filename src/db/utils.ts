@@ -74,6 +74,18 @@ export async function ipcQuery<T>(sql: string, params: unknown[] = [], retries =
       lastError = error as Error
       console.warn(`[ipcQuery] 第 ${attempt + 1} 次查询失败:`, error)
       
+      // 检查是否是约束错误或数据错误，这些错误重试无法解决
+      const errorMsg = lastError?.message || ''
+      const isConstraintError = errorMsg.includes('UNIQUE constraint') ||
+                                errorMsg.includes('FOREIGN KEY constraint') ||
+                                errorMsg.includes('NOT NULL constraint') ||
+                                errorMsg.includes('CHECK constraint')
+      
+      // 如果是约束错误，直接抛出，不进行重试
+      if (isConstraintError) {
+        throw lastError
+      }
+      
       // 如果还有重试机会，等待一段时间后重试
       if (attempt < retries) {
         const delay = 100 * (attempt + 1)
@@ -106,6 +118,18 @@ export async function ipcQueryOne<T>(sql: string, params: unknown[] = [], retrie
     } catch (error) {
       lastError = error as Error
       console.warn(`[ipcQueryOne] 第 ${attempt + 1} 次查询失败:`, error)
+      
+      // 检查是否是约束错误或数据错误，这些错误重试无法解决
+      const errorMsg = lastError?.message || ''
+      const isConstraintError = errorMsg.includes('UNIQUE constraint') ||
+                                errorMsg.includes('FOREIGN KEY constraint') ||
+                                errorMsg.includes('NOT NULL constraint') ||
+                                errorMsg.includes('CHECK constraint')
+      
+      // 如果是约束错误，直接抛出，不进行重试
+      if (isConstraintError) {
+        throw lastError
+      }
       
       // 如果还有重试机会，等待一段时间后重试
       if (attempt < retries) {

@@ -154,7 +154,7 @@ export function ImportStudentsDrawer({ open, onClose }: ImportStudentsDrawerProp
           // keep_both: 继续创建新学员
         }
         
-        // 创建新学员
+          // 创建新学员
         try {
           const newStudent = await studentDb.create({
             student_no: studentRow.data.student_no || null,
@@ -171,6 +171,7 @@ export function ImportStudentsDrawer({ open, onClose }: ImportStudentsDrawerProp
             phonics_progress: studentRow.data.phonics_progress || null,
             phonics_completed: studentRow.data.phonics_completed || false,
             ipa_completed: studentRow.data.ipa_completed || false,
+            reading_progress: null,
             notes: studentRow.data.notes || null,
           })
           

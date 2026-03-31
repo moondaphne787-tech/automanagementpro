@@ -14,12 +14,13 @@ interface InfoTabProps {
 }
 
 export function InfoTab({ studentId }: InfoTabProps) {
-  const { currentStudent, currentBilling, updateBilling } = useAppStore()
+  const { currentStudent, currentBilling, updateBilling, updateStudent } = useAppStore()
 
   const [billingForm, setBillingForm] = useState({
     total_hours: '',
     warning_threshold: '3'
   })
+  const [readingProgress, setReadingProgress] = useState('')
   const [schedulePreferences, setSchedulePreferences] = useState<StudentSchedulePreference[]>([])
   const [showPreferenceForm, setShowPreferenceForm] = useState(false)
   const [editingPreference, setEditingPreference] = useState<StudentSchedulePreference | null>(null)
@@ -40,6 +41,13 @@ export function InfoTab({ studentId }: InfoTabProps) {
     }
   }, [currentBilling])
 
+  // 同步阅读进度到表单
+  useEffect(() => {
+    if (currentStudent) {
+      setReadingProgress(currentStudent.reading_progress || '')
+    }
+  }, [currentStudent])
+
   // 加载偏好时段
   useEffect(() => {
     loadSchedulePreferences()
@@ -59,6 +67,13 @@ export function InfoTab({ studentId }: InfoTabProps) {
       total_hours: (currentBilling?.total_hours || 0) + hours
     })
     setBillingForm(prev => ({ ...prev, total_hours: '' }))
+  }
+
+  const handleUpdateReadingProgress = async () => {
+    if (!currentStudent) return
+    await updateStudent(studentId, {
+      reading_progress: readingProgress || null
+    })
   }
 
   const resetPreferenceForm = () => {
@@ -431,6 +446,36 @@ export function InfoTab({ studentId }: InfoTabProps) {
           <div className="flex justify-between">
             <span className="text-muted-foreground">国际音标状态</span>
             <span>{currentStudent.ipa_completed ? '已完成' : '未开始'}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 阅读训练进度 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>阅读训练进度</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="text-sm text-muted-foreground">当前进度</label>
+              <Input
+                value={readingProgress}
+                onChange={(e) => setReadingProgress(e.target.value)}
+                placeholder="如：初中B级,12（级别+已完成篇数）"
+                className="h-8"
+              />
+            </div>
+            <Button 
+              size="sm"
+              onClick={handleUpdateReadingProgress}
+              disabled={readingProgress === (currentStudent.reading_progress || '')}
+            >
+              保存
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            格式说明：级别 + 已完成篇数，如 "初中B级,12" 表示初中B级已完成12篇
           </div>
         </CardContent>
       </Card>

@@ -100,6 +100,7 @@ export const trialConversionDb = {
       phonics_progress: row.phonics_progress,
       phonics_completed: !!row.phonics_completed,
       ipa_completed: !!row.ipa_completed,
+      reading_progress: row.reading_progress,
       notes: row.notes,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -140,7 +141,7 @@ export const trialConversionDb = {
     const endDate = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`
     
     const results = await ipcQuery<any[]>(`
-      SELECT tc.*, s.id as student_id, s.student_no, s.name, s.school, s.grade, s.account, s.enroll_date, s.student_type, s.status, s.level, s.initial_score, s.initial_vocab, s.phonics_progress, s.phonics_completed, s.ipa_completed, s.notes, s.created_at as student_created_at, s.updated_at
+      SELECT tc.*, s.id as student_id, s.student_no, s.name, s.school, s.grade, s.account, s.enroll_date, s.student_type, s.status, s.level, s.initial_score, s.initial_vocab, s.phonics_progress, s.phonics_completed, s.ipa_completed, s.reading_progress, s.notes, s.created_at as student_created_at, s.updated_at
       FROM trial_conversions tc
       JOIN students s ON tc.student_id = s.id
       WHERE tc.trial_date >= ? AND tc.trial_date < ?
@@ -172,6 +173,7 @@ export const trialConversionDb = {
         phonics_progress: row.phonics_progress,
         phonics_completed: !!row.phonics_completed,
         ipa_completed: !!row.ipa_completed,
+        reading_progress: row.reading_progress,
         notes: row.notes,
         created_at: row.student_created_at,
         updated_at: row.updated_at
