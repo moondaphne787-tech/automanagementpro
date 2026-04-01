@@ -21,6 +21,9 @@ export {
   calculateSlotStyle 
 } from './hooks/useManualSchedule'
 
+// 也从 utils 导出 formatDateISO 作为替代名称（推荐使用）
+export { formatDateISO } from '@/lib/utils'
+
 // 类型
 export type {
   TeacherWithColor,

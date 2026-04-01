@@ -9,6 +9,16 @@ console.log('main.tsx starting...')
 console.log('window:', typeof window)
 console.log('document.getElementById("root"):', document.getElementById('root'))
 
+// 初始化主题（在React渲染之前，避免闪烁）
+try {
+  const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null
+  if (savedTheme === 'dark') {
+    document.documentElement.classList.add('dark')
+  }
+} catch (e) {
+  console.error('Failed to load theme:', e)
+}
+
 // 错误边界组件
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {

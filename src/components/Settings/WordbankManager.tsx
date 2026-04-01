@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAppStore } from '@/store/appStore'
@@ -66,15 +68,15 @@ export function WordbankManager() {
   const handleSaveEdit = async () => {
     if (!editingId) return
     if (!editForm.name.trim()) {
-      alert('词库名称不能为空')
+      toast.error('词库名称不能为空')
       return
     }
     if (editForm.total_levels < 1) {
-      alert('总关数必须大于0')
+      toast.error('总关数必须大于0')
       return
     }
     if (editForm.nine_grid_interval < 1) {
-      alert('九宫格间隔必须大于0')
+      toast.error('九宫格间隔必须大于0')
       return
     }
     
@@ -96,30 +98,37 @@ export function WordbankManager() {
 
   // 删除词库
   const handleDelete = async (wb: Wordbank) => {
-    if (!confirm(`确定要删除词库「${wb.name}」吗？\n\n⚠️ 警告：删除词库不会删除学员的词库进度记录，但进度记录中的词库名称可能不再匹配。`)) {
+    const confirmed = await confirmDialog({
+      title: '删除词库',
+      message: `确定要删除词库「${wb.name}」吗？\n\n⚠️ 警告：删除词库不会删除学员的词库进度记录，但进度记录中的词库名称可能不再匹配。`,
+      confirmText: '删除',
+      variant: 'danger'
+    })
+    if (!confirmed) {
       return
     }
     await deleteWordbank(wb.id)
+    toast.success('词库已删除')
   }
 
   // 添加词库
   const handleAddWordbank = async () => {
     if (!newWordbank.name.trim()) {
-      alert('请输入词库名称')
+      toast.error('请输入词库名称')
       return
     }
     // 检查词库名称是否已存在
     const existingWordbank = wordbanks.find(w => w.name === newWordbank.name.trim())
     if (existingWordbank) {
-      alert(`词库「${newWordbank.name.trim()}」已存在，请使用其他名称`)
+      toast.error(`词库「${newWordbank.name.trim()}」已存在，请使用其他名称`)
       return
     }
     if (isNaN(newWordbank.total_levels) || newWordbank.total_levels < 1) {
-      alert('请输入有效的关数')
+      toast.error('请输入有效的关数')
       return
     }
     if (isNaN(newWordbank.nine_grid_interval) || newWordbank.nine_grid_interval < 1) {
-      alert('请输入有效的九宫格间隔')
+      toast.error('请输入有效的九宫格间隔')
       return
     }
     await createWordbank({

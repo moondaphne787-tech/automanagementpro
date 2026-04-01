@@ -1,11 +1,5 @@
-import type { Student, Billing, FilterOptions, SortOptions, DayOfWeek } from '@/types'
+import type { Student, Billing, FilterOptions, SortOptions } from '@/types'
 import { generateId, ipcQuery, ipcQueryOne } from './utils'
-
-// 获取当前日期对应的星期
-function getDayOfWeekFromDate(date: Date): DayOfWeek {
-  const days: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-  return days[date.getDay()]
-}
 
 // 学员操作
 export const studentDb = {
@@ -72,10 +66,27 @@ export const studentDb = {
       params.push(`%${filters.search}%`)
     }
     
-    // 按周几筛选有课学员
+    // 按周几筛选有课学员：同时查询偏好表和已排课记录
+    // 偏好表存储 day_of_week，排课表存储 class_date（需要计算星期几）
     if (filters.day_of_week !== 'all') {
-      sql += ` AND EXISTS (SELECT 1 FROM student_schedule_preferences ssp WHERE ssp.student_id = s.id AND ssp.day_of_week = ?)`
-      params.push(filters.day_of_week)
+      // SQLite 使用 strftime('%w', class_date) 计算星期几
+      // %w: 0=周日, 1=周一, 2=周二, 3=周三, 4=周四, 5=周五, 6=周六
+      // day_of_week 字符串格式: monday, tuesday, ... 需要转换为数字
+      const dayOfWeekMap: Record<string, number> = {
+        'sunday': 0,
+        'monday': 1,
+        'tuesday': 2,
+        'wednesday': 3,
+        'thursday': 4,
+        'friday': 5,
+        'saturday': 6
+      }
+      const dayNum = dayOfWeekMap[filters.day_of_week]
+      sql += ` AND (
+        EXISTS (SELECT 1 FROM student_schedule_preferences ssp WHERE ssp.student_id = s.id AND ssp.day_of_week = ?)
+        OR EXISTS (SELECT 1 FROM scheduled_classes sc WHERE sc.student_id = s.id AND sc.status = 'scheduled' AND strftime('%w', sc.class_date) = ?)
+      )`
+      params.push(filters.day_of_week, String(dayNum))
     }
     
     // 排序

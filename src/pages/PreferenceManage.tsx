@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
+import { toast } from 'sonner'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import {
   RefreshCw,
   User,
@@ -206,7 +208,7 @@ export function PreferenceManage() {
       setEditForm(EMPTY_EDIT_FORM)
     } catch (error) {
       console.error('Failed to update preference:', error)
-      alert('保存失败，请重试')
+      toast.error('保存失败，请重试')
     } finally {
       setOperating(false)
     }
@@ -249,7 +251,7 @@ export function PreferenceManage() {
       setAddForm(EMPTY_EDIT_FORM)
     } catch (error) {
       console.error('Failed to create preference:', error)
-      alert('添加失败，请重试')
+      toast.error('添加失败，请重试')
     } finally {
       setOperating(false)
     }
@@ -257,7 +259,13 @@ export function PreferenceManage() {
 
   // 删除偏好
   const handleDelete = async (prefId: string) => {
-    if (!confirm('确定要删除这条时段偏好吗？')) {
+    const confirmed = await confirmDialog({
+      title: '删除时段偏好',
+      message: '确定要删除这条时段偏好吗？',
+      confirmText: '删除',
+      variant: 'danger'
+    })
+    if (!confirmed) {
       return
     }
     
@@ -269,9 +277,10 @@ export function PreferenceManage() {
       // 刷新数据
       await loadData()
       setDeletingPrefId(null)
+      toast.success('时段偏好已删除')
     } catch (error) {
       console.error('Failed to delete preference:', error)
-      alert('删除失败，请重试')
+      toast.error('删除失败，请重试')
     } finally {
       setOperating(false)
     }

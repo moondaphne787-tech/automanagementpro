@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { AppLayout } from '@/components/Layout/AppLayout'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ImportRecordsDrawer } from '@/components/Drawers/ImportRecordsDrawer'
 import { GeneratePlansDrawer } from '@/components/Drawers/GeneratePlansDrawer'
 import { PrintPlansDrawer } from '@/components/Drawers/PrintPlansDrawer'
@@ -84,6 +86,12 @@ function App() {
         open={quickRecordDrawerOpen} 
         onClose={() => setQuickRecordDrawerOpen(false)} 
       />
+      
+      {/* Toast 通知 */}
+      <Toaster position="top-center" richColors />
+      
+      {/* 确认对话框 */}
+      <ConfirmDialog />
     </HashRouter>
   )
 }

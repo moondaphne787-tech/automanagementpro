@@ -1,5 +1,5 @@
 import type { ClassRecord, LessonPlan } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, ipcTransaction } from './utils'
 
 // 课堂记录操作
 export const classRecordDb = {
@@ -281,6 +281,98 @@ export const classRecordDb = {
     })
   },
 
+  /**
+   * 原子性地创建课堂记录并更新课时
+   * 使用数据库事务确保课堂记录插入和课时更新的原子性
+   * 如果中途失败，两者都会回滚
+   * @param data 课堂记录数据
+   * @param billingUpdate 课时更新数据（可选，如果提供则与记录创建在同一事务中执行）
+   * @returns 创建的课堂记录
+   */
+  async createWithBillingUpdate(data: {
+    student_id: string
+    class_date: string
+    duration_hours?: number
+    teacher_name?: string
+    attendance?: 'present' | 'absent' | 'late'
+    tasks: unknown[]
+    task_completed?: 'completed' | 'partial' | 'not_completed'
+    incomplete_reason?: string
+    performance?: 'excellent' | 'good' | 'needs_improvement'
+    detail_feedback?: string
+    highlights?: string
+    issues?: string
+    checkin_completed?: boolean
+    phase_id?: string
+    plan_id?: string
+    imported_from_excel?: boolean
+  }, billingUpdate?: {
+    student_id: string
+    used_hours_delta: number  // 课时变化量（正数表示增加已用课时）
+  }): Promise<ClassRecord> {
+    const id = generateId()
+    const now = new Date().toISOString()
+    
+    // 如果没有指定 plan_id，尝试自动关联同日期的计划（事务前查询）
+    let planId = data.plan_id || null
+    if (!planId) {
+      const plan = await ipcQueryOne<{ id: string }>(
+        `SELECT id FROM lesson_plans WHERE student_id = ? AND plan_date = ? LIMIT 1`,
+        [data.student_id, data.class_date]
+      )
+      planId = plan?.id || null
+    }
+    
+    // 构建事务语句数组
+    const statements: Array<{ sql: string; params: unknown[] }> = []
+    
+    // 1. 插入课堂记录
+    statements.push({
+      sql: `INSERT INTO class_records (id, student_id, class_date, duration_hours, teacher_name, attendance, tasks, task_completed, incomplete_reason, performance, detail_feedback, highlights, issues, checkin_completed, phase_id, plan_id, imported_from_excel, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      params: [
+        id, 
+        data.student_id, 
+        data.class_date, 
+        data.duration_hours || 1, 
+        data.teacher_name || null,
+        data.attendance || 'present',
+        JSON.stringify(data.tasks),
+        data.task_completed || 'completed',
+        data.incomplete_reason || null,
+        data.performance || 'good',
+        data.detail_feedback || null,
+        data.highlights || null,
+        data.issues || null,
+        data.checkin_completed ? 1 : 0,
+        data.phase_id || null,
+        planId,
+        data.imported_from_excel ? 1 : 0,
+        now
+      ]
+    })
+    
+    // 2. 更新课时（如果提供了billingUpdate）
+    if (billingUpdate && billingUpdate.used_hours_delta > 0) {
+      statements.push({
+        sql: `UPDATE billing SET used_hours = used_hours + ?, updated_at = ? WHERE student_id = ?`,
+        params: [
+          billingUpdate.used_hours_delta,
+          now,
+          billingUpdate.student_id
+        ]
+      })
+    }
+    
+    // 执行事务
+    await ipcTransaction(statements)
+    
+    // 返回创建的记录
+    const result = await this.getById(id)
+    if (!result) throw new Error('Failed to create class record')
+    return result
+  },
+  
   // 获取完成率统计（用于成长档案趋势图）
   async getCompletionRateStats(studentId: string, months: number = 6): Promise<{ date: string; total: number; completed: number; rate: number }[]> {
     const startDate = new Date()

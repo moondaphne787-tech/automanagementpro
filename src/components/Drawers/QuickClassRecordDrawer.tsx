@@ -11,7 +11,7 @@ import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { useAppStore } from '@/store/appStore'
 import { scheduledClassDb } from '@/db/schedule'
 import { lessonPlanDb } from '@/db'
-import { cn } from '@/lib/utils'
+import { cn, formatDateISO, formatDateDisplay } from '@/lib/utils'
 import type { 
   TaskBlock as TaskBlockType, 
   AttendanceType, 
@@ -22,18 +22,6 @@ import type {
   LessonPlan,
   ScheduledClass
 } from '@/types'
-
-// 格式化日期为 YYYY-MM-DD
-function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0]
-}
-
-// 格式化日期显示
-function formatDateDisplay(dateStr: string): string {
-  const date = new Date(dateStr)
-  const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-  return `${date.getMonth() + 1}月${date.getDate()}日 ${days[date.getDay()]}`
-}
 
 // 扩展的排课类型，包含关联的学员和助教信息
 interface ScheduledClassWithInfo extends ScheduledClass {
@@ -64,7 +52,7 @@ export function QuickClassRecordDrawer({ open, onClose }: QuickClassRecordDrawer
   const { wordbanks, batchImportClassRecords, loadStudents } = useAppStore()
   
   // 今日日期
-  const today = useMemo(() => formatDate(new Date()), [])
+  const today = useMemo(() => formatDateISO(new Date()), [])
   const todayDisplay = useMemo(() => formatDateDisplay(today), [today])
   
   // 学员排课信息

@@ -19,7 +19,7 @@ interface StudentRowProps {
   onAssign: (slotId: string, teacherId: string) => void
   onRemove: (slotId: string) => void
   selectedDate: string
-  onAddPreference: (studentId: string, date: string, startTime: string, endTime: string) => Promise<void>
+  onAddPreference: (studentId: string, date: string, startTime: string, endTime: string, todayOnly?: boolean) => Promise<void>
 }
 
 // 学生时段色块组件
@@ -117,6 +117,7 @@ export function StudentRowComponent({
     start_time: '09:00',
     end_time: '11:00'
   })
+  const [todayOnly, setTodayOnly] = useState(true) // 默认勾选「仅限今日」
   const [isAddingPref, setIsAddingPref] = useState(false)
   
   const totalWidth = ((timeRangeEnd - timeRangeStart) / 60) * HOUR_WIDTH
@@ -155,7 +156,7 @@ export function StudentRowComponent({
                 <Settings2 className="h-3 w-3" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-56 p-3" align="start">
+            <PopoverContent className="w-64 p-3" align="start">
               <div className="text-xs font-medium mb-2">快速添加时段偏好</div>
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
@@ -178,12 +179,29 @@ export function StudentRowComponent({
                     />
                   </div>
                 </div>
+                {/* 仅限今日开关 */}
+                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={todayOnly} 
+                    onChange={e => setTodayOnly(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-gray-300"
+                  />
+                  <span className={todayOnly ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                    仅限今日（不保存为长期偏好）
+                  </span>
+                </label>
+                <div className="text-[10px] text-muted-foreground px-1">
+                  {todayOnly 
+                    ? '将直接创建今日排课，不影响后续排课建议' 
+                    : '将保存为每周固定时段偏好'}
+                </div>
                 <button
                   onClick={async () => {
                     if (isAddingPref) return
                     setIsAddingPref(true)
                     try {
-                      await onAddPreference(row.student.id, selectedDate, quickPrefForm.start_time, quickPrefForm.end_time)
+                      await onAddPreference(row.student.id, selectedDate, quickPrefForm.start_time, quickPrefForm.end_time, todayOnly)
                       setPrefPopoverOpen(false)
                       // 重置表单
                       setQuickPrefForm({ start_time: '09:00', end_time: '11:00' })
@@ -197,7 +215,7 @@ export function StudentRowComponent({
                   disabled={isAddingPref}
                   className="w-full text-xs bg-primary text-primary-foreground rounded py-1.5 hover:bg-primary/90 disabled:opacity-50"
                 >
-                  {isAddingPref ? '添加中...' : '添加'}
+                  {isAddingPref ? '添加中...' : (todayOnly ? '添加今日排课' : '添加长期偏好')}
                 </button>
               </div>
             </PopoverContent>

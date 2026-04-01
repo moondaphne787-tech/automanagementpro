@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Database, FolderOpen, History, AlertCircle, Download, FileSpreadsheet } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { settingsDb } from '@/db'
@@ -68,11 +70,11 @@ export function DatabaseManagementCard() {
     try {
       const result = await window.electronAPI.dbCreateBackup()
       if (result.success) {
-        alert(`备份成功！\n文件路径: ${result.path}`)
+        toast.success(`备份成功！文件已保存`)
         loadDatabaseInfo() // 刷新信息
       }
     } catch (error) {
-      alert('备份失败：' + (error as Error).message)
+      toast.error('备份失败：' + (error as Error).message)
     } finally {
       setCreatingBackup(false)
     }
@@ -86,18 +88,25 @@ export function DatabaseManagementCard() {
   const handleRestoreBackup = async (backupPath: string) => {
     if (!window.electronAPI) return
     
-    if (!confirm('确定要从该备份恢复数据库吗？\n\n⚠️ 警告：当前数据将被覆盖，恢复后需要重启应用。')) {
+    const confirmed = await confirmDialog({
+      title: '恢复数据库备份',
+      message: '确定要从该备份恢复数据库吗？\n\n⚠️ 警告：当前数据将被覆盖，恢复后需要重启应用。',
+      confirmText: '恢复',
+      variant: 'warning'
+    })
+    
+    if (!confirmed) {
       return
     }
 
     try {
       const result = await window.electronAPI.dbRestoreFromBackup(backupPath)
       if (result.success) {
-        alert(result.message)
+        toast.success(result.message)
         window.location.reload()
       }
     } catch (error) {
-      alert('恢复失败：' + (error as Error).message)
+      toast.error('恢复失败：' + (error as Error).message)
     }
   }
   
@@ -106,7 +115,7 @@ export function DatabaseManagementCard() {
     try {
       await exportToExcel()
     } catch (error) {
-      alert('导出失败：' + (error as Error).message)
+      toast.error('导出失败：' + (error as Error).message)
     } finally {
       setExportingExcel(false)
     }

@@ -75,56 +75,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
 })
 
-// TypeScript类型声明
-export interface ElectronAPI {
-  // 基础数据库操作
-  dbQuery: (sql: string, params?: unknown[]) => Promise<unknown>
-  dbQueryOne: (sql: string, params?: unknown[]) => Promise<unknown>
-  dbTransaction: (statements: Array<{ sql: string; params: unknown[] }>) => Promise<{ success: boolean }>
-  dbGetPath: () => Promise<string>
-  dbBackup: (backupPath: string) => Promise<{ success: boolean }>
-  
-  // 迁移和备份相关
-  dbGetVersion: () => Promise<{ version: number; latestVersion: number }>
-  dbGetMigrationHistory: () => Promise<Array<{ version: number; applied_at: string; description?: string }>>
-  dbGetStats: () => Promise<{
-    version: number
-    students: number
-    teachers: number
-    classRecords: number
-    lessonPlans: number
-    dbSize: number
-    lastBackup: string | null
-  } | null>
-  dbCreateBackup: (backupName?: string) => Promise<{ success: boolean; path: string }>
-  dbGetBackupHistory: (limit?: number) => Promise<Array<{
-    id: string
-    backup_path: string
-    backup_type: string
-    file_size: number
-    created_at: string
-  }>>
-  dbRestoreFromBackup: (backupPath: string) => Promise<{ success: boolean; message: string }>
-  dbGetBackupDir: () => Promise<string>
-  dbOpenBackupDir: () => Promise<{ success: boolean }>
-  
-  // 对话框
-  showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => 
-    Promise<{ canceled: boolean; filePath?: string }>
-  
-  // 文件写入
-  writeFile: (filePath: string, base64Data: string) => Promise<{ success: boolean }>
-  
-  // 打印
-  printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
-  
-  // 平台信息
-  platform: string
-  isElectron: boolean
-}
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI
-  }
-}
+// 注意：ElectronAPI 类型定义已统一移至 src/types/index.ts
+// Window 接口的扩展也在该文件中声明

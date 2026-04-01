@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Save, X, Link, Unlink, Edit } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -109,7 +110,7 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
   
   // 添加任务
   const handleAddTask = () => {
-    if (tasks.length < 4) {
+    if (tasks.length < 5) {
       setTasks([...tasks, createEmptyTask()])
     }
   }
@@ -127,7 +128,7 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
   // 保存记录
   const handleSave = async () => {
     if (!classDate) {
-      alert('请选择上课日期')
+      toast.error('请选择上课日期')
       return
     }
     
@@ -143,7 +144,7 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
     })
     
     if (validTasks.length === 0) {
-      alert('请至少添加一个有效的任务')
+      toast.error('请至少添加一个有效的任务')
       return
     }
     
@@ -286,10 +287,10 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
               variant="outline"
               size="sm"
               onClick={handleAddTask}
-              disabled={tasks.length >= 4}
+              disabled={tasks.length >= 5}
             >
               <Plus className="w-4 h-4 mr-1" />
-              添加任务 ({tasks.length}/4)
+              添加任务 ({tasks.length}/5)
             </Button>
           </div>
           

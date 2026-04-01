@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Save } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { settingsDb } from '@/db'
 import { DEFAULT_SYSTEM_PROMPT } from '@/ai/prompts'
@@ -30,20 +32,26 @@ export function SystemPromptEditor() {
     try {
       await settingsDb.set('ai_system_prompt', promptValue)
       setIsCustom(true)
-      alert('系统提示词已保存！下次生成计划时生效。')
+      toast.success('系统提示词已保存！下次生成计划时生效。')
     } catch (error) {
-      alert('保存失败：' + (error as Error).message)
+      toast.error('保存失败：' + (error as Error).message)
     } finally {
       setSaving(false)
     }
   }
 
   const handleReset = async () => {
-    if (!confirm('确定要恢复为内置默认提示词吗？')) return
+    const confirmed = await confirmDialog({
+      title: '恢复默认提示词',
+      message: '确定要恢复为内置默认提示词吗？',
+      confirmText: '恢复',
+      variant: 'warning'
+    })
+    if (!confirmed) return
     await settingsDb.set('ai_system_prompt', '')
     setPromptValue(DEFAULT_SYSTEM_PROMPT)
     setIsCustom(false)
-    alert('已恢复为默认提示词。')
+    toast.success('已恢复为默认提示词。')
   }
 
   if (loading) return <div className="text-sm text-muted-foreground">加载中...</div>

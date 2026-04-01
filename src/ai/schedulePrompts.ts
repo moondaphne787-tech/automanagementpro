@@ -1,14 +1,6 @@
 import type { Student, Teacher, TeacherAvailability, StudentSchedulePreference, Billing, DayOfWeek } from '@/types'
 import { DAY_LABELS } from '@/types'
-
-// 获取周一日期（用于匹配特定周时段）
-function getWeekStartFromDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const day = date.getDay()
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1)
-  date.setDate(diff)
-  return date.toISOString().split('T')[0]
-}
+import { getWeekStartFromDate, timeToMinutes } from '@/lib/utils'
 
 // 排课日期类型描述
 const SCHEDULE_TYPE_DESCRIPTIONS = {
@@ -411,11 +403,6 @@ function isTimeOverlap(start1: string, end1: string, start2: string, end2: strin
   const e2 = timeToMinutes(end2)
   
   return (s1 < e2 && s2 < e1)
-}
-
-function timeToMinutes(time: string): number {
-  const [h, m] = time.split(':').map(Number)
-  return h * 60 + m
 }
 
 // 获取本周末日期

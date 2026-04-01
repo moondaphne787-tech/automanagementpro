@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Save, TestTube, Calendar, RefreshCw, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { DateInput } from '@/components/ui/date-input'
 import { useAppStore } from '@/store/appStore'
 import { settingsDb, studentDb, learningPhaseDb, classRecordDb } from '@/db'
+import { testAIConnection } from '@/ai/client'
 import type { AIConfig, PhaseType } from '@/types'
 import { DatabaseManagementCard } from '@/components/Settings/DatabaseManagementCard'
 import { SystemPromptEditor } from '@/components/Settings/SystemPromptEditor'
@@ -86,48 +89,21 @@ export function Settings() {
       await settingsDb.set('ai_model', aiConfig.model)
       await settingsDb.set('ai_temperature', aiConfig.temperature.toString())
       await settingsDb.set('ai_max_tokens', aiConfig.max_tokens.toString())
-      alert('保存成功！')
+      toast.success('保存成功！')
     } catch (error) {
-      alert('保存失败：' + (error as Error).message)
+      toast.error('保存失败：' + (error as Error).message)
     } finally {
       setSaving(false)
     }
   }
 
   const handleTest = async () => {
-    if (!aiConfig.api_key) {
-      alert('请先输入 API Key')
-      return
-    }
-
     setTesting(true)
     setTestResult(null)
     
-    try {
-      const response = await fetch(`${aiConfig.api_url}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${aiConfig.api_key}`
-        },
-        body: JSON.stringify({
-          model: aiConfig.model,
-          messages: [{ role: 'user', content: 'Hi' }],
-          max_tokens: 10
-        })
-      })
-
-      if (response.ok) {
-        setTestResult('连接成功！API 配置正确。')
-      } else {
-        const error = await response.json()
-        setTestResult(`连接失败：${error.error?.message || response.statusText}`)
-      }
-    } catch (error) {
-      setTestResult(`连接失败：${(error as Error).message}`)
-    } finally {
-      setTesting(false)
-    }
+    const result = await testAIConnection(aiConfig)
+    setTestResult(result.message)
+    setTesting(false)
   }
 
   const handleSaveSemester = async () => {
@@ -145,9 +121,9 @@ export function Settings() {
       // 更新 store 中的学期配置
       await loadSemesterConfig()
       
-      alert('学期节点设置已保存！')
+      toast.success('学期节点设置已保存！')
     } catch (error) {
-      alert('保存失败：' + (error as Error).message)
+      toast.error('保存失败：' + (error as Error).message)
     } finally {
       setSavingSemester(false)
     }
@@ -157,11 +133,18 @@ export function Settings() {
   const handleSyncPhases = async () => {
     if (!semesterConfig.spring_start && !semesterConfig.summer_start && 
         !semesterConfig.autumn_start && !semesterConfig.winter_start) {
-      alert('请先设置至少一个学期的起止日期')
+      toast.error('请先设置至少一个学期的起止日期')
       return
     }
     
-    if (!confirm('确定要根据学期设置同步所有学员的学习阶段吗？\n\n这将为每个学员创建对应的学习阶段记录。')) {
+    const confirmed = await confirmDialog({
+      title: '同步学习阶段',
+      message: '确定要根据学期设置同步所有学员的学习阶段吗？\n\n这将为每个学员创建对应的学习阶段记录。',
+      confirmText: '同步',
+      variant: 'warning'
+    })
+    
+    if (!confirmed) {
       return
     }
     
@@ -225,9 +208,9 @@ export function Settings() {
         }
       }
       
-      alert(`同步完成！共创建了 ${createdCount} 个学习阶段记录。`)
+      toast.success(`同步完成！共创建了 ${createdCount} 个学习阶段记录。`)
     } catch (error) {
-      alert('同步失败：' + (error as Error).message)
+      toast.error('同步失败：' + (error as Error).message)
     } finally {
       setSyncingPhases(false)
     }
@@ -236,7 +219,7 @@ export function Settings() {
   const handleBackup = async () => {
     try {
       if (!window.electronAPI) {
-        alert('备份功能仅在桌面应用中可用')
+        toast.error('备份功能仅在桌面应用中可用')
         return
       }
       
@@ -251,9 +234,9 @@ export function Settings() {
       
       await window.electronAPI.dbBackup(result.filePath)
       await settingsDb.set('last_backup_date', new Date().toISOString())
-      alert(`备份成功！文件已保存到：${result.filePath}`)
+      toast.success(`备份成功！文件已保存到：${result.filePath}`)
     } catch (error) {
-      alert('备份失败：' + (error as Error).message)
+      toast.error('备份失败：' + (error as Error).message)
     }
   }
 

@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { studentDb, teacherDb, scheduledClassDb, studentSchedulePreferenceDb, teacherAvailabilityDb } from '@/db'
 import { getGradesFromSuitableGrades } from '@/types'
+import { formatDateISO, getDayOfWeek, timeToMinutes, minutesToTime } from '@/lib/utils'
 import type { 
   Student, 
   Teacher, 
   ScheduledClass, 
-  DayOfWeek, 
   Billing, 
   StudentSchedulePreference,
   TeacherAvailability,
@@ -18,30 +18,8 @@ import type {
 } from '../types'
 import { TEACHER_COLORS, LEVEL_LABELS } from '../constants'
 
-// 格式化日期
-export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0]
-}
-
-// 获取日期对应的星期
-export function getDayOfWeek(dateStr: string): DayOfWeek {
-  const days: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-  const date = new Date(dateStr)
-  return days[date.getDay()]
-}
-
-// 将时间字符串转换为分钟数
-export function timeToMinutes(time: string): number {
-  const [h, m] = time.split(':').map(Number)
-  return h * 60 + m
-}
-
-// 将分钟数转换为时间字符串
-export function minutesToTime(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
-}
+// 重新导出统一工具函数，保持对外接口不变
+export { formatDateISO as formatDate, getDayOfWeek, timeToMinutes, minutesToTime } from '@/lib/utils'
 
 // 计算时间范围
 export function getTimeRange(slots: StudentSlot[]): TimeRange {
@@ -102,14 +80,14 @@ export interface UseManualScheduleReturn {
   getTeacherAssignStatuses: (slot: StudentSlot) => import('../types').TeacherAssignStatus[]
   checkTeacherConflict: (teacherId: string, slot: StudentSlot) => ConflictInfo
   loadSchedulesForDate: (date: string) => Promise<void>
-  handleAddPreference: (studentId: string, date: string, startTime: string, endTime: string) => Promise<void>
+  handleAddPreference: (studentId: string, date: string, startTime: string, endTime: string, todayOnly?: boolean) => Promise<void>
 }
 
 export function useManualSchedule(options: UseManualScheduleOptions = {}): UseManualScheduleReturn {
   const { initialDate } = options
   
   // 日期状态
-  const [selectedDate, setSelectedDate] = useState(initialDate || formatDate(new Date()))
+  const [selectedDate, setSelectedDate] = useState(initialDate || formatDateISO(new Date()))
   
   // 监听初始日期变化
   useEffect(() => {
@@ -577,43 +555,65 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
   const goToPrevDay = () => {
     const date = new Date(selectedDate)
     date.setDate(date.getDate() - 1)
-    setSelectedDate(formatDate(date))
+    setSelectedDate(formatDateISO(date))
   }
   
   const goToNextDay = () => {
     const date = new Date(selectedDate)
     date.setDate(date.getDate() + 1)
-    setSelectedDate(formatDate(date))
+    setSelectedDate(formatDateISO(date))
   }
   
   const goToToday = () => {
-    setSelectedDate(formatDate(new Date()))
+    setSelectedDate(formatDateISO(new Date()))
   }
   
-  // 快速添加时段偏好
+  // 快速添加时段偏好或临时排课
+  // todayOnly: true = 仅限今日（直接创建 scheduled_class），false = 长期偏好（写入偏好表）
   const handleAddPreference = useCallback(
     async (
       studentId: string,
       date: string,
       startTime: string,
-      endTime: string
+      endTime: string,
+      todayOnly: boolean = false
     ) => {
-      const dayOfWeek = getDayOfWeek(date)
+      if (todayOnly) {
+        // 仅限今日：直接创建排课记录，不保存为长期偏好
+        const [startH, startM] = startTime.split(':').map(Number)
+        const [endH, endM] = endTime.split(':').map(Number)
+        const durationHours = (endH * 60 + endM - startH * 60 - startM) / 60
 
-      await studentSchedulePreferenceDb.create({
-        student_id: studentId,
-        day_of_week: dayOfWeek,
-        preferred_start: startTime,
-        preferred_end: endTime,
-      })
+        await scheduledClassDb.create({
+          student_id: studentId,
+          class_date: date,
+          start_time: startTime,
+          end_time: endTime,
+          duration_hours: durationHours,
+          status: 'scheduled'
+        })
 
-      // 只刷新受影响学员的偏好，不重新加载全部静态数据
-      const updatedPrefs = await studentSchedulePreferenceDb.getByStudentId(studentId)
-      setStudents(prev =>
-        prev.map(s => (s.id === studentId ? { ...s, preferences: updatedPrefs } : s))
-      )
+        // 刷新排课数据
+        await loadSchedulesForDate(date)
+      } else {
+        // 长期偏好：写入偏好表
+        const dayOfWeek = getDayOfWeek(date)
 
-      await loadSchedulesForDate(date)
+        await studentSchedulePreferenceDb.create({
+          student_id: studentId,
+          day_of_week: dayOfWeek,
+          preferred_start: startTime,
+          preferred_end: endTime,
+        })
+
+        // 只刷新受影响学员的偏好，不重新加载全部静态数据
+        const updatedPrefs = await studentSchedulePreferenceDb.getByStudentId(studentId)
+        setStudents(prev =>
+          prev.map(s => (s.id === studentId ? { ...s, preferences: updatedPrefs } : s))
+        )
+
+        await loadSchedulesForDate(date)
+      }
     },
     [loadSchedulesForDate]
   )

@@ -6,43 +6,65 @@ export type { Todo } from '@/types'
 
 export const todoDb = {
   async getAll(): Promise<Todo[]> {
+    // 使用 JOIN 查询从 students 表获取最新的学员姓名，避免数据不一致
     const rows = await ipcQuery<any[]>(
-      `SELECT * FROM todos ORDER BY completed ASC, sort_order DESC, created_at DESC`
+      `SELECT t.*, s.name as student_name 
+       FROM todos t 
+       LEFT JOIN students s ON t.student_id = s.id 
+       ORDER BY t.completed ASC, t.sort_order DESC, t.created_at DESC`
     )
     return rows.map(r => ({ ...r, completed: !!r.completed }))
   },
 
   async getActive(): Promise<Todo[]> {
+    // 使用 JOIN 查询从 students 表获取最新的学员姓名
     const rows = await ipcQuery<any[]>(
-      `SELECT * FROM todos WHERE completed = 0 ORDER BY sort_order DESC, created_at DESC`
+      `SELECT t.*, s.name as student_name 
+       FROM todos t 
+       LEFT JOIN students s ON t.student_id = s.id 
+       WHERE t.completed = 0 
+       ORDER BY t.sort_order DESC, t.created_at DESC`
     )
     return rows.map(r => ({ ...r, completed: false }))
   },
 
   async getCompleted(): Promise<Todo[]> {
+    // 使用 JOIN 查询从 students 表获取最新的学员姓名
     const rows = await ipcQuery<any[]>(
-      `SELECT * FROM todos WHERE completed = 1 ORDER BY completed_at DESC`
+      `SELECT t.*, s.name as student_name 
+       FROM todos t 
+       LEFT JOIN students s ON t.student_id = s.id 
+       WHERE t.completed = 1 
+       ORDER BY t.completed_at DESC`
     )
     return rows.map(r => ({ ...r, completed: true }))
   },
 
   async getById(id: string): Promise<Todo | undefined> {
-    const row = await ipcQueryOne<any>(`SELECT * FROM todos WHERE id = ?`, [id])
+    // 使用 JOIN 查询从 students 表获取最新的学员姓名
+    const row = await ipcQueryOne<any>(
+      `SELECT t.*, s.name as student_name 
+       FROM todos t 
+       LEFT JOIN students s ON t.student_id = s.id 
+       WHERE t.id = ?`, 
+      [id]
+    )
     if (row) {
       return { ...row, completed: !!row.completed }
     }
     return undefined
   },
 
-  async create(data: Omit<Todo, 'id' | 'created_at' | 'completed' | 'completed_at'>): Promise<Todo> {
+  async create(data: Omit<Todo, 'id' | 'created_at' | 'completed' | 'completed_at' | 'student_name'>): Promise<Todo> {
     const id = generateId()
+    // 不存储 student_name，通过 JOIN 查询从 students 表获取，避免数据不一致
     await ipcQuery(
-      `INSERT INTO todos (id, content, student_id, student_name, due_date, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, data.content, data.student_id ?? null, data.student_name ?? null, data.due_date ?? null, data.sort_order ?? 0]
+      `INSERT INTO todos (id, content, student_id, due_date, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, data.content, data.student_id ?? null, data.due_date ?? null, data.sort_order ?? 0]
     )
-    const row = await ipcQueryOne<any>(`SELECT * FROM todos WHERE id = ?`, [id])
-    return { ...row, completed: false }
+    // 使用 getById 获取完整数据（包含通过 JOIN 查询的 student_name）
+    return this.getById(id) as Promise<Todo>
   },
 
   async toggleComplete(id: string, completed: boolean): Promise<void> {

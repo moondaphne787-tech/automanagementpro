@@ -143,3 +143,19 @@ export async function ipcQueryOne<T>(sql: string, params: unknown[] = [], retrie
   // 所有重试都失败后，抛出最后一个错误
   throw new Error(`数据库查询失败（已重试 ${retries} 次）: ${lastError?.message || '未知错误'}`)
 }
+
+/**
+ * 执行数据库事务（多个SQL语句原子执行）
+ * @param statements SQL语句数组，每项包含 sql 和 params
+ * @throws 当事务执行失败时抛出错误
+ */
+export async function ipcTransaction(statements: Array<{ sql: string; params: unknown[] }>): Promise<void> {
+  if (!window.electronAPI) throw new Error('Electron API not available')
+  
+  try {
+    await window.electronAPI.dbTransaction(statements)
+  } catch (error) {
+    console.error('[ipcTransaction] 事务执行失败:', error)
+    throw new Error(`数据库事务失败: ${(error as Error)?.message || '未知错误'}`)
+  }
+}

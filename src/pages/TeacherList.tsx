@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Phone, GraduationCap, Search, Clock, Award, AlertTriangle, Check, X } from 'lucide-react'
 import { teacherDb } from '@/db'
 import type { Teacher, TeacherStatus, OralLevel, TrainingStage, TeacherType } from '@/types'
@@ -204,7 +205,7 @@ export function TeacherList() {
   // 保存助教
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      alert('请输入助教姓名')
+      toast.error('请输入助教姓名')
       return
     }
     
@@ -251,7 +252,7 @@ export function TeacherList() {
       loadTeachers()
     } catch (error) {
       console.error('Failed to save teacher:', error)
-      alert('保存失败，请重试')
+      toast.error('保存失败，请重试')
     } finally {
       setSaving(false)
     }
@@ -266,9 +267,10 @@ export function TeacherList() {
       setDeleteDialogOpen(false)
       setDeletingTeacher(null)
       loadTeachers()
+      toast.success('助教已删除')
     } catch (error) {
       console.error('Failed to delete teacher:', error)
-      alert('删除失败，请重试')
+      toast.error('删除失败，请重试')
     }
   }
   
@@ -312,9 +314,10 @@ export function TeacherList() {
       // 从提醒列表中移除
       setUpgradeReminders(prev => prev.filter(r => r.teacher.id !== reminder.teacher.id))
       loadTeachers()
+      toast.success(`${reminder.teacher.name} 已升级为${reminder.newStage === 'formal' ? '正式助教' : '实习期'}`)
     } catch (error) {
       console.error('Failed to upgrade teacher:', error)
-      alert('升级失败，请重试')
+      toast.error('升级失败，请重试')
     }
   }
   

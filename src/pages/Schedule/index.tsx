@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import {
   ChevronLeft,
   ChevronRight,
@@ -8,9 +9,8 @@ import {
   Hand,
   X
 } from 'lucide-react'
-import { scheduledClassDb, studentSchedulePreferenceDb } from '@/db'
-import { generateId } from '@/db/utils'
-import type { ScheduledClass, DayOfWeek, Student, Billing, StudentSchedulePreference } from '@/types'
+import { scheduledClassDb } from '@/db'
+import type { ScheduledClass, Student, Billing, StudentSchedulePreference } from '@/types'
 import {
   getWeekendWithFridayConfigs,
   getWeekDateConfigs,
@@ -20,6 +20,7 @@ import { ManualSchedule } from '@/components/ManualSchedule'
 import { Button } from '@/components/ui/button'
 import { useScheduleData } from './hooks/useScheduleData'
 import { useAISchedule } from './hooks/useAISchedule'
+import { useScheduleDialogs } from './hooks/useScheduleDialogs'
 import { DayScheduleView } from './components/DayScheduleView'
 import { ClassDialog } from './components/ClassDialog'
 import { RescheduleDialog } from './components/RescheduleDialog'
@@ -31,7 +32,6 @@ import { ArrangeView } from './ArrangeView'
 import {
   ViewMode,
   SchedulePreset,
-  ScheduleItem,
   DAY_LABELS,
   formatDate,
   formatDisplayDate,
@@ -69,7 +69,6 @@ export function Schedule() {
     aiConflicts,
     aiError,
     selectedAiResults,
-    setSelectedAiResults,
     handleAISchedule,
     toggleAiResultSelection,
     handleConfirmAISchedule,
@@ -82,66 +81,46 @@ export function Schedule() {
     onSuccess: loadData
   })
 
-  // 添加日期对话框
-  const [addDateDialogOpen, setAddDateDialogOpen] = useState(false)
-  const [newDateForm, setNewDateForm] = useState({
-    date: '',
-    type: 'custom' as ScheduleDateConfig['type'],
-    label: '',
-    timeStart: '08:00',
-    timeEnd: '18:00'
-  })
-
-  // 新增/编辑课程对话框
-  const [classDialogOpen, setClassDialogOpen] = useState(false)
-  const [editingClass, setEditingClass] = useState<ScheduledClass | null>(null)
-  const [classForm, setClassForm] = useState({
-    student_id: '',
-    teacher_id: '',
-    schedules: [] as ScheduleItem[],
-    notes: ''
-  })
-  const [saving, setSaving] = useState(false)
+  // 使用对话框管理 hook
+  const {
+    dialogs,
+    forms,
+    editing,
+    saving,
+    batchSaving,
+    openDialog,
+    closeDialog,
+    setDialogOpen,
+    setNewDateForm,
+    setClassForm,
+    setRescheduleForm,
+    setPreferenceForm,
+    setBatchPrefForm,
+    setCancelReason,
+    setBatchSelectedStudents,
+    setEditingClass,
+    setReschedulingClass,
+    setCancellingClass,
+    setSelectedStudent,
+    handleAddCustomDate,
+    resetNewDateForm,
+    initClassFormForCreate,
+    initClassFormForEdit,
+    initRescheduleForm,
+    initCancelDialog,
+    initPreferenceDialog,
+    onSaveClass,
+    handleDeleteClass,
+    onReschedule,
+    onCancel,
+    onAddPreference,
+    onDeletePreference,
+    onBatchSavePreferences
+  } = useScheduleDialogs(scheduleDates, students, loadData)
 
   // 更多操作菜单
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
-
-  // 调课对话框
-  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false)
-  const [reschedulingClass, setReschedulingClass] = useState<ScheduledClass | null>(null)
-  const [rescheduleForm, setRescheduleForm] = useState({
-    class_date: '',
-    start_time: '',
-    end_time: ''
-  })
-
-  // 取消对话框
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
-  const [cancellingClass, setCancellingClass] = useState<ScheduledClass | null>(null)
-  const [cancelReason, setCancelReason] = useState('')
-
-  // 学生时段偏好对话框
-  const [preferenceDialogOpen, setPreferenceDialogOpen] = useState(false)
-  const [selectedStudent, setSelectedStudent] = useState<StudentWithPrefs | null>(null)
-  const [preferenceForm, setPreferenceForm] = useState({
-    day_of_week: 'saturday' as DayOfWeek,
-    preferred_start: '09:00',
-    preferred_end: '11:00',
-    notes: ''
-  })
-
-  // 批量设置时段偏好
-  const [batchPrefDialogOpen, setBatchPrefDialogOpen] = useState(false)
-  const [batchSelectedStudents, setBatchSelectedStudents] = useState<string[]>([])
-  const [batchPrefForm, setBatchPrefForm] = useState({
-    day_of_week: 'saturday' as DayOfWeek,
-    preferred_start: '09:00',
-    preferred_end: '11:00',
-    notes: '',
-    grade_filter: 'all',
-  })
-  const [batchSaving, setBatchSaving] = useState(false)
 
   // 单日视图当前日期索引
   const [currentDateIndex, setCurrentDateIndex] = useState(0)
@@ -202,38 +181,18 @@ export function Schedule() {
   }
 
   // 添加自定义日期
-  const handleAddCustomDate = () => {
-    if (!newDateForm.date) {
-      alert('请选择日期')
-      return
-    }
+  const handleAddDate = () => {
+    const newConfig = handleAddCustomDate()
+    if (!newConfig) return
 
-    const dayOfWeek = getDayOfWeek(newDateForm.date)
-    const label = newDateForm.label || `${DAY_LABELS[dayOfWeek]}${newDateForm.type === 'holiday' ? '（假期）' : ''}`
-
-    const newConfig: ScheduleDateConfig = {
-      date: newDateForm.date,
-      type: newDateForm.type,
-      label,
-      timeRange: newDateForm.type === 'friday_evening'
-        ? { start: '18:00', end: '21:00' }
-        : { start: newDateForm.timeStart, end: newDateForm.timeEnd }
-    }
-
-    if (scheduleDates.some(d => d.date === newDateForm.date)) {
-      alert('该日期已添加')
+    if (scheduleDates.some(d => d.date === newConfig.date)) {
+      toast.error('该日期已添加')
       return
     }
 
     setScheduleDates(prev => [...prev, newConfig].sort((a, b) => a.date.localeCompare(b.date)))
-    setAddDateDialogOpen(false)
-    setNewDateForm({
-      date: '',
-      type: 'custom',
-      label: '',
-      timeStart: '08:00',
-      timeEnd: '18:00'
-    })
+    closeDialog('addDateDialog')
+    resetNewDateForm()
   }
 
   // 移除日期
@@ -243,285 +202,35 @@ export function Schedule() {
 
   // 打开新增课程对话框
   const handleCreateClass = (date?: string, time?: string) => {
-    setEditingClass(null)
-    const initialSchedule: ScheduleItem = {
-      id: generateId(),
-      date: date || scheduleDates[0]?.date || formatDate(new Date()),
-      start_time: time || '09:00',
-      end_time: time ? `${(parseInt(time.split(':')[0]) + 2).toString().padStart(2, '0')}:${time.split(':')[1]}` : '11:00',
-      duration_hours: 2
-    }
-    setClassForm({
-      student_id: '',
-      teacher_id: '',
-      schedules: [initialSchedule],
-      notes: ''
-    })
-    setClassDialogOpen(true)
+    initClassFormForCreate(date, time)
+    openDialog('classDialog')
   }
 
   // 打开编辑课程对话框
   const handleEditClass = (cls: ScheduledClass) => {
-    setEditingClass(cls)
-    setClassForm({
-      student_id: cls.student_id,
-      teacher_id: cls.teacher_id || '',
-      schedules: [{
-        id: generateId(),
-        date: cls.class_date,
-        start_time: cls.start_time || '09:00',
-        end_time: cls.end_time || '11:00',
-        duration_hours: cls.duration_hours
-      }],
-      notes: cls.notes || ''
-    })
-    setClassDialogOpen(true)
+    initClassFormForEdit(cls)
+    openDialog('classDialog')
     setActiveMenu(null)
-  }
-
-  // 保存课程
-  const handleSaveClass = async () => {
-    if (!classForm.student_id) {
-      alert('请选择学员')
-      return
-    }
-
-    if (classForm.schedules.length === 0) {
-      alert('请添加排课项')
-      return
-    }
-
-    const emptySchedule = classForm.schedules.find(s => !s.date)
-    if (emptySchedule) {
-      alert('请为所有排课项设置日期')
-      return
-    }
-
-    try {
-      setSaving(true)
-
-      if (editingClass) {
-        const schedule = classForm.schedules[0]
-        if (classForm.teacher_id) {
-          const conflict = await scheduledClassDb.checkConflict(
-            classForm.teacher_id,
-            schedule.date,
-            schedule.start_time,
-            schedule.end_time,
-            editingClass.id
-          )
-          if (conflict) {
-            alert(`时段冲突：该助教在 ${schedule.date} ${schedule.start_time}-${schedule.end_time} 已有课程安排`)
-            return
-          }
-        }
-
-        await scheduledClassDb.update(editingClass.id, {
-          student_id: classForm.student_id,
-          teacher_id: classForm.teacher_id || null,
-          class_date: schedule.date,
-          start_time: schedule.start_time,
-          end_time: schedule.end_time,
-          duration_hours: schedule.duration_hours,
-          notes: classForm.notes || null
-        })
-      } else {
-        if (classForm.teacher_id) {
-          for (const schedule of classForm.schedules) {
-            const conflict = await scheduledClassDb.checkConflict(
-              classForm.teacher_id,
-              schedule.date,
-              schedule.start_time,
-              schedule.end_time
-            )
-            if (conflict) {
-              alert(`时段冲突：该助教在 ${schedule.date} ${schedule.start_time}-${schedule.end_time} 已有课程安排`)
-              return
-            }
-          }
-        }
-
-        const results = await scheduledClassDb.batchCreate(
-          classForm.schedules.map(schedule => ({
-            student_id: classForm.student_id,
-            teacher_id: classForm.teacher_id || undefined,
-            class_date: schedule.date,
-            start_time: schedule.start_time,
-            end_time: schedule.end_time,
-            duration_hours: schedule.duration_hours,
-            notes: classForm.notes || undefined
-          }))
-        )
-
-        if (results.failed > 0) {
-          alert(`排课完成：成功 ${results.success} 条，失败 ${results.failed} 条`)
-        }
-      }
-
-      setClassDialogOpen(false)
-      loadData()
-    } catch (error) {
-      console.error('Failed to save class:', error)
-      alert('保存失败，请重试')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // 删除课程
-  const handleDeleteClass = async (cls: ScheduledClass) => {
-    if (!confirm('确定要删除这节课程吗？')) return
-
-    try {
-      await scheduledClassDb.delete(cls.id)
-      setActiveMenu(null)
-      loadData()
-    } catch (error) {
-      console.error('Failed to delete class:', error)
-      alert('删除失败，请重试')
-    }
   }
 
   // 打开调课对话框
   const handleOpenReschedule = (cls: ScheduledClass) => {
-    setReschedulingClass(cls)
-    setRescheduleForm({
-      class_date: cls.class_date,
-      start_time: cls.start_time || '09:00',
-      end_time: cls.end_time || '10:00'
-    })
-    setRescheduleDialogOpen(true)
+    initRescheduleForm(cls)
+    openDialog('rescheduleDialog')
     setActiveMenu(null)
-  }
-
-  // 执行调课
-  const handleReschedule = async () => {
-    if (!reschedulingClass) return
-
-    try {
-      await scheduledClassDb.reschedule(
-        reschedulingClass.id,
-        rescheduleForm.class_date,
-        rescheduleForm.start_time,
-        rescheduleForm.end_time
-      )
-
-      setRescheduleDialogOpen(false)
-      setReschedulingClass(null)
-      loadData()
-    } catch (error) {
-      console.error('Failed to reschedule:', error)
-      alert('调课失败，请重试')
-    }
   }
 
   // 打开取消对话框
   const handleOpenCancel = (cls: ScheduledClass) => {
-    setCancellingClass(cls)
-    setCancelReason('')
-    setCancelDialogOpen(true)
+    initCancelDialog(cls)
+    openDialog('cancelDialog')
     setActiveMenu(null)
-  }
-
-  // 执行取消
-  const handleCancel = async () => {
-    if (!cancellingClass) return
-
-    try {
-      await scheduledClassDb.cancel(cancellingClass.id, cancelReason || undefined)
-      setCancelDialogOpen(false)
-      setCancellingClass(null)
-      loadData()
-    } catch (error) {
-      console.error('Failed to cancel class:', error)
-      alert('取消失败，请重试')
-    }
   }
 
   // 打开学生时段偏好对话框
   const handleOpenPreferenceDialog = (student: StudentWithPrefs) => {
-    setSelectedStudent(student)
-    setPreferenceForm({
-      day_of_week: 'saturday',
-      preferred_start: '09:00',
-      preferred_end: '11:00',
-      notes: ''
-    })
-    setPreferenceDialogOpen(true)
-  }
-
-  // 添加学生时段偏好
-  const handleAddPreference = async () => {
-    if (!selectedStudent) return
-
-    try {
-      await studentSchedulePreferenceDb.create({
-        student_id: selectedStudent.id,
-        day_of_week: preferenceForm.day_of_week,
-        preferred_start: preferenceForm.preferred_start,
-        preferred_end: preferenceForm.preferred_end,
-        notes: preferenceForm.notes || undefined
-      })
-
-      const prefs = await studentSchedulePreferenceDb.getByStudentId(selectedStudent.id)
-      setSelectedStudent({ ...selectedStudent, preferences: prefs })
-      loadData()
-    } catch (error) {
-      console.error('Failed to add preference:', error)
-      alert('添加失败，请重试')
-    }
-  }
-
-  // 删除学生时段偏好
-  const handleDeletePreference = async (prefId: string) => {
-    if (!selectedStudent) return
-
-    try {
-      await studentSchedulePreferenceDb.delete(prefId)
-      const prefs = await studentSchedulePreferenceDb.getByStudentId(selectedStudent.id)
-      setSelectedStudent({ ...selectedStudent, preferences: prefs })
-      loadData()
-    } catch (error) {
-      console.error('Failed to delete preference:', error)
-      alert('删除失败，请重试')
-    }
-  }
-
-  // 批量保存时段偏好
-  const handleBatchSavePreferences = async () => {
-    if (batchSelectedStudents.length === 0) {
-      alert('请至少选择一名学生')
-      return
-    }
-
-    setBatchSaving(true)
-    try {
-      for (const studentId of batchSelectedStudents) {
-        const existing = await studentSchedulePreferenceDb.getByStudentId(studentId)
-        const duplicate = existing.find(
-          p => p.day_of_week === batchPrefForm.day_of_week &&
-            p.preferred_start === batchPrefForm.preferred_start
-        )
-        if (!duplicate) {
-          await studentSchedulePreferenceDb.create({
-            student_id: studentId,
-            day_of_week: batchPrefForm.day_of_week,
-            preferred_start: batchPrefForm.preferred_start,
-            preferred_end: batchPrefForm.preferred_end,
-            notes: batchPrefForm.notes || undefined,
-          })
-        }
-      }
-
-      setBatchPrefDialogOpen(false)
-      setBatchSelectedStudents([])
-      loadData()
-      alert(`已为 ${batchSelectedStudents.length} 名学生添加时段偏好`)
-    } catch (error) {
-      alert('批量设置失败：' + (error as Error).message)
-    } finally {
-      setBatchSaving(false)
-    }
+    initPreferenceDialog(student)
+    openDialog('preferenceDialog')
   }
 
   // 处理课程卡片点击
@@ -566,12 +275,18 @@ export function Schedule() {
 
   // 处理AI排课选择 - 全选
   const handleSelectAllAiResults = () => {
-    setSelectedAiResults(new Set(aiResults.filter(r => !r.unmatched).map(r => r.student_id)))
+    const newSet = new Set(aiResults.filter(r => !r.unmatched).map(r => r.student_id))
+    // 直接调用 toggleAiResultSelection 来设置全选状态
+    aiResults.filter(r => !r.unmatched).forEach(r => {
+      if (!selectedAiResults.has(r.student_id)) {
+        toggleAiResultSelection(r.student_id)
+      }
+    })
   }
 
   // 处理AI排课选择 - 清空
   const handleClearAiResultSelection = () => {
-    setSelectedAiResults(new Set())
+    selectedAiResults.forEach(id => toggleAiResultSelection(id))
   }
 
   // 处理AI排课选择 - 单个切换
@@ -664,12 +379,12 @@ export function Schedule() {
             </>
           )}
           {viewMode === 'arrange' && (
-            <Button variant="outline" size="sm" onClick={() => setBatchPrefDialogOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => openDialog('batchPrefDialog')}>
               <Users className="h-4 w-4 mr-2" />
               批量设置时段偏好
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => setAddDateDialogOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => openDialog('addDateDialog')}>
             <CalendarPlus className="h-4 w-4 mr-2" />
             添加日期
           </Button>
@@ -745,13 +460,14 @@ export function Schedule() {
             unscheduledStudents={unscheduledStudents}
             onOpenPreferenceDialog={handleOpenPreferenceDialog}
             onCreateClass={(studentId, schedules) => {
-              setClassForm({
+              setClassForm(prev => ({
+                ...prev,
                 student_id: studentId,
                 teacher_id: '',
                 schedules,
                 notes: ''
-              })
-              setClassDialogOpen(true)
+              }))
+              openDialog('classDialog')
             }}
             aiScheduling={aiScheduling}
             aiResults={aiResults}
@@ -772,64 +488,64 @@ export function Schedule() {
 
       {/* 对话框 */}
       <AddDateDialog
-        open={addDateDialogOpen}
-        onOpenChange={setAddDateDialogOpen}
-        newDateForm={newDateForm}
+        open={dialogs.addDateDialog}
+        onOpenChange={(open) => setDialogOpen('addDateDialog', open)}
+        newDateForm={forms.newDateForm}
         setNewDateForm={setNewDateForm}
-        onAdd={handleAddCustomDate}
+        onAdd={handleAddDate}
       />
 
       <ClassDialog
-        open={classDialogOpen}
-        onOpenChange={setClassDialogOpen}
-        editingClass={editingClass}
-        classForm={classForm}
+        open={dialogs.classDialog}
+        onOpenChange={(open) => setDialogOpen('classDialog', open)}
+        editingClass={editing.editingClass}
+        classForm={forms.classForm}
         setClassForm={setClassForm}
         students={students}
         teachers={teachers}
         scheduleDates={scheduleDates}
         saving={saving}
-        onSave={handleSaveClass}
+        onSave={onSaveClass}
       />
 
       <RescheduleDialog
-        open={rescheduleDialogOpen}
-        onOpenChange={setRescheduleDialogOpen}
-        reschedulingClass={reschedulingClass}
-        rescheduleForm={rescheduleForm}
+        open={dialogs.rescheduleDialog}
+        onOpenChange={(open) => setDialogOpen('rescheduleDialog', open)}
+        reschedulingClass={editing.reschedulingClass}
+        rescheduleForm={forms.rescheduleForm}
         setRescheduleForm={setRescheduleForm}
-        onConfirm={handleReschedule}
+        onConfirm={onReschedule}
       />
 
       <CancelDialog
-        open={cancelDialogOpen}
-        onOpenChange={setCancelDialogOpen}
-        cancellingClass={cancellingClass}
-        cancelReason={cancelReason}
+        open={dialogs.cancelDialog}
+        onOpenChange={(open) => setDialogOpen('cancelDialog', open)}
+        cancellingClass={editing.cancellingClass}
+        cancelReason={forms.cancelReason}
         setCancelReason={setCancelReason}
-        onConfirm={handleCancel}
+        onConfirm={onCancel}
       />
 
       <PreferenceDialog
-        open={preferenceDialogOpen}
-        onOpenChange={setPreferenceDialogOpen}
-        selectedStudent={selectedStudent}
-        preferenceForm={preferenceForm}
+        open={dialogs.preferenceDialog}
+        onOpenChange={(open) => setDialogOpen('preferenceDialog', open)}
+        selectedStudent={editing.selectedStudent}
+        preferenceForm={forms.preferenceForm}
         setPreferenceForm={setPreferenceForm}
-        onAddPreference={handleAddPreference}
-        onDeletePreference={handleDeletePreference}
+        onAddPreference={onAddPreference}
+        onDeletePreference={onDeletePreference}
       />
 
       <BatchPrefDialog
-        open={batchPrefDialogOpen}
-        onOpenChange={setBatchPrefDialogOpen}
+        open={dialogs.batchPrefDialog}
+        onOpenChange={(open) => setDialogOpen('batchPrefDialog', open)}
         students={students}
-        batchSelectedStudents={batchSelectedStudents}
+        batchSelectedStudents={editing.batchSelectedStudents}
         setBatchSelectedStudents={setBatchSelectedStudents}
-        batchPrefForm={batchPrefForm}
+        batchPrefForm={forms.batchPrefForm}
         setBatchPrefForm={setBatchPrefForm}
         batchSaving={batchSaving}
-        onSave={handleBatchSavePreferences}
+        onSave={onBatchSavePreferences}
       />
     </div>
   )

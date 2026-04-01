@@ -332,12 +332,12 @@ function createTables() {
   `)
 
   // 待办事项表
+  // 注：student_name 字段已移除，通过 JOIN 查询从 students 表获取最新姓名
   db.exec(`
     CREATE TABLE IF NOT EXISTS todos (
       id TEXT PRIMARY KEY,
       content TEXT NOT NULL,
       student_id TEXT,
-      student_name TEXT,
       due_date TEXT,
       completed INTEGER DEFAULT 0,
       completed_at TEXT,
@@ -725,6 +725,14 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   if (db) {
+    try {
+      // 退出前执行 WAL checkpoint，将 WAL 文件中的更改合并回主数据库
+      // 这样可以减少下次启动时的 WAL 重放时间
+      runWalCheckpoint(db, 'TRUNCATE')
+      console.log('WAL checkpoint completed before quit')
+    } catch (e) {
+      console.error('Checkpoint on quit failed:', e)
+    }
     db.close()
   }
 })

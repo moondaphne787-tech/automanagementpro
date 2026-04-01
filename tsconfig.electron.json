@@ -8,7 +8,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist-electron",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "composite": true,
+    "declaration": true
   },
   "include": ["electron/**/*"]
 }

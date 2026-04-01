@@ -1,6 +1,7 @@
 import { DAY_LABELS } from '@/types'
 import type { DayOfWeek } from '@/types'
 import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
+import { formatDateISO, getDayOfWeek } from '@/lib/utils'
 
 // 视图模式类型
 export type ViewMode = 'week' | 'arrange' | 'manual'
@@ -32,20 +33,12 @@ for (let h = 18; h <= 21; h++) {
 // 星期标签 - 从 @/types 导入并重新导出
 export { DAY_LABELS }
 
-// 格式化日期
-export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0]
-}
+// 日期工具函数 - 从 @/lib/utils 导入并重新导出
+export { formatDateISO as formatDate, getDayOfWeek }
 
+// 格式化日期显示（保留，用于特殊格式需求）
 export function formatDisplayDate(date: Date): string {
   return `${date.getMonth() + 1}月${date.getDate()}日`
-}
-
-// 获取日期对应的星期
-export function getDayOfWeek(dateStr: string): DayOfWeek {
-  const days: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-  const date = new Date(dateStr)
-  return days[date.getDay()]
 }
 
 // 获取日期类型对应的图标（emoji 字符串）

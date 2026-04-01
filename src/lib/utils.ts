@@ -2,6 +2,22 @@ import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import type { Teacher } from '@/types'
 
+// 从 dateUtils.ts 重新导出日期相关函数，保持向后兼容
+export {
+  formatDateISO,
+  formatLocalDate,
+  getDayOfWeek,
+  formatDateDisplay,
+  getWeekRange,
+  timeToMinutes,
+  minutesToTime,
+  getTodayStr,
+  getWeekStartFromDate
+} from './dateUtils'
+
+// 导出类型供外部使用
+export type { DayOfWeek } from '@/types'
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -95,3 +111,4 @@ export function isHoursWarning(billing: { remaining_hours: number; warning_thres
   if (!billing) return false
   return billing.remaining_hours <= billing.warning_threshold
 }
+

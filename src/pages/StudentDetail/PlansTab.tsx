@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { Edit, Trash2, Plus, Calendar, FileText, Sparkles, Download, Printer, Loader2, CalendarX, RefreshCw, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -129,11 +131,12 @@ export function PlansTab({ studentId }: PlansTabProps) {
         setShowPlanGenerator(false)
         setStreamContent('')
         setExtraInstruction('')
+        toast.success('课程计划已生成')
       } else {
-        alert('AI 响应格式错误，请重试')
+        toast.error('AI 响应格式错误，请重试')
       }
     } catch (error) {
-      alert('生成失败：' + (error as Error).message)
+      toast.error('生成失败：' + (error as Error).message)
     }
     
     setGeneratingPlan(false)
@@ -350,9 +353,16 @@ export function PlansTab({ studentId }: PlansTabProps) {
                                 size="sm"
                                 className="text-destructive hover:text-destructive"
                                 onClick={async () => {
-                                  if (confirm('确定要删除这个过期计划吗？')) {
+                                  const confirmed = await confirmDialog({
+                                    title: '删除过期计划',
+                                    message: '确定要删除这个过期计划吗？',
+                                    confirmText: '删除',
+                                    variant: 'danger'
+                                  })
+                                  if (confirmed) {
                                     await lessonPlanDb.delete(plan.id)
                                     loadLessonPlans()
+                                    toast.success('过期计划已删除')
                                   }
                                 }}
                               >
@@ -480,9 +490,16 @@ export function PlansTab({ studentId }: PlansTabProps) {
                             size="icon"
                             className="text-muted-foreground hover:text-destructive"
                             onClick={async () => {
-                              if (confirm('确定删除此课程计划？')) {
+                              const confirmed = await confirmDialog({
+                                title: '删除课程计划',
+                                message: '确定删除此课程计划？',
+                                confirmText: '删除',
+                                variant: 'danger'
+                              })
+                              if (confirmed) {
                                 await deleteLessonPlan(plan.id)
                                 loadLessonPlans()
+                                toast.success('课程计划已删除')
                               }
                             }}
                           >

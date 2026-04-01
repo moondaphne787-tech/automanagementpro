@@ -60,6 +60,7 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
   
   // 快速添加学员状态
   const [quickAddTime, setQuickAddTime] = useState({ start: '09:00', end: '11:00' })
+  const [quickAddTodayOnly, setQuickAddTodayOnly] = useState(true) // 默认勾选「仅限今日」
   
   // 分隔线拖动处理
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -150,8 +151,8 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
   
   // 快速添加学员到今日排课
   const handleQuickAddStudentToday = useCallback(async (studentId: string) => {
-    await handleAddPreference(studentId, selectedDate, quickAddTime.start, quickAddTime.end)
-  }, [handleAddPreference, selectedDate, quickAddTime])
+    await handleAddPreference(studentId, selectedDate, quickAddTime.start, quickAddTime.end, quickAddTodayOnly)
+  }, [handleAddPreference, selectedDate, quickAddTime, quickAddTodayOnly])
   
   // 快捷日期列表（整周：周一到周日）
   const quickDates = useMemo(() => {
@@ -231,13 +232,13 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                   添加学员 ({studentsNotInPanel.length})
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-72 p-3" align="end">
+              <PopoverContent className="w-80 p-3" align="end">
                 <div className="text-xs font-medium mb-2">添加学员到今日排课</div>
                 <div className="text-xs text-muted-foreground mb-2">
-                  点击学员为其添加今日时段偏好
+                  点击学员为其添加今日时段
                 </div>
                 {/* 时间选择 */}
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs text-muted-foreground">时段:</span>
                   <input 
                     type="time" 
@@ -253,8 +254,25 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
                     className="text-xs border rounded px-1.5 py-0.5 w-20"
                   />
                 </div>
+                {/* 仅限今日开关 */}
+                <label className="flex items-center gap-2 text-xs cursor-pointer mb-2">
+                  <input 
+                    type="checkbox" 
+                    checked={quickAddTodayOnly} 
+                    onChange={e => setQuickAddTodayOnly(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-gray-300"
+                  />
+                  <span className={quickAddTodayOnly ? 'text-primary font-medium' : 'text-muted-foreground'}>
+                    仅限今日（不保存为长期偏好）
+                  </span>
+                </label>
+                <div className="text-[10px] text-muted-foreground px-1 mb-3">
+                  {quickAddTodayOnly 
+                    ? '将直接创建今日排课，不影响后续排课建议' 
+                    : '将保存为每周固定时段偏好'}
+                </div>
                 {/* 学员列表 */}
-                <div className="max-h-64 overflow-y-auto space-y-0.5">
+                <div className="max-h-48 overflow-y-auto space-y-0.5">
                   {studentsNotInPanel.map(s => (
                     <button 
                       key={s.id}

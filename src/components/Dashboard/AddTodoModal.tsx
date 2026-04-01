@@ -29,10 +29,10 @@ export function AddTodoModal({ onClose, onCreated }: Props) {
   const handleSave = async () => {
     if (!content.trim()) return
     setSaving(true)
+    // 不传递 student_name，通过 JOIN 查询从 students 表获取最新姓名，避免数据不一致
     await todoDb.create({
       content: content.trim(),
       student_id: selectedStudentId || undefined,
-      student_name: selectedStudent?.name || undefined,
       due_date: dueDate || undefined,
       sort_order: Date.now(),
     })

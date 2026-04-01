@@ -316,7 +316,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
       const pageCards = cards.slice(i, i + perPage)
       // 填充空白卡片确保页面完整
       while (pageCards.length < perPage) {
-        pageCards.push('<div class="student-card"><div class="no-plan"></div></div>')
+        pageCards.push('<div class="plan-card"></div>')
       }
       pages.push(`<div class="page">${pageCards.join('')}</div>`)
     }

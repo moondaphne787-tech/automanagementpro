@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { ArrowLeft, Plus, Trash2, Clock, Calendar, Phone, GraduationCap, Award, Edit, AlertTriangle, Check, TrendingUp, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 import { teacherDb, teacherAvailabilityDb, scheduledClassDb } from '@/db'
 import type { Teacher, TeacherAvailability, ScheduledClass, DayOfWeek, TrainingStage } from '@/types'
@@ -155,9 +157,10 @@ export function TeacherDetail() {
         week_start: ''
       })
       loadData()
+      toast.success('时段添加成功')
     } catch (error) {
       console.error('Failed to add availability:', error)
-      alert('添加失败，请重试')
+      toast.error('添加失败，请重试')
     } finally {
       setSaving(false)
     }
@@ -167,7 +170,13 @@ export function TeacherDetail() {
   const handleCopyGeneralToWeek = async () => {
     if (!id || generalAvailabilities.length === 0) return
     
-    if (!confirm('确定要将通用时段复制到本周吗？这将保留原有的通用时段，同时为本周创建副本。')) return
+    const confirmed = await confirmDialog({
+      title: '复制时段',
+      message: '确定要将通用时段复制到本周吗？这将保留原有的通用时段，同时为本周创建副本。',
+      confirmText: '复制',
+      variant: 'info'
+    })
+    if (!confirmed) return
     
     try {
       setSaving(true)
@@ -182,9 +191,10 @@ export function TeacherDetail() {
         })
       }
       loadData()
+      toast.success('时段复制成功')
     } catch (error) {
       console.error('Failed to copy availability:', error)
-      alert('复制失败，请重试')
+      toast.error('复制失败，请重试')
     } finally {
       setSaving(false)
     }
@@ -194,7 +204,13 @@ export function TeacherDetail() {
   const handleClearWeekAvailability = async () => {
     if (!id || currentWeekAvailabilities.length === 0) return
     
-    if (!confirm('确定要清除本周的特定时段吗？')) return
+    const confirmed = await confirmDialog({
+      title: '清除时段',
+      message: '确定要清除本周的特定时段吗？',
+      confirmText: '清除',
+      variant: 'warning'
+    })
+    if (!confirmed) return
     
     try {
       setSaving(true)
@@ -202,9 +218,10 @@ export function TeacherDetail() {
         await teacherAvailabilityDb.delete(a.id)
       }
       loadData()
+      toast.success('本周时段已清除')
     } catch (error) {
       console.error('Failed to clear week availability:', error)
-      alert('清除失败，请重试')
+      toast.error('清除失败，请重试')
     } finally {
       setSaving(false)
     }
@@ -212,14 +229,21 @@ export function TeacherDetail() {
   
   // 删除时段
   const handleDeleteAvailability = async (availabilityId: string) => {
-    if (!confirm('确定要删除这个时段吗？')) return
+    const confirmed = await confirmDialog({
+      title: '删除时段',
+      message: '确定要删除这个时段吗？',
+      confirmText: '删除',
+      variant: 'danger'
+    })
+    if (!confirmed) return
     
     try {
       await teacherAvailabilityDb.delete(availabilityId)
       loadData()
+      toast.success('时段已删除')
     } catch (error) {
       console.error('Failed to delete availability:', error)
-      alert('删除失败，请重试')
+      toast.error('删除失败，请重试')
     }
   }
   
@@ -244,9 +268,10 @@ export function TeacherDetail() {
       })
       setEditDialogOpen(false)
       loadData()
+      toast.success('助教信息已更新')
     } catch (error) {
       console.error('Failed to update teacher:', error)
-      alert('更新失败，请重试')
+      toast.error('更新失败，请重试')
     } finally {
       setSaving(false)
     }

@@ -2,7 +2,17 @@ import * as XLSX from 'xlsx'
 import { parseFeedback } from './feedbackParser'
 import type { TaskBlock } from '@/types'
 
-// Excel 列名到系统字段的映射
+/**
+ * Excel 列名到系统字段的映射
+ * 
+ * 注意：当有多个相似的列名映射到同一字段时（如"今日主要学习内容"和"今日词库主要学习内容"），
+ * 识别逻辑会按以下优先级处理：
+ * 1. 精确匹配：列名完全等于映射键
+ * 2. 忽略列表：检查是否包含忽略关键词
+ * 3. 模糊匹配：列名包含映射键，或映射键包含列名
+ * 
+ * 这确保了"今日主要学习内容"和"今日词库主要学习内容"可以被精确区分。
+ */
 const COLUMN_MAPPING: Record<string, string> = {
   '署名': 'student_name',
   '学生到课情况': 'attendance',
@@ -10,7 +20,7 @@ const COLUMN_MAPPING: Record<string, string> = {
   '学习时长': 'duration_hours',
   '助教老师': 'teacher_name',
   '今日主要学习内容': 'content',
-  '今日词库主要学习内容': 'content',
+  '今日词库主要学习内容': 'wordbank_content', // 词库学习内容单独映射，与普通学习内容区分
   '词库': 'wordbank',
   '已学到词库的第几关': 'level',
   '清理九宫格多少个词': 'nine_grid_count',
@@ -20,7 +30,10 @@ const COLUMN_MAPPING: Record<string, string> = {
   '备注': 'notes'
 }
 
-// 忽略的字段
+/**
+ * 忽略的字段列表
+ * 包含这些关键词的列将被跳过，不进行数据提取
+ */
 const IGNORED_COLUMNS = [
   '请各位助教自查',
   '当日计划本',
@@ -61,21 +74,43 @@ export interface ParseResult {
 
 /**
  * 识别列名
+ * 
+ * 优先级：
+ * 1. 精确匹配：列名完全等于映射键 → 返回对应的字段
+ * 2. 忽略列表：列名包含忽略关键词 → 返回 ignored
+ * 3. 模糊匹配：列名包含映射键，或映射键包含列名 → 返回对应的字段
+ * 4. 未识别：返回 unrecognized
+ * 
+ * 这种优先级确保了：
+ * - "今日主要学习内容" 不会被误识别为包含 "今日词库主要学习内容" 的映射
+ * - 精确匹配优先于模糊匹配，避免相似的列名互相干扰
  */
-function identifyColumn(colName: string): { field: string | null; status: 'recognized' | 'ignored' | 'unrecognized' } {
+export function identifyColumn(colName: string): { field: string | null; status: 'recognized' | 'ignored' | 'unrecognized' } {
   const trimmedName = colName.trim()
   
-  // 检查是否在忽略列表中
+  // 边界情况：空字符串或只有空格的列名直接返回未识别
+  if (trimmedName === '') {
+    return { field: null, status: 'unrecognized' }
+  }
+  
+  // 1. 精确匹配：检查列名是否完全等于某个映射键
+  if (COLUMN_MAPPING[trimmedName]) {
+    return { field: COLUMN_MAPPING[trimmedName], status: 'recognized' }
+  }
+  
+  // 2. 检查是否在忽略列表中（列名包含忽略关键词）
   for (const ignored of IGNORED_COLUMNS) {
     if (trimmedName.includes(ignored)) {
       return { field: null, status: 'ignored' }
     }
   }
   
-  // 检查是否有映射
-  for (const [key, field] of Object.entries(COLUMN_MAPPING)) {
-    if (trimmedName.includes(key)) {
-      return { field, status: 'recognized' }
+  // 3. 模糊匹配：列名包含映射键，或映射键包含列名
+  // 注意：使用更长的键优先匹配，避免短键抢先匹配
+  const sortedKeys = Object.keys(COLUMN_MAPPING).sort((a, b) => b.length - a.length)
+  for (const key of sortedKeys) {
+    if (trimmedName.includes(key) || key.includes(trimmedName)) {
+      return { field: COLUMN_MAPPING[key], status: 'recognized' }
     }
   }
   

@@ -11,9 +11,12 @@ import {
   FileDown,
   Zap,
   LayoutDashboard,
-  Clock
+  Clock,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/store/appStore'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: '工作台' },
@@ -38,13 +41,40 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onQuickAction }: SidebarProps) {
+  const { sidebarCollapsed, toggleSidebar } = useAppStore()
+  
   return (
-    <aside className="w-56 h-screen bg-card border-r flex flex-col">
+    <aside className={cn(
+      "h-screen bg-card border-r flex flex-col transition-all duration-200",
+      sidebarCollapsed ? "w-14" : "w-56"
+    )}>
       {/* Logo区域 - 添加左边距避开macOS窗口控制按钮 */}
-      <div className="h-16 flex items-center px-4 border-b" style={{ paddingLeft: '80px' }}>
-        <h1 className="text-lg font-semibold text-primary">EduManager</h1>
-        <span className="ml-2 text-xs text-muted-foreground">Pro</span>
+      <div className={cn(
+        "h-16 flex items-center px-4 border-b",
+        sidebarCollapsed ? "justify-center" : ""
+      )} style={!sidebarCollapsed ? { paddingLeft: '80px' } : {}}>
+        {sidebarCollapsed ? (
+          <h1 className="text-lg font-semibold text-primary">E</h1>
+        ) : (
+          <>
+            <h1 className="text-lg font-semibold text-primary">EduManager</h1>
+            <span className="ml-2 text-xs text-muted-foreground">Pro</span>
+          </>
+        )}
       </div>
+      
+      {/* 折叠按钮 */}
+      <button
+        onClick={toggleSidebar}
+        className="absolute top-4 right-0 translate-x-1/2 z-10 w-6 h-6 bg-card border rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-sm"
+        title={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
+      >
+        {sidebarCollapsed ? (
+          <ChevronRight className="h-3 w-3" />
+        ) : (
+          <ChevronLeft className="h-3 w-3" />
+        )}
+      </button>
       
       {/* 导航区 */}
       <nav className="flex-1 p-3 space-y-1">
@@ -57,28 +87,36 @@ export function Sidebar({ onQuickAction }: SidebarProps) {
                 "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
                 isActive
                   ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                sidebarCollapsed && "justify-center px-0"
               )
             }
+            title={sidebarCollapsed ? item.label : undefined}
           >
-            <item.icon className="h-4 w-4" />
-            {item.label}
+            <item.icon className="h-4 w-4 flex-shrink-0" />
+            {!sidebarCollapsed && item.label}
           </NavLink>
         ))}
       </nav>
       
       {/* 快捷功能区 */}
       <div className="p-3 border-t">
-        <div className="text-xs text-muted-foreground mb-2 px-3">快捷操作</div>
+        {!sidebarCollapsed && (
+          <div className="text-xs text-muted-foreground mb-2 px-3">快捷操作</div>
+        )}
         <div className="space-y-1">
           {quickActions.map((action) => (
             <button
               key={action.action}
               onClick={() => onQuickAction?.(action.action)}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors",
+                sidebarCollapsed && "justify-center px-0"
+              )}
+              title={sidebarCollapsed ? action.label : undefined}
             >
-              <action.icon className="h-4 w-4" />
-              {action.label}
+              <action.icon className="h-4 w-4 flex-shrink-0" />
+              {!sidebarCollapsed && action.label}
             </button>
           ))}
         </div>
