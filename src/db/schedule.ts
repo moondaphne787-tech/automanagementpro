@@ -198,7 +198,23 @@ export const scheduledClassDb = {
     rescheduled_from_id?: string
     cancel_reason?: string
     notes?: string
+    skipConflictCheck?: boolean  // 跳过冲突检查（用于内部调用如reschedule）
   }): Promise<ScheduledClass> {
+    // 检查学员时段冲突（仅对 scheduled 状态检查）
+    if (data.status !== 'cancelled' && data.status !== 'rescheduled' && !data.skipConflictCheck) {
+      if (data.start_time && data.end_time) {
+        const studentConflict = await this.checkStudentConflict(
+          data.student_id,
+          data.class_date,
+          data.start_time,
+          data.end_time
+        )
+        if (studentConflict) {
+          throw new Error(`学员该时段已有排课：${data.class_date} ${data.start_time}-${data.end_time}`)
+        }
+      }
+    }
+    
     const id = generateId()
     const now = new Date().toISOString()
     
@@ -326,7 +342,7 @@ export const scheduledClassDb = {
     await ipcQuery(`DELETE FROM scheduled_classes WHERE id = ?`, [id])
   },
   
-  // 检查时段冲突
+  // 检查助教时段冲突
   async checkConflict(teacherId: string, date: string, startTime: string, endTime: string, excludeId?: string): Promise<ScheduledClass | null> {
     let sql = `
       SELECT * FROM scheduled_classes 
@@ -334,6 +350,24 @@ export const scheduledClassDb = {
       AND ((start_time <= ? AND end_time > ?) OR (start_time < ? AND end_time >= ?) OR (start_time >= ? AND end_time <= ?))
     `
     const params: unknown[] = [teacherId, date, startTime, startTime, endTime, endTime, startTime, endTime]
+    
+    if (excludeId) {
+      sql += ` AND id != ?`
+      params.push(excludeId)
+    }
+    
+    const result = await ipcQueryOne<ScheduledClass>(sql, params)
+    return result || null
+  },
+  
+  // 检查学员时段冲突（防止同一学员同一时间重复排课）
+  async checkStudentConflict(studentId: string, date: string, startTime: string, endTime: string, excludeId?: string): Promise<ScheduledClass | null> {
+    let sql = `
+      SELECT * FROM scheduled_classes 
+      WHERE student_id = ? AND class_date = ? AND status = 'scheduled'
+      AND ((start_time <= ? AND end_time > ?) OR (start_time < ? AND end_time >= ?) OR (start_time >= ? AND end_time <= ?))
+    `
+    const params: unknown[] = [studentId, date, startTime, startTime, endTime, endTime, startTime, endTime]
     
     if (excludeId) {
       sql += ` AND id != ?`
@@ -353,18 +387,29 @@ export const scheduledClassDb = {
     end_time?: string
     duration_hours?: number
     notes?: string
-  }>): Promise<{ success: number; failed: number; conflicts: string[] }> {
+  }>): Promise<{ success: number; failed: number; conflicts: string[]; studentConflicts: string[] }> {
     let success = 0
     let failed = 0
     const conflicts: string[] = []
+    const studentConflicts: string[] = []
     
     for (const cls of classes) {
       try {
-        // 检查冲突
+        // 检查助教冲突
         if (cls.teacher_id && cls.start_time && cls.end_time) {
-          const conflict = await this.checkConflict(cls.teacher_id, cls.class_date, cls.start_time, cls.end_time)
-          if (conflict) {
-            conflicts.push(`${cls.class_date} ${cls.start_time}-${cls.end_time}`)
+          const teacherConflict = await this.checkConflict(cls.teacher_id, cls.class_date, cls.start_time, cls.end_time)
+          if (teacherConflict) {
+            conflicts.push(`助教冲突: ${cls.class_date} ${cls.start_time}-${cls.end_time}`)
+            failed++
+            continue
+          }
+        }
+        
+        // 检查学员冲突
+        if (cls.start_time && cls.end_time) {
+          const studentConflict = await this.checkStudentConflict(cls.student_id, cls.class_date, cls.start_time, cls.end_time)
+          if (studentConflict) {
+            studentConflicts.push(`学员冲突: ${cls.class_date} ${cls.start_time}-${cls.end_time}`)
             failed++
             continue
           }
@@ -378,7 +423,7 @@ export const scheduledClassDb = {
       }
     }
     
-    return { success, failed, conflicts }
+    return { success, failed, conflicts, studentConflicts }
   },
   
   // 调课
@@ -386,21 +431,39 @@ export const scheduledClassDb = {
     const original = await this.getById(id)
     if (!original) throw new Error('Scheduled class not found')
     
+    const startTime = newStartTime || original.start_time || undefined
+    const endTime = newEndTime || original.end_time || undefined
+    
+    // 检查新时段是否有学员冲突（排除原课程）
+    if (startTime && endTime) {
+      const studentConflict = await this.checkStudentConflict(
+        original.student_id,
+        newDate,
+        startTime,
+        endTime,
+        id  // 排除原课程
+      )
+      if (studentConflict) {
+        throw new Error(`学员新时段已有排课：${newDate} ${startTime}-${endTime}`)
+      }
+    }
+    
     // 创建新记录（状态为 scheduled，表示新的有效排课）
     const newClass = await this.create({
       student_id: original.student_id,
       teacher_id: newTeacherId || original.teacher_id || undefined,
       class_date: newDate,
-      start_time: newStartTime || original.start_time || undefined,
-      end_time: newEndTime || original.end_time || undefined,
+      start_time: startTime,
+      end_time: endTime,
       duration_hours: original.duration_hours,
       status: 'scheduled',
       rescheduled_from_id: id,
-      notes: `调课自 ${original.class_date}`
+      notes: `调课自 ${original.class_date}`,
+      skipConflictCheck: true  // 已在上文检查，跳过重复检查
     })
     
     // 更新原记录状态为 rescheduled，表示已被调走
-    await this.update(id, { status: 'rescheduled', cancel_reason: `已调课至 ${newDate} ${newStartTime || ''}` })
+    await this.update(id, { status: 'rescheduled', cancel_reason: `已调课至 ${newDate} ${startTime || ''}` })
     
     return newClass
   },

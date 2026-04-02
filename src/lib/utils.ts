@@ -2,7 +2,24 @@ import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import type { Teacher } from '@/types'
 
-// 从 dateUtils.ts 重新导出日期相关函数，保持向后兼容
+/**
+ * 日期工具函数说明（统一从 dateUtils.ts 导出）:
+ * 
+ * - formatDateISO(date: Date): string
+ *   使用 UTC 时区格式化为 YYYY-MM-DD。注意：可能与本地时区有差异。
+ * 
+ * - formatLocalDate(date: Date): string
+ *   使用本地时区格式化为 YYYY-MM-DD。推荐用于获取"今天"等本地日期。
+ * 
+ * - formatDateDisplay(dateStr: string): string
+ *   格式化为中文显示，如 "3月24日 周一"。
+ * 
+ * - formatDateCN(date: string|Date|null): string
+ *   格式化为中文日期格式，如 "2024/01/15"。用于显示日期给用户。
+ * 
+ * - getDayOfWeek(dateInput: string | Date): DayOfWeek
+ *   返回日期对应的星期（'monday', 'tuesday', ...）。
+ */
 export {
   formatDateISO,
   formatLocalDate,
@@ -68,8 +85,14 @@ export function matchTeacherByName(name: string, teachers: Teacher[]): Teacher |
   return null
 }
 
-// 格式化日期
-export function formatDate(date: string | Date | null | undefined): string {
+/**
+ * 格式化日期为中文显示格式
+ * 将日期格式化为 "2024/01/15" 这样的中文日期格式
+ * 
+ * @param date - 日期字符串 (YYYY-MM-DD)、Date 对象、null 或 undefined
+ * @returns 格式化后的日期字符串，如 "2024/01/15"；输入为空时返回 "-"
+ */
+export function formatDateCN(date: string | Date | null | undefined): string {
   if (!date) return '-'
   const d = typeof date === 'string' ? new Date(date) : date
   return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })

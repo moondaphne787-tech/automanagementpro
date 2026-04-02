@@ -13,7 +13,8 @@ import {
   LayoutDashboard,
   Clock,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  BookText
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
@@ -24,6 +25,7 @@ const navItems = [
   { to: '/trial', icon: UserPlus, label: '体验生' },
   { to: '/schedule', icon: Calendar, label: '排课' },
   { to: '/preferences', icon: Clock, label: '时段偏好' },
+  { to: '/reading-checkin', icon: BookText, label: '朗读打卡' },
   { to: '/teachers', icon: GraduationCap, label: '助教' },
   { to: '/phases', icon: BookOpen, label: '学习阶段' },
   { to: '/settings', icon: Settings, label: '设置' },

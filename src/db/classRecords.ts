@@ -91,18 +91,32 @@ export const classRecordDb = {
   },
   
   // 获取课堂记录及关联的计划信息
-  async getWithPlan(studentId: string, limit?: number): Promise<(ClassRecord & { plan?: LessonPlan })[]> {
+  async getWithPlan(studentId: string, options?: { startDate?: string; endDate?: string; limit?: number }): Promise<(ClassRecord & { plan?: LessonPlan })[]> {
     let sql = `
       SELECT cr.*, lp.id as plan_id_ref, lp.tasks as plan_tasks, lp.notes as plan_notes, lp.ai_reason as plan_ai_reason
       FROM class_records cr
       LEFT JOIN lesson_plans lp ON cr.plan_id = lp.id
       WHERE cr.student_id = ?
-      ORDER BY cr.class_date DESC
     `
-    if (limit) {
-      sql += ` LIMIT ${limit}`
+    const params: unknown[] = [studentId]
+    
+    // 添加日期范围过滤
+    if (options?.startDate) {
+      sql += ` AND cr.class_date >= ?`
+      params.push(options.startDate)
     }
-    const records = await ipcQuery<any[]>(sql, [studentId])
+    if (options?.endDate) {
+      sql += ` AND cr.class_date <= ?`
+      params.push(options.endDate)
+    }
+    
+    sql += ` ORDER BY cr.class_date DESC`
+    
+    if (options?.limit) {
+      sql += ` LIMIT ${options.limit}`
+    }
+    
+    const records = await ipcQuery<any[]>(sql, params)
     return records.map(record => {
       const classRecord: ClassRecord & { plan?: LessonPlan } = {
         id: record.id,
@@ -373,6 +387,116 @@ export const classRecordDb = {
     return result
   },
   
+  /**
+   * 批量创建课堂记录并原子性更新课时（使用事务保障）
+   * 确保所有记录插入和课时更新要么全部成功，要么全部回滚
+   * @param records 课堂记录数组
+   * @param billingUpdates 课时更新映射（studentId -> hoursDelta）
+   * @returns 成功创建的记录数量
+   */
+  async batchCreateWithBillingUpdate(
+    records: Array<{
+      student_id: string
+      class_date: string
+      duration_hours?: number
+      teacher_name?: string
+      attendance?: 'present' | 'absent' | 'late'
+      tasks: unknown[]
+      task_completed?: 'completed' | 'partial' | 'not_completed'
+      incomplete_reason?: string
+      performance?: 'excellent' | 'good' | 'needs_improvement'
+      detail_feedback?: string
+      highlights?: string
+      issues?: string
+      checkin_completed?: boolean
+      phase_id?: string
+      plan_id?: string
+      imported_from_excel?: boolean
+    }>,
+    billingUpdates: Map<string, number>  // studentId -> hoursDelta
+  ): Promise<number> {
+    if (records.length === 0) return 0
+    
+    const now = new Date().toISOString()
+    const statements: Array<{ sql: string; params: unknown[] }> = []
+    
+    // 预先查询所有需要的 plan_id（避免事务内嵌套查询）
+    const planQueryDates = new Map<string, Set<string>>()  // studentId -> Set<date>
+    for (const data of records) {
+      if (!data.plan_id) {
+        if (!planQueryDates.has(data.student_id)) {
+          planQueryDates.set(data.student_id, new Set())
+        }
+        planQueryDates.get(data.student_id)!.add(data.class_date)
+      }
+    }
+    
+    // 批量查询 plan_id
+    const planIdMap = new Map<string, string>()  // "studentId:date" -> planId
+    for (const [studentId, dates] of planQueryDates) {
+      for (const date of dates) {
+        const plan = await ipcQueryOne<{ id: string }>(
+          `SELECT id FROM lesson_plans WHERE student_id = ? AND plan_date = ? LIMIT 1`,
+          [studentId, date]
+        )
+        if (plan?.id) {
+          planIdMap.set(`${studentId}:${date}`, plan.id)
+        }
+      }
+    }
+    
+    // 构建所有插入语句
+    for (const data of records) {
+      const id = generateId()
+      
+      // 获取 plan_id
+      let planId = data.plan_id || null
+      if (!planId) {
+        planId = planIdMap.get(`${data.student_id}:${data.class_date}`) || null
+      }
+      
+      statements.push({
+        sql: `INSERT INTO class_records (id, student_id, class_date, duration_hours, teacher_name, attendance, tasks, task_completed, incomplete_reason, performance, detail_feedback, highlights, issues, checkin_completed, phase_id, plan_id, imported_from_excel, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        params: [
+          id, 
+          data.student_id, 
+          data.class_date, 
+          data.duration_hours || 1, 
+          data.teacher_name || null,
+          data.attendance || 'present',
+          JSON.stringify(data.tasks),
+          data.task_completed || 'completed',
+          data.incomplete_reason || null,
+          data.performance || 'good',
+          data.detail_feedback || null,
+          data.highlights || null,
+          data.issues || null,
+          data.checkin_completed ? 1 : 0,
+          data.phase_id || null,
+          planId,
+          data.imported_from_excel ? 1 : 0,
+          now
+        ]
+      })
+    }
+    
+    // 添加课时更新语句
+    for (const [studentId, hoursDelta] of billingUpdates) {
+      if (hoursDelta > 0) {
+        statements.push({
+          sql: `UPDATE billing SET used_hours = used_hours + ?, updated_at = ? WHERE student_id = ?`,
+          params: [hoursDelta, now, studentId]
+        })
+      }
+    }
+    
+    // 执行事务
+    await ipcTransaction(statements)
+    
+    return records.length
+  },
+
   // 获取完成率统计（用于成长档案趋势图）
   async getCompletionRateStats(studentId: string, months: number = 6): Promise<{ date: string; total: number; completed: number; rate: number }[]> {
     const startDate = new Date()

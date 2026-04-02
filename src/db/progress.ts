@@ -1,5 +1,5 @@
 import type { StudentWordbankProgress, Wordbank } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, ipcTransaction } from './utils'
 import { wordbankDb } from './wordbanks'
 
 // 进度操作
@@ -76,7 +76,9 @@ export const progressDb = {
       }
     }
 
-    // 批量执行更新
+    // 收集所有需要执行的语句
+    const statements: Array<{ sql: string; params: unknown[] }> = []
+
     for (const update of uniqueUpdates.values()) {
       const existingProgress = existingProgressMap.get(update.student_id) || []
       const existing = existingProgress.find(p => p.wordbank_id === update.wordbank_id)
@@ -85,24 +87,29 @@ export const progressDb = {
       if (existing) {
         // 只有新关数大于当前关数才更新
         if (update.current_level > existing.current_level || update.last_nine_grid_level) {
-          await ipcQuery(
-            `UPDATE student_wordbank_progress SET current_level = ?, last_nine_grid_level = ?, updated_at = ? WHERE id = ?`,
-            [
+          statements.push({
+            sql: `UPDATE student_wordbank_progress SET current_level = ?, last_nine_grid_level = ?, updated_at = ? WHERE id = ?`,
+            params: [
               Math.max(update.current_level, existing.current_level),
               update.last_nine_grid_level || existing.last_nine_grid_level,
               now,
               existing.id
             ]
-          )
+          })
         }
       } else {
         // 插入新记录
         const id = generateId()
-        await ipcQuery(
-          `INSERT INTO student_wordbank_progress (id, student_id, wordbank_id, wordbank_label, current_level, total_levels_override, last_nine_grid_level, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [id, update.student_id, update.wordbank_id, wordbank?.name || '未知词库', update.current_level, null, update.last_nine_grid_level || 0, 'active', null, now, now]
-        )
+        statements.push({
+          sql: `INSERT INTO student_wordbank_progress (id, student_id, wordbank_id, wordbank_label, current_level, total_levels_override, last_nine_grid_level, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          params: [id, update.student_id, update.wordbank_id, wordbank?.name || '未知词库', update.current_level, null, update.last_nine_grid_level || 0, 'active', null, now, now]
+        })
       }
+    }
+
+    // 使用事务一次性执行所有语句，减少 IPC 往返次数
+    if (statements.length > 0) {
+      await ipcTransaction(statements)
     }
   },
   

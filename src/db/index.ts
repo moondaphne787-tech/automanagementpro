@@ -40,6 +40,10 @@ export { teacherAvailabilityDb, studentSchedulePreferenceDb, scheduledClassDb } 
 // 设置操作
 export { settingsDb } from './settings'
 
+// 朗读打卡操作
+export { readingCheckinDb } from './readingCheckins'
+export type { ReadingCheckinRow, MonthSummaryResult } from './readingCheckins'
+
 // 类型重导出（方便使用）
 export type { 
   Student, 

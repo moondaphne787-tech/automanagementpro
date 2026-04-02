@@ -10,6 +10,23 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 // react-day-picker 样式
 import 'react-day-picker/style.css'
 
+/**
+ * DatePicker - 日历弹窗式日期选择组件
+ * 
+ * 使用场景：低频筛选场景（如日期范围筛选、报表查询等）
+ * 
+ * 特点：
+ * - 日历弹窗式选择，用户可直观查看日期
+ * - 支持年月下拉选择，方便跨月/跨年选择
+ * - 中文本地化显示（如 "2024年01月15日"）
+ * 
+ * 与 DateInput 的区别：
+ * - DateInput 是分框输入式，适合高频表单输入场景
+ * - DatePicker 是日历选择式，适合低频筛选场景
+ * 
+ * 使用规范：筛选场景优先使用 DatePicker，表单输入场景使用 DateInput
+ */
+
 interface DatePickerProps {
   value: string // 格式: YYYY-MM-DD
   onChange: (value: string) => void

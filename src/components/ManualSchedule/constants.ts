@@ -1,5 +1,4 @@
 import type { LevelType } from '@/types'
-import { DAY_LABELS } from '@/types'
 
 // 预设颜色板
 export const TEACHER_COLORS = [
@@ -20,9 +19,6 @@ export const HOUR_WIDTH = 80
 
 // 学生行高度
 export const ROW_HEIGHT = 60
-
-// 星期标签 - 从 @/types 导入并重新导出
-export { DAY_LABELS }
 
 // 程度等级显示
 export const LEVEL_LABELS: Record<LevelType, string> = {

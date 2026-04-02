@@ -4,7 +4,9 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { Student, Teacher, Billing, StudentSchedulePreference, TeacherAvailability, DayOfWeek } from '@/types'
 import type { AIScheduleResult, ScheduleDateConfig } from '@/ai/schedulePrompts'
-import { DAY_LABELS, formatDate, formatDisplayDate, getDayOfWeek, type ScheduleItem } from './types'
+import { DAY_LABELS } from '@/types'
+import { formatDateISO, getDayOfWeek } from '@/lib/utils'
+import { formatDisplayDate, type ScheduleItem } from './types'
 import { generateId } from '@/db/utils'
 
 type StudentWithPrefs = Student & { billing: Billing | null; preferences: StudentSchedulePreference[] }
@@ -139,7 +141,7 @@ export function ArrangeView({
                       if (schedules.length === 0) {
                         schedules = [{
                           id: generateId(),
-                          date: scheduleDates[0]?.date || formatDate(new Date()),
+                          date: scheduleDates[0]?.date || formatDateISO(new Date()),
                           start_time: '09:00',
                           end_time: '11:00',
                           duration_hours: 2

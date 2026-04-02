@@ -3,8 +3,10 @@ import { Check, Loader2, Trash2, ChevronLeft, ChevronRight, ChevronUp, ChevronDo
 import { Button } from '@/components/ui/button'
 import { DateInput } from '@/components/ui/date-input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { HOUR_WIDTH, DAY_LABELS } from './constants'
-import { useManualSchedule, getDayOfWeek, minutesToTime, formatDate } from './hooks/useManualSchedule'
+import { HOUR_WIDTH } from './constants'
+import { DAY_LABELS } from '@/types'
+import { getDayOfWeek, formatDateISO, minutesToTime } from '@/lib/utils'
+import { useManualSchedule } from './hooks/useManualSchedule'
 import { StudentRowComponent } from './StudentRow'
 import { TeacherTimelineRow } from './TeacherTimeline'
 import { TeacherDetailCard } from './TeacherDetailCard'
@@ -208,7 +210,7 @@ export function ManualSchedule({ initialDate }: ManualScheduleProps) {
               if (typeof date === 'string') {
                 setSelectedDate(date)
               } else {
-                setSelectedDate(formatDate(date))
+                setSelectedDate(formatDateISO(date))
               }
             }} />
             <Button variant="outline" size="icon" onClick={goToNextDay}>

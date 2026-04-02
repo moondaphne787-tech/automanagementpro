@@ -396,9 +396,110 @@ export const migrations: Migration[] = [
     }
   },
   
+  // ===== 版本 14: 为 student_schedule_preferences 表添加唯一约束 =====
+  // 解决问题：同一学员+星期+时段可重复插入，导致数据不一致
+  // 修复方案：先去重（保留id最小的记录），再添加唯一约束
+  {
+    version: 14,
+    description: '为 student_schedule_preferences 表添加唯一约束，防止重复偏好记录',
+    up: (db: Database.Database) => {
+      // 步骤 1: 检查是否已存在唯一索引（避免重复创建）
+      const existingUniqueIndex = db.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type = 'index' AND name = 'idx_student_schedule_preferences_unique'
+      `).get()
+      
+      if (existingUniqueIndex) {
+        console.log('Migration v14: Unique index already exists, skipping')
+        return
+      }
+      
+      // 步骤 2: 查找并删除重复记录（保留 id 最小的记录）
+      // 查询重复记录
+      const duplicates = db.prepare(`
+        SELECT student_id, day_of_week, preferred_start, preferred_end, COUNT(*) as cnt
+        FROM student_schedule_preferences
+        GROUP BY student_id, day_of_week, preferred_start, preferred_end
+        HAVING COUNT(*) > 1
+      `).all() as Array<{
+        student_id: string
+        day_of_week: string
+        preferred_start: string
+        preferred_end: string
+        cnt: number
+      }>
+      
+      if (duplicates.length > 0) {
+        console.log(`Migration v14: Found ${duplicates.length} groups of duplicate preferences`)
+        
+        // 对每组重复记录，删除除了 id 最小以外的所有记录
+        for (const dup of duplicates) {
+          const result = db.prepare(`
+            DELETE FROM student_schedule_preferences 
+            WHERE student_id = ? 
+              AND day_of_week = ? 
+              AND preferred_start = ? 
+              AND preferred_end = ?
+              AND id NOT IN (
+                SELECT MIN(id) 
+                FROM student_schedule_preferences 
+                WHERE student_id = ? 
+                  AND day_of_week = ? 
+                  AND preferred_start = ? 
+                  AND preferred_end = ?
+              )
+          `).run(
+            dup.student_id, dup.day_of_week, dup.preferred_start, dup.preferred_end,
+            dup.student_id, dup.day_of_week, dup.preferred_start, dup.preferred_end
+          )
+          
+          if (result.changes > 0) {
+            console.log(`Migration v14: Removed ${result.changes} duplicate preference(s) for student ${dup.student_id}`)
+          }
+        }
+      }
+      
+      // 步骤 3: 创建唯一索引
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_student_schedule_preferences_unique 
+        ON student_schedule_preferences(student_id, day_of_week, preferred_start, preferred_end)
+      `)
+      
+      console.log('Migration v14: Added unique constraint on student_schedule_preferences(student_id, day_of_week, preferred_start, preferred_end)')
+    }
+  },
+  
+  // ===== 版本 15: 添加朗读打卡表 =====
+  {
+    version: 15,
+    description: '添加朗读打卡表 reading_checkins',
+    up: (db: Database.Database) => {
+      // 创建朗读打卡表
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS reading_checkins (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+          checked_date TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+          UNIQUE(student_id, checked_date)
+        )
+      `)
+      
+      // 创建索引
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_reading_checkins_student_id ON reading_checkins(student_id)
+      `)
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_reading_checkins_date ON reading_checkins(checked_date)
+      `)
+      
+      console.log('Migration v15: Added reading_checkins table with indexes')
+    }
+  },
+  
   // ===== 后续迁移在此添加 =====
   // {
-  //   version: 13,
+  //   version: 16,
   //   description: '描述此次迁移的目的',
   //   up: (db: Database.Database) => {
   //     // 迁移逻辑

@@ -1,7 +1,5 @@
-import { DAY_LABELS } from '@/types'
 import type { DayOfWeek } from '@/types'
 import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
-import { formatDateISO, getDayOfWeek } from '@/lib/utils'
 
 // 视图模式类型
 export type ViewMode = 'week' | 'arrange' | 'manual'
@@ -29,12 +27,6 @@ export const EVENING_SLOTS: string[] = []
 for (let h = 18; h <= 21; h++) {
   EVENING_SLOTS.push(`${h.toString().padStart(2, '0')}:00`)
 }
-
-// 星期标签 - 从 @/types 导入并重新导出
-export { DAY_LABELS }
-
-// 日期工具函数 - 从 @/lib/utils 导入并重新导出
-export { formatDateISO as formatDate, getDayOfWeek }
 
 // 格式化日期显示（保留，用于特殊格式需求）
 export function formatDisplayDate(date: Date): string {

@@ -188,6 +188,30 @@ export interface DashboardSlice {
   isDashboardCacheValid: (staleTime: number) => boolean
 }
 
+// ===== 朗读打卡 Slice 类型 =====
+export interface ReadingCheckinSlice {
+  // 状态
+  selectedYear: number
+  selectedMonth: number
+  checkinStudents: import('./readingCheckinSlice').CheckinStudent[]
+  totalStudents: number
+  todayCheckedCount: number
+  todayDate: string
+  checkinLoading: boolean
+  
+  // 搜索和过滤
+  searchQuery: string
+  showOnlyUnchecked: boolean
+  
+  // 操作
+  setSelectedMonth: (year: number, month: number) => void
+  fetchMonthSummary: () => Promise<void>
+  checkToday: (studentId: string, studentName: string) => Promise<void>
+  uncheckToday: (studentId: string, studentName: string) => Promise<void>
+  setSearchQuery: (query: string) => void
+  toggleShowOnlyUnchecked: () => void
+}
+
 // ===== 完整 AppState 类型 =====
 export type AppState = StudentSlice & 
   WordbankSlice & 
@@ -197,4 +221,5 @@ export type AppState = StudentSlice &
   LearningPhaseSlice & 
   SemesterConfigSlice &
   UISlice & 
-  DashboardSlice
+  DashboardSlice &
+  ReadingCheckinSlice

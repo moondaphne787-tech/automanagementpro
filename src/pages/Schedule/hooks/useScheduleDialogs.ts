@@ -4,7 +4,9 @@ import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { scheduledClassDb, studentSchedulePreferenceDb } from '@/db'
 import { generateId } from '@/db/utils'
 import type { ScheduledClass, DayOfWeek, Student, Billing, StudentSchedulePreference } from '@/types'
-import { DAY_LABELS, formatDate, getDayOfWeek, type ScheduleItem } from '../types'
+import { DAY_LABELS } from '@/types'
+import { formatDateISO, getDayOfWeek } from '@/lib/utils'
+import { type ScheduleItem } from '../types'
 import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
 
 type StudentWithPrefs = Student & { billing: Billing | null; preferences: StudentSchedulePreference[] }
@@ -241,7 +243,7 @@ export function useScheduleDialogs(
   const initClassFormForCreate = useCallback((date?: string, time?: string) => {
     const initialSchedule: ScheduleItem = {
       id: generateId(),
-      date: date || scheduleDates[0]?.date || formatDate(new Date()),
+      date: date || scheduleDates[0]?.date || formatDateISO(new Date()),
       start_time: time || '09:00',
       end_time: time ? `${(parseInt(time.split(':')[0]) + 2).toString().padStart(2, '0')}:${time.split(':')[1]}` : '11:00',
       duration_hours: 2
@@ -435,9 +437,6 @@ export function useScheduleDialogs(
       closeDialog('rescheduleDialog')
       setReschedulingClass(null)
       loadData()
-      closeDialog('rescheduleDialog')
-      setReschedulingClass(null)
-      loadData()
       toast.success('调课成功')
       return true
     } catch (error) {
@@ -452,9 +451,6 @@ export function useScheduleDialogs(
 
     try {
       await scheduledClassDb.cancel(editing.cancellingClass.id, forms.cancelReason || undefined)
-      closeDialog('cancelDialog')
-      setCancellingClass(null)
-      loadData()
       closeDialog('cancelDialog')
       setCancellingClass(null)
       loadData()
@@ -482,8 +478,6 @@ export function useScheduleDialogs(
       const prefs = await studentSchedulePreferenceDb.getByStudentId(editing.selectedStudent.id)
       setSelectedStudent({ ...editing.selectedStudent, preferences: prefs })
       loadData()
-      setSelectedStudent({ ...editing.selectedStudent, preferences: prefs })
-      loadData()
       toast.success('时段偏好已添加')
       return true
     } catch (error) {
@@ -499,8 +493,6 @@ export function useScheduleDialogs(
     try {
       await studentSchedulePreferenceDb.delete(prefId)
       const prefs = await studentSchedulePreferenceDb.getByStudentId(editing.selectedStudent.id)
-      setSelectedStudent({ ...editing.selectedStudent, preferences: prefs })
-      loadData()
       setSelectedStudent({ ...editing.selectedStudent, preferences: prefs })
       loadData()
       toast.success('时段偏好已删除')

@@ -1,6 +1,23 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
+/**
+ * DateInput - 年/月/日 分框输入组件
+ * 
+ * 使用场景：高频输入场景（如课堂记录日期、学员入学日期等表单）
+ * 
+ * 特点：
+ * - 三框分离式输入（年/月/日），适合快速键盘输入
+ * - 自动跳转（年份满 4 位跳月份，月份满 2 位跳日期）
+ * - 输入验证（月份 01-12，日期 01-31）
+ * 
+ * 与 DatePicker 的区别：
+ * - DatePicker 是日历弹窗式选择，适合低频筛选场景
+ * - DateInput 是直接输入式，适合高频表单场景
+ * 
+ * 使用规范：请勿随意混用，表单输入优先使用 DateInput
+ */
+
 interface DateInputProps {
   value: string // 格式: YYYY-MM-DD
   onChange: (value: string) => void

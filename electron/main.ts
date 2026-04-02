@@ -79,10 +79,34 @@ async function initDatabase() {
   }
 }
 
+/**
+ * 创建数据库基础表结构（v0 基线）
+ * 
+ * ⚠️ 重要说明：
+ * 此函数仅用于新安装用户的初始化建表，定义的是 v0 版本的基础表结构。
+ * 
+ * 【字段演进原则】
+ * - 所有后续字段变更（ADD COLUMN、字段类型修改等）必须在迁移系统中维护
+ * - 迁移文件位置：electron/migrations/migrationRunner.ts
+ * - 不要在此函数中添加新字段，只需添加迁移版本即可
+ * 
+ * 【为什么这样设计？】
+ * - 已有用户通过迁移系统获取新字段
+ * - 新安装用户通过此函数获取基础表，然后通过迁移系统应用到最新版本
+ * - 避免双重维护导致的不一致风险
+ * 
+ * 【示例】
+ * 假设需要为 students 表添加 reading_progress 字段：
+ * ❌ 错误：在此函数的 CREATE TABLE 中添加 reading_progress TEXT
+ * ✅ 正确：在 migrationRunner.ts 中添加新迁移版本，使用 ALTER TABLE 添加字段
+ * 
+ * @see electron/migrations/migrationRunner.ts 迁移系统
+ */
 function createTables() {
   if (!db) return
 
   // 学员表
+  // 注：reading_progress 字段由迁移 v12 添加，此处不重复定义
   db.exec(`
     CREATE TABLE IF NOT EXISTS students (
       id TEXT PRIMARY KEY,
@@ -647,6 +671,104 @@ ipcMain.handle('fs:writeFile', async (_event, filePath: string, base64Data: stri
     return { success: true }
   } catch (error) {
     console.error('Write file error:', error)
+    throw error
+  }
+})
+
+// === 朗读打卡相关 IPC 处理程序 ===
+
+// 获取某月所有在读学员的打卡统计
+ipcMain.handle('reading-checkin:getMonthSummary', async (_event, { year, month }) => {
+  if (!db) throw new Error('Database not initialized')
+  
+  const monthPrefix = `${year}-${String(month).padStart(2, '0')}%`
+  const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+  
+  const rows = db.prepare(`
+    SELECT
+      s.id,
+      s.name,
+      COUNT(rc.id) AS monthly_count,
+      MAX(CASE WHEN rc.checked_date = ? THEN 1 ELSE 0 END) AS checked_today
+    FROM students s
+    LEFT JOIN reading_checkins rc
+      ON rc.student_id = s.id
+      AND rc.checked_date LIKE ?
+    WHERE s.status = 'active'
+    GROUP BY s.id
+    ORDER BY 
+      MAX(CASE WHEN rc.checked_date = ? THEN 1 ELSE 0 END) ASC,
+      s.name ASC
+  `).all(today, monthPrefix, today) as Array<{
+    id: string
+    name: string
+    monthly_count: number
+    checked_today: number
+  }>
+  
+  // 获取在读学员总数
+  const totalStudents = db.prepare(`
+    SELECT COUNT(*) as count FROM students WHERE status = 'active'
+  `).get() as { count: number }
+  
+  // 获取今日已打卡人数
+  const todayCheckedCount = db.prepare(`
+    SELECT COUNT(DISTINCT student_id) as count 
+    FROM reading_checkins 
+    WHERE checked_date = ?
+  `).get(today) as { count: number }
+  
+  return {
+    students: rows,
+    totalStudents: totalStudents.count,
+    todayCheckedCount: todayCheckedCount.count,
+    today
+  }
+})
+
+// 今日打卡
+ipcMain.handle('reading-checkin:checkToday', async (_event, { studentId }) => {
+  if (!db) throw new Error('Database not initialized')
+  
+  const today = new Date().toISOString().split('T')[0]
+  
+  try {
+    // 使用 INSERT OR IGNORE 防止重复打卡
+    const result = db.prepare(`
+      INSERT OR IGNORE INTO reading_checkins (student_id, checked_date)
+      VALUES (?, ?)
+    `).run(studentId, today)
+    
+    return {
+      success: true,
+      inserted: result.changes > 0,
+      today
+    }
+  } catch (error) {
+    console.error('Check today error:', error)
+    throw error
+  }
+})
+
+// 撤销今日打卡
+ipcMain.handle('reading-checkin:uncheckToday', async (_event, { studentId }) => {
+  if (!db) throw new Error('Database not initialized')
+  
+  const today = new Date().toISOString().split('T')[0]
+  
+  try {
+    const result = db.prepare(`
+      DELETE FROM reading_checkins 
+      WHERE student_id = ? AND checked_date = ?
+    `).run(studentId, today)
+    
+    return {
+      success: true,
+      deleted: result.changes > 0,
+      today
+    }
+  } catch (error) {
+    console.error('Uncheck today error:', error)
     throw error
   }
 })

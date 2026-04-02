@@ -9,7 +9,7 @@ import type {
   DayOfWeek
 } from './types'
 import { HOUR_WIDTH, ROW_HEIGHT } from './constants'
-import { getDayOfWeek, timeToMinutes } from './hooks/useManualSchedule'
+import { getDayOfWeek, timeToMinutes } from '@/lib/utils'
 
 interface TeacherTimelineRowProps {
   card: TeacherCardData

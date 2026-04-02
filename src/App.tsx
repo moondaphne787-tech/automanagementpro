@@ -19,6 +19,7 @@ import { TeacherDetail } from '@/pages/TeacherDetail'
 import { Schedule } from '@/pages/Schedule'
 import { PhasesPage } from '@/pages/PhasesPage'
 import { PreferenceManage } from '@/pages/PreferenceManage'
+import { ReadingCheckin } from '@/pages/ReadingCheckin'
 
 function App() {
   const [importDrawerOpen, setImportDrawerOpen] = useState(false)
@@ -59,6 +60,7 @@ function App() {
           <Route path="/teachers" element={<TeacherList />} />
           <Route path="/teachers/:id" element={<TeacherDetail />} />
           <Route path="/phases" element={<PhasesPage />} />
+          <Route path="/reading-checkin" element={<ReadingCheckin />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>

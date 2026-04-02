@@ -18,9 +18,6 @@ import type {
 } from '../types'
 import { TEACHER_COLORS, LEVEL_LABELS } from '../constants'
 
-// 重新导出统一工具函数，保持对外接口不变
-export { formatDateISO as formatDate, getDayOfWeek, timeToMinutes, minutesToTime } from '@/lib/utils'
-
 // 计算时间范围
 export function getTimeRange(slots: StudentSlot[]): TimeRange {
   let startMin = 8 * 60 // 默认从8点开始

@@ -391,30 +391,6 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                 </div>
               )}
             </div>
-
-            {/* 底部操作栏 */}
-            <div className="h-16 border-t flex items-center justify-between px-6">
-              <Button variant="outline" onClick={handleClose}>
-                取消
-              </Button>
-              <div className="flex gap-3">
-                {successCount > 0 && (
-                  <Button
-                    variant="outline"
-                    onClick={saveAllConfirmed}
-                    disabled={generating}
-                  >
-                    保存全部已确认 ({successCount})
-                  </Button>
-                )}
-                <Button
-                  onClick={startGeneration}
-                  disabled={!aiConfig?.api_key || selectedStudents.length === 0 || generating}
-                >
-                  {generating ? '生成中...' : '开始生成'}
-                </Button>
-              </div>
-            </div>
           </motion.div>
         </>
       )}
@@ -422,7 +398,3 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
   )
 }
 
-// Re-export for backward compatibility
-export { StudentSelector } from './StudentSelector'
-export { PlanResultCard } from './PlanResultCard'
-export { GenerationControls } from './GenerationControls'

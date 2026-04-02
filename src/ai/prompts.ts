@@ -143,7 +143,7 @@ export function buildUserInput(params: {
       phonics_progress: phonicsProgressDesc,
       phonics_completed: student.phonics_completed,
       ipa_completed: student.ipa_completed,
-      reading_progress: student.reading_progress || '未开始'
+      reading_progress: student.reading_progress ?? null
     },
     wordbank_progress: wordbankData,
     recent_records: recentRecordsSummary,

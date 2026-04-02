@@ -216,30 +216,6 @@ export function Settings() {
     }
   }
 
-  const handleBackup = async () => {
-    try {
-      if (!window.electronAPI) {
-        toast.error('备份功能仅在桌面应用中可用')
-        return
-      }
-      
-      // 通过 IPC 调用主进程的 dialog.showSaveDialog
-      const result = await window.electronAPI.showSaveDialog({
-        title: '选择备份保存位置',
-        defaultPath: `edumanager_backup_${new Date().toISOString().split('T')[0]}.db`,
-        filters: [{ name: 'SQLite Database', extensions: ['db'] }]
-      })
-      
-      if (!result || result.canceled || !result.filePath) return
-      
-      await window.electronAPI.dbBackup(result.filePath)
-      await settingsDb.set('last_backup_date', new Date().toISOString())
-      toast.success(`备份成功！文件已保存到：${result.filePath}`)
-    } catch (error) {
-      toast.error('备份失败：' + (error as Error).message)
-    }
-  }
-
   return (
     <div className="h-full flex flex-col">
       {/* 顶部栏 */}

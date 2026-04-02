@@ -553,18 +553,19 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
                       }, 0) / (layout * 5))
                       
                       return (
-                        <div className="space-y-3">
-                          {/* A4预览容器 - 严格按照A4比例 210:297 */}
+                        <div className="space-y-3 w-full">
+                          {/* A4预览容器 - 响应式宽度，使用 aspect-ratio 保持 A4 比例 (210:297 ≈ 1:√2) */}
                           <div 
                             className="bg-white border-2 border-gray-400 shadow-lg mx-auto"
                             style={{ 
-                              width: '297px',
-                              height: '420px',
-                              padding: '6px',
+                              width: '100%',
+                              maxWidth: '400px',
+                              aspectRatio: '210 / 297',
+                              padding: '2%',
                               display: 'grid',
                               gridTemplateColumns: layout === 2 ? '1fr 1fr' : '1fr 1fr 1fr',
                               gridAutoRows: '1fr',
-                              gap: '5px',
+                              gap: '1.5%',
                               alignContent: 'start',
                               boxSizing: 'border-box',
                             }}>

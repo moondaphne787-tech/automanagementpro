@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { DAY_LABELS } from '../types'
+import { DAY_LABELS } from '@/types'
 
 type StudentWithPrefs = Student & { billing: Billing | null; preferences: StudentSchedulePreference[] }
 

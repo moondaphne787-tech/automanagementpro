@@ -9,6 +9,7 @@ import { createLearningPhaseSlice } from './learningPhaseSlice'
 import { createSemesterConfigSlice } from './semesterConfigSlice'
 import { createUISlice } from './uiSlice'
 import { createDashboardSlice } from './dashboardSlice'
+import { createReadingCheckinSlice } from './readingCheckinSlice'
 
 // 组合所有 slices 创建统一的 store
 export const useAppStore = create<AppState>()(
@@ -22,6 +23,7 @@ export const useAppStore = create<AppState>()(
     ...createSemesterConfigSlice(...a),
     ...createUISlice(...a),
     ...createDashboardSlice(...a),
+    ...createReadingCheckinSlice(...a),
   })
 )
 

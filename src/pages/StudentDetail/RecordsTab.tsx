@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Edit, Trash2, Plus, Calendar, FileText, Link, Columns } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Edit, Trash2, Plus, Calendar, FileText, Link, Columns, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { DatePicker } from '@/components/ui/date-picker'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
 import { ClassRecordForm } from '@/components/ClassRecord/ClassRecordForm'
 import { useAppStore } from '@/store/appStore'
@@ -41,35 +42,54 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
   const [showRecordForm, setShowRecordForm] = useState(false)
   const [editingRecord, setEditingRecord] = useState<ClassRecord | null>(null)
   const [recordsWithPlan, setRecordsWithPlan] = useState<(ClassRecord & { plan?: LessonPlan })[]>([])
-  const [recordFilter, setRecordFilter] = useState<{ startDate: string; endDate: string }>({
-    startDate: '',
-    endDate: ''
-  })
+  const [recordFilter, setRecordFilter] = useState<{ startDate: string; endDate: string }>(getLast3MonthsRange())
   const [expandedFeedbackId, setExpandedFeedbackId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [totalCount, setTotalCount] = useState<number | null>(null)
+
+  // 加载课堂记录（使用数据库层过滤）
+  const loadRecordsWithPlan = useCallback(async (options?: { startDate?: string; endDate?: string }) => {
+    setLoading(true)
+    try {
+      // 如果没有指定日期范围，使用当前筛选状态
+      const filterOptions = options || recordFilter
+      const hasFilter = filterOptions.startDate || filterOptions.endDate
+      
+      // 如果有筛选条件，使用筛选条件查询
+      // 如果没有筛选条件（全部），则不加日期限制
+      const records = await classRecordDb.getWithPlan(studentId, {
+        startDate: hasFilter ? filterOptions.startDate : undefined,
+        endDate: hasFilter ? filterOptions.endDate : undefined
+      })
+      
+      setRecordsWithPlan(records)
+      
+      // 只在首次加载时获取总数量（用于判断是否显示提示）
+      if (totalCount === null) {
+        const allRecords = await classRecordDb.getWithPlan(studentId)
+        setTotalCount(allRecords.length)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [studentId, recordFilter, totalCount])
 
   useEffect(() => {
     loadRecordsWithPlan()
   }, [studentId])
 
-  const loadRecordsWithPlan = async () => {
-    const records = await classRecordDb.getWithPlan(studentId)
-    setRecordsWithPlan(records)
-    if (records.length > 50) {
-      setRecordFilter(getLast3MonthsRange())
+  // 当筛选条件变化时重新查询数据库
+  useEffect(() => {
+    // 跳过首次加载（已经在上面的 useEffect 中处理）
+    if (totalCount !== null) {
+      loadRecordsWithPlan()
     }
-  }
-
-  const filteredRecords = useMemo(() => {
-    return recordsWithPlan.filter(r => {
-      if (recordFilter.startDate && r.class_date < recordFilter.startDate) return false
-      if (recordFilter.endDate && r.class_date > recordFilter.endDate) return false
-      return true
-    })
-  }, [recordsWithPlan, recordFilter])
+  }, [recordFilter.startDate, recordFilter.endDate])
 
   const handleCreateRecord = async (data: any) => {
     await createClassRecord(data)
     setShowRecordForm(false)
+    setTotalCount(null) // 重置总数量，让下次加载时重新计算
     await loadRecordsWithPlan()
   }
 
@@ -77,6 +97,12 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
     if (!editingRecord) return
     await updateClassRecord(editingRecord.id, data)
     setEditingRecord(null)
+    await loadRecordsWithPlan()
+  }
+
+  const handleDeleteRecord = async (recordId: string) => {
+    await deleteClassRecord(recordId)
+    setTotalCount(null) // 重置总数量
     await loadRecordsWithPlan()
   }
 
@@ -109,9 +135,9 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
           
           {/* 日期筛选栏 */}
           <div className="space-y-2">
-            {recordsWithPlan.length > 50 && (
+            {totalCount !== null && totalCount > 50 && (
               <p className="text-xs text-muted-foreground">
-                默认显示近 3 个月，点击【全部】查看所有记录
+                默认显示近 3 个月，点击【全部】查看所有记录（共 {totalCount} 条）
               </p>
             )}
             <div className="flex items-center gap-3 flex-wrap p-3 bg-muted/30 rounded-lg">
@@ -153,28 +179,39 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
               </div>
               {(recordFilter.startDate || recordFilter.endDate) && (
                 <span className="text-xs text-muted-foreground">
-                  共 {filteredRecords.length} 条记录
+                  共 {recordsWithPlan.length} 条记录
                 </span>
               )}
             </div>
           </div>
           
+          {/* 加载状态 */}
+          {loading && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-muted-foreground">加载中...</span>
+            </div>
+          )}
+          
           {/* 课堂记录列表 */}
-          {recordsWithPlan.length === 0 ? (
+          {!loading && recordsWithPlan.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">
               <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>暂无课堂记录</p>
-              <p className="text-sm mt-1">点击上方按钮创建第一条记录</p>
+              {totalCount === 0 ? (
+                <>
+                  <p>暂无课堂记录</p>
+                  <p className="text-sm mt-1">点击上方按钮创建第一条记录</p>
+                </>
+              ) : (
+                <>
+                  <p>当前日期范围内无记录</p>
+                  <p className="text-sm mt-1">点击【全部】查看所有记录</p>
+                </>
+              )}
             </div>
-          ) : filteredRecords.length === 0 ? (
-            <div className="text-center text-muted-foreground py-12">
-              <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>当前日期范围内无记录</p>
-              <p className="text-sm mt-1">点击【全部】查看所有记录</p>
-            </div>
-          ) : (
+          ) : !loading && (
             <div className="space-y-4">
-              {filteredRecords.map((record) => (
+              {recordsWithPlan.map((record) => (
                 <Card key={record.id}>
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
@@ -352,9 +389,14 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
                           className="text-muted-foreground hover:text-destructive"
                           title="删除"
                           onClick={async () => {
-                            if (confirm('确定删除此课堂记录？')) {
-                              await deleteClassRecord(record.id)
-                              await loadRecordsWithPlan()
+                            const confirmed = await confirmDialog({
+                              title: '删除课堂记录',
+                              message: '确定删除此课堂记录？此操作不可恢复。',
+                              confirmText: '删除',
+                              variant: 'danger'
+                            })
+                            if (confirmed) {
+                              await handleDeleteRecord(record.id)
                             }
                           }}
                         >

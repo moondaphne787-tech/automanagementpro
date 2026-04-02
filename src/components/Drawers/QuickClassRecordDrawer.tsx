@@ -7,7 +7,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
-import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
+import { TaskBlock, createEmptyTask } from '@/components/TaskBlock/TaskBlock'
 import { useAppStore } from '@/store/appStore'
 import { scheduledClassDb } from '@/db/schedule'
 import { lessonPlanDb } from '@/db'
@@ -433,8 +433,7 @@ export function QuickClassRecordDrawer({ open, onClose }: QuickClassRecordDrawer
                                 variant="ghost" 
                                 size="sm"
                                 onClick={() => {
-                                  const newTask: TaskBlockType = { type: 'other', content: '' }
-                                  handleUpdateTasks(index, [...info.tasks, newTask])
+                                  handleUpdateTasks(index, [...info.tasks, createEmptyTask()])
                                 }}
                                 disabled={info.tasks.length >= 4}
                               >

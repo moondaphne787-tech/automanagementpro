@@ -1,20 +1,8 @@
-import type { ClassRecord } from '@/types'
+import type { ClassRecord, TaskType } from '@/types'
+import { TASK_TYPE_LABELS } from '@/types'
 
 interface TaskStatsProps {
   records: ClassRecord[]
-}
-
-// 任务类型标签映射
-const TASK_TYPE_LABELS: Record<string, string> = {
-  phonics: '语音训练',
-  vocab_new: '词库学习',
-  vocab_review: '词库复习',
-  nine_grid: '九宫格清理',
-  textbook: '课文梳理',
-  reading: '阅读训练',
-  picture_book: '绘本阅读',
-  exercise: '专项练习',
-  other: '其他'
 }
 
 export function TaskStats({ records }: TaskStatsProps) {
@@ -40,12 +28,10 @@ export function TaskStats({ records }: TaskStatsProps) {
     <div className="space-y-2">
       {sortedStats.map(([type, count]) => (
         <div key={type} className="flex items-center justify-between text-sm">
-          <span>{TASK_TYPE_LABELS[type] || type}</span>
+          <span>{TASK_TYPE_LABELS[type as TaskType] || type}</span>
           <span className="text-muted-foreground">{count} 次</span>
         </div>
       ))}
     </div>
   )
 }
-
-export { TASK_TYPE_LABELS }

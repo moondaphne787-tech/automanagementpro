@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAppStore } from '@/store/appStore'
 import { studentSchedulePreferenceDb } from '@/db'
-import { formatDate, formatHours, isHoursWarning, cn } from '@/lib/utils'
+import { formatDateCN, formatHours, isHoursWarning, cn } from '@/lib/utils'
 import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS, DAY_LABELS } from '@/types'
 import type { StudentSchedulePreference, DayOfWeek } from '@/types'
 
@@ -155,7 +155,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
             </div>
             <div>
               <span className="text-muted-foreground">入学日期：</span>
-              <span>{formatDate(currentStudent.enroll_date)}</span>
+              <span>{formatDateCN(currentStudent.enroll_date)}</span>
             </div>
             <div>
               <span className="text-muted-foreground">入学成绩：</span>

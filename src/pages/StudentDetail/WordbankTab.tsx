@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PromptDialog } from '@/components/ui/dialog'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/lib/utils'
 
@@ -60,10 +61,16 @@ export function WordbankTab({ studentId }: WordbankTabProps) {
                         className="h-6 w-6 text-muted-foreground hover:text-destructive"
                         title="删除词库进度"
                         onClick={async () => {
-                          const confirmMessage = progress.status === 'completed'
+                          const message = progress.status === 'completed'
                             ? `确定要删除已完成的词库「${progress.wordbank_label}」吗？`
                             : `确定要删除词库「${progress.wordbank_label}」的进度记录吗？\n\n删除后进度将无法恢复。`
-                          if (confirm(confirmMessage)) {
+                          const confirmed = await confirmDialog({
+                            title: '删除词库进度',
+                            message,
+                            confirmText: '删除',
+                            variant: 'danger'
+                          })
+                          if (confirmed) {
                             await deleteProgress(studentId, progress.wordbank_id)
                           }
                         }}

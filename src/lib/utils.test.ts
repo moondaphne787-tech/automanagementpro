@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchTeacherByName } from './utils'
+import { matchTeacherByName, formatDateCN } from './utils'
 import type { Teacher } from '@/types'
 
 // 创建模拟助教数据
@@ -152,5 +152,43 @@ describe('matchTeacherByName', () => {
       // 课时不会回滚（因为没有匹配到助教）
       // 这是正确的行为：无法匹配时跳过课时操作
     })
+  })
+})
+
+describe('formatDateCN', () => {
+  it('格式化日期字符串为中文格式 (YYYY/MM/DD)', () => {
+    const result = formatDateCN('2024-03-15')
+    expect(result).toBe('2024/03/15')
+  })
+
+  it('格式化 Date 对象为中文格式', () => {
+    const date = new Date(2024, 2, 15) // 本地 2024年3月15日
+    const result = formatDateCN(date)
+    expect(result).toContain('2024')
+    expect(result).toContain('03')
+    expect(result).toContain('15')
+  })
+
+  it('空值返回 "-"', () => {
+    expect(formatDateCN(null)).toBe('-')
+    expect(formatDateCN(undefined)).toBe('-')
+    expect(formatDateCN('')).toBe('-')
+  })
+
+  it('使用中文本地化格式', () => {
+    const date = new Date('2024-01-05')
+    const result = formatDateCN(date)
+    // 中文格式使用 zh-CN，格式为 YYYY/MM/DD
+    expect(result).toMatch(/^\d{4}\/\d{2}\/\d{2}$/)
+  })
+
+  it('处理年末日期', () => {
+    const result = formatDateCN('2024-12-31')
+    expect(result).toBe('2024/12/31')
+  })
+
+  it('处理年初日期', () => {
+    const result = formatDateCN('2024-01-01')
+    expect(result).toBe('2024/01/01')
   })
 })

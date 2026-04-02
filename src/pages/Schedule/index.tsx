@@ -32,10 +32,7 @@ import { ArrangeView } from './ArrangeView'
 import {
   ViewMode,
   SchedulePreset,
-  DAY_LABELS,
-  formatDate,
   formatDisplayDate,
-  getDayOfWeek,
   getDateTypeIcon
 } from './types'
 

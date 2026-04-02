@@ -387,13 +387,3 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
     </div>
   )
 }
-
-// 导出子组件供外部使用
-export { CompletionRateChart } from './CompletionRateChart'
-export { ScoreChart } from './ScoreChart'
-export { WordbankProgressSummary } from './WordbankProgressSummary'
-export { TaskStats } from './TaskStats'
-export { PerformanceStats } from './PerformanceStats'
-export { ExamScoreForm } from './ExamScoreForm'
-export { AutoLearningPhasesPanel } from './AutoLearningPhasesPanel'
-export { EXAM_TYPE_LABELS } from './ScoreChart'

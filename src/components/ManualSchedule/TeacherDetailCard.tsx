@@ -8,7 +8,7 @@ import type {
   Billing, 
   StudentSchedulePreference 
 } from './types'
-import { getDayOfWeek, timeToMinutes, minutesToTime } from './hooks/useManualSchedule'
+import { getDayOfWeek, timeToMinutes, minutesToTime } from '@/lib/utils'
 
 interface TeacherDetailCardProps {
   open: boolean

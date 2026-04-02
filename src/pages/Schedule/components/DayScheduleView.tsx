@@ -12,7 +12,8 @@ import {
 import type { Student, Teacher, ScheduledClass } from '@/types'
 import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
 import { Button } from '@/components/ui/button'
-import { formatDate, formatDisplayDate, DAYTIME_SLOTS, EVENING_SLOTS, getDateTypeIcon } from '../types'
+import { formatDateISO } from '@/lib/utils'
+import { formatDisplayDate, DAYTIME_SLOTS, EVENING_SLOTS, getDateTypeIcon } from '../types'
 
 interface DayScheduleViewProps {
   scheduleDates: ScheduleDateConfig[]
@@ -70,7 +71,7 @@ export function DayScheduleView({
   if (!dateConfig) return null
 
   const dayClasses = classes.filter(c => c.class_date === dateConfig.date)
-  const isToday = dateConfig.date === formatDate(new Date())
+  const isToday = dateConfig.date === formatDateISO(new Date())
   const timeSlots = getTimeSlots(dateConfig)
   const startHour = dateConfig.type === 'friday_evening' ? 18 : 8
 

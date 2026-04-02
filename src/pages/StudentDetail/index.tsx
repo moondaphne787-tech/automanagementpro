@@ -4,6 +4,7 @@ import { ArrowLeft, Edit, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StudentForm } from '@/components/Student/StudentForm'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { GrowthPanel } from '@/components/Growth/GrowthPanel'
 import { useAppStore } from '@/store/appStore'
 import { getLevelColor, cn } from '@/lib/utils'
@@ -49,7 +50,13 @@ export function StudentDetail() {
   }
 
   const handleDelete = async () => {
-    if (confirm('确定要删除此学员吗？此操作不可恢复。')) {
+    const confirmed = await confirmDialog({
+      title: '删除学员',
+      message: '确定要删除此学员吗？此操作不可恢复。',
+      confirmText: '删除',
+      variant: 'danger'
+    })
+    if (confirmed) {
       await deleteStudent(id!)
       navigate('/')
     }

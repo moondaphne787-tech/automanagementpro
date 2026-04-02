@@ -215,11 +215,11 @@ export const createClassRecordSlice: StateCreator<AppState, [], [], ClassRecordS
     }
   },
 
-  // 批量导入课堂记录
+  // 批量导入课堂记录（使用事务保障原子性）
+  // ✅ 所有课堂记录插入和课时更新在同一个事务中执行
+  // 确保要么全部成功，要么全部回滚，避免部分数据不一致
   batchImportClassRecords: async (records) => {
-    const count = await classRecordDb.batchCreate(records)
-    
-    // 更新课时（扣减）- 按学员汇总课时
+    // 按学员汇总课时变化
     const studentHoursMap = new Map<string, number>()
     for (const record of records) {
       if (record.duration_hours && record.student_id) {
@@ -228,15 +228,8 @@ export const createClassRecordSlice: StateCreator<AppState, [], [], ClassRecordS
       }
     }
     
-    // 批量更新每个学员的课时
-    for (const [studentId, hours] of studentHoursMap) {
-      const billing = await billingDb.getByStudentId(studentId)
-      if (billing) {
-        await billingDb.update(studentId, {
-          used_hours: billing.used_hours + hours
-        })
-      }
-    }
+    // 使用事务原子性地执行：1) 批量创建课堂记录 2) 更新所有学员课时
+    const count = await classRecordDb.batchCreateWithBillingUpdate(records, studentHoursMap)
     
     // ✅ 性能优化：在循环前批量获取词库（避免 N+1 查询）
     const wordbanks = await wordbankDb.getAll()

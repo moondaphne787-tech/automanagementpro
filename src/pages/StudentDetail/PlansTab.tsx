@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
-import { Edit, Trash2, Plus, Calendar, FileText, Sparkles, Download, Printer, Loader2, CalendarX, RefreshCw, Copy } from 'lucide-react'
+import { Edit, Trash2, Plus, Calendar, FileText, Sparkles, Printer, Loader2, CalendarX, RefreshCw, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,8 +11,8 @@ import { useAppStore } from '@/store/appStore'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
 import { sendAIRequestStream } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
-import { exportLessonPlanPDF, printLessonPlan } from '@/utils/pdfExport'
-import { formatDate as formatDateUtil, cn } from '@/lib/utils'
+import { printLessonPlan } from '@/utils/pdfExport'
+import { formatLocalDate, cn } from '@/lib/utils'
 import { LEVEL_LABELS } from '@/types'
 import type { LessonPlan, AIConfig, TaskBlock as TaskBlockType } from '@/types'
 
@@ -314,7 +314,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
                                 size="sm"
                                 title="改期"
                                 onClick={() => {
-                                  showPrompt('请输入新的计划日期 (YYYY-MM-DD):', formatDateUtil(new Date()), async (newDate) => {
+                                  showPrompt('请输入新的计划日期 (YYYY-MM-DD):', formatLocalDate(new Date()), async (newDate) => {
                                     if (newDate) {
                                       await lessonPlanDb.update(plan.id, { plan_date: newDate })
                                       loadLessonPlans()
@@ -330,7 +330,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
                                 size="sm"
                                 title="沿用到新计划"
                                 onClick={() => {
-                                  showPrompt('请输入新计划的日期 (YYYY-MM-DD):', formatDateUtil(new Date()), async (newDate) => {
+                                  showPrompt('请输入新计划的日期 (YYYY-MM-DD):', formatLocalDate(new Date()), async (newDate) => {
                                     if (newDate) {
                                       await lessonPlanDb.create({
                                         student_id: studentId,
@@ -472,15 +472,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            title="导出 PDF"
-                            onClick={() => exportLessonPlanPDF(currentStudent, plan)}
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="打印"
+                            title="打印 / 导出 PDF"
                             onClick={() => printLessonPlan(currentStudent, plan)}
                           >
                             <Printer className="w-4 h-4" />

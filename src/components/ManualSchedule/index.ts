@@ -11,18 +11,11 @@ export { AssignTeacherPopover } from './AssignTeacherPopover'
 export { useManualSchedule } from './hooks/useManualSchedule'
 export type { UseManualScheduleOptions, UseManualScheduleReturn } from './hooks/useManualSchedule'
 
-// 工具函数
+// 工具函数（组件内部使用的计算函数）
 export { 
-  formatDate, 
-  getDayOfWeek, 
-  timeToMinutes, 
-  minutesToTime, 
   getTimeRange, 
   calculateSlotStyle 
 } from './hooks/useManualSchedule'
-
-// 也从 utils 导出 formatDateISO 作为替代名称（推荐使用）
-export { formatDateISO } from '@/lib/utils'
 
 // 类型
 export type {
@@ -37,4 +30,9 @@ export type {
 } from './types'
 
 // 常量
-export { TEACHER_COLORS, HOUR_WIDTH, ROW_HEIGHT, DAY_LABELS, LEVEL_LABELS } from './constants'
+export { TEACHER_COLORS, HOUR_WIDTH, ROW_HEIGHT, LEVEL_LABELS } from './constants'
+
+// 注意：DAY_LABELS、getDayOfWeek、formatDateISO、timeToMinutes、minutesToTime
+// 请直接从权威来源导入：
+// - DAY_LABELS: import { DAY_LABELS } from '@/types'
+// - getDayOfWeek, formatDateISO, timeToMinutes, minutesToTime: import { ... } from '@/lib/utils'
