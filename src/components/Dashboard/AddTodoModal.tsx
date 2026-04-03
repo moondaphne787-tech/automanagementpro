@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function AddTodoModal({ onClose, onCreated }: Props) {
-  const { students } = useAppStore()
+  const students = useAppStore(s => s.students)
   const [content, setContent] = useState('')
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [dueDate, setDueDate] = useState('')

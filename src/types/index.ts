@@ -553,6 +553,10 @@ export interface ElectronAPI {
   dbGetBackupDir: () => Promise<string>
   dbOpenBackupDir: () => Promise<{ success: boolean }>
   
+  // WAL Checkpoint 相关
+  dbGetWalInfo: () => Promise<{ exists: boolean; size: number; path: string }>
+  dbCheckpoint: (mode?: 'PASSIVE' | 'RESTART' | 'TRUNCATE' | 'FULL') => Promise<{ success: boolean; walSize: number; checkpointedCount: number; message: string }>
+  
   // 对话框
   showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => 
     Promise<{ canceled: boolean; filePath?: string }>
@@ -561,7 +565,6 @@ export interface ElectronAPI {
   writeFile: (filePath: string, base64Data: string) => Promise<{ success: boolean }>
   
   // 其他
-  getWasmPath: (filename: string) => Promise<string>
   printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
   platform: string
   isElectron: boolean

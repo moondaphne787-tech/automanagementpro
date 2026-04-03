@@ -27,7 +27,7 @@ function formatTaskText(task: TaskBlock): string {
 function getLevelText(level?: string): string {
   if (level === 'weak') return '基础薄弱'
   if (level === 'medium') return '基础较好'
-  if (level === 'strong') return '非常优秀'
+  if (level === 'advanced') return '非常优秀'
   return '-'
 }
 

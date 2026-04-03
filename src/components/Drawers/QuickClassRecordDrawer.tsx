@@ -4,6 +4,7 @@ import {
   X, Check, CheckCheck, AlertCircle, Loader2, 
   Copy, Users, Clock, Calendar, Zap
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
@@ -49,7 +50,9 @@ interface QuickClassRecordDrawerProps {
 }
 
 export function QuickClassRecordDrawer({ open, onClose }: QuickClassRecordDrawerProps) {
-  const { wordbanks, batchImportClassRecords, loadStudents } = useAppStore()
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const batchImportClassRecords = useAppStore(s => s.batchImportClassRecords)
+  const loadStudents = useAppStore(s => s.loadStudents)
   
   // 今日日期
   const today = useMemo(() => formatDateISO(new Date()), [])
@@ -74,33 +77,40 @@ export function QuickClassRecordDrawer({ open, onClose }: QuickClassRecordDrawer
       // 过滤掉已取消和已调课的排课
       const validSchedules = schedules.filter(s => s.status === 'scheduled' || s.status === 'completed')
       
-      // 转换为学员排课信息
-      const infos: StudentScheduleInfo[] = await Promise.all(
-        validSchedules.map(async (schedule) => {
-          // 获取该学员今日的课程计划
-          const plans = await lessonPlanDb.getByStudentId(schedule.student_id)
-          const todayPlan = plans.find(p => p.plan_date === today)
-          
-          return {
-            student: schedule.student!,
-            schedule: schedule as ScheduledClassWithInfo,
-            plan: todayPlan,
-            selected: true, // 默认全选
-            attendance: 'present',
-            taskCompleted: 'completed',
-            performance: 'good',
-            durationHours: schedule.duration_hours || 1,
-            teacherName: (schedule as ScheduledClassWithInfo).teacher?.name || '',
-            tasks: todayPlan ? [...todayPlan.tasks] : [],
-            hasPlan: !!todayPlan
-          }
-        })
+      // 批量查询今日所有计划，避免 N+1 查询（每个学员单独查询）
+      const allTodayPlans = await lessonPlanDb.getByDate(today)
+      const planByStudentId = new Map(
+        allTodayPlans.map(p => [p.student_id, p])
       )
+      
+      // 转换为学员排课信息（无需额外异步查询）
+      const infos: StudentScheduleInfo[] = validSchedules.map((schedule) => {
+        const todayPlan = planByStudentId.get(schedule.student_id)
+        
+        // 自动为有计划的学员预填任务（一键从计划填充）
+        const autoFilledTasks = todayPlan && todayPlan.tasks.length > 0
+          ? [...todayPlan.tasks]
+          : []
+        
+        return {
+          student: schedule.student!,
+          schedule: schedule as ScheduledClassWithInfo,
+          plan: todayPlan,
+          selected: true, // 默认全选
+          attendance: 'present' as AttendanceType,
+          taskCompleted: 'completed' as TaskCompletedType,
+          performance: 'good' as PerformanceType,
+          durationHours: schedule.duration_hours || 1,
+          teacherName: (schedule as ScheduledClassWithInfo).teacher?.name || '',
+          tasks: autoFilledTasks,
+          hasPlan: !!todayPlan
+        }
+      })
       
       setStudentSchedules(infos)
     } catch (error) {
       console.error('Failed to load today schedules:', error)
-      alert('加载今日排课数据失败')
+      toast.error('加载今日排课数据失败')
     }
     setLoading(false)
   }
@@ -163,7 +173,7 @@ export function QuickClassRecordDrawer({ open, onClose }: QuickClassRecordDrawer
     const selectedStudents = studentSchedules.filter(s => s.selected && s.tasks.length > 0)
     
     if (selectedStudents.length === 0) {
-      alert('请至少选择一个学员并添加任务')
+      toast.warning('请至少选择一个学员并添加任务')
       return
     }
     

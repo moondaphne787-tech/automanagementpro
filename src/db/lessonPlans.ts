@@ -1,5 +1,6 @@
-import type { LessonPlan } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import type { LessonPlan, TaskBlock } from '@/types'
+import type { LessonPlanRow } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, mapLessonPlan, parseTasks, isAllowedField, LESSON_PLAN_UPDATABLE_FIELDS } from './utils'
 
 // 课程计划操作
 export const lessonPlanDb = {
@@ -8,7 +9,7 @@ export const lessonPlanDb = {
     const today = new Date().toISOString().split('T')[0]
     
     // 通过 plan_id 关联判断：计划已过期 且 没有任何课堂记录关联了此计划
-    const plans = await ipcQuery<any[]>(
+    const plans = await ipcQuery<LessonPlanRow[]>(
       `SELECT lp.* FROM lesson_plans lp
        WHERE lp.student_id = ? 
        AND lp.plan_date IS NOT NULL 
@@ -20,11 +21,7 @@ export const lessonPlanDb = {
       [studentId, today]
     )
     
-    return plans.map(plan => {
-      plan.tasks = JSON.parse(plan.tasks || '[]')
-      plan.generated_by_ai = !!plan.generated_by_ai
-      return plan as LessonPlan
-    })
+    return plans.map(mapLessonPlan)
   },
   
   // 批量获取多个学员的过期计划数量
@@ -88,24 +85,16 @@ export const lessonPlanDb = {
   },
   
   async getById(id: string): Promise<LessonPlan | undefined> {
-    const plan = await ipcQueryOne<any>(`SELECT * FROM lesson_plans WHERE id = ?`, [id])
-    if (plan) {
-      plan.tasks = JSON.parse(plan.tasks || '[]')
-      plan.generated_by_ai = !!plan.generated_by_ai
-    }
-    return plan as LessonPlan | undefined
+    const plan = await ipcQueryOne<LessonPlanRow>(`SELECT * FROM lesson_plans WHERE id = ?`, [id])
+    return plan ? mapLessonPlan(plan) : undefined
   },
   
   async getByStudentId(studentId: string): Promise<LessonPlan[]> {
-    const plans = await ipcQuery<any[]>(
+    const plans = await ipcQuery<LessonPlanRow[]>(
       `SELECT * FROM lesson_plans WHERE student_id = ? ORDER BY plan_date DESC, created_at DESC`,
       [studentId]
     )
-    return plans.map(plan => {
-      plan.tasks = JSON.parse(plan.tasks || '[]')
-      plan.generated_by_ai = !!plan.generated_by_ai
-      return plan as LessonPlan
-    })
+    return plans.map(mapLessonPlan)
   },
   
   async update(id: string, data: Partial<LessonPlan>): Promise<LessonPlan | undefined> {
@@ -113,13 +102,14 @@ export const lessonPlanDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
+      if (!isAllowedField(key, LESSON_PLAN_UPDATABLE_FIELDS)) continue
       if (key === 'tasks') {
         fields.push(`${key} = ?`)
         values.push(JSON.stringify(value))
       } else if (key === 'generated_by_ai') {
         fields.push(`${key} = ?`)
         values.push(value ? 1 : 0)
-      } else if (key !== 'id' && key !== 'created_at') {
+      } else {
         fields.push(`${key} = ?`)
         values.push(value)
       }
@@ -138,16 +128,16 @@ export const lessonPlanDb = {
   },
   
   async getLastPlanSummary(studentId: string): Promise<string | null> {
-    const plan = await ipcQueryOne<any>(
+    const plan = await ipcQueryOne<Pick<LessonPlanRow, 'tasks' | 'notes'>>(
       `SELECT tasks, notes FROM lesson_plans WHERE student_id = ? ORDER BY created_at DESC LIMIT 1`,
       [studentId]
     )
     if (!plan) return null
     
-    const tasks = JSON.parse(plan.tasks || '[]')
+    const tasks = parseTasks(plan.tasks)
     if (tasks.length === 0) return null
     
-    const taskSummary = tasks.map((t: any) => {
+    const taskSummary = tasks.map((t: TaskBlock) => {
       if (t.wordbank_label && t.level_from && t.level_to) {
         return `${t.wordbank_label}第${t.level_from}-${t.level_to}关`
       }
@@ -161,7 +151,7 @@ export const lessonPlanDb = {
   async getAllExpiredPlans(): Promise<LessonPlan[]> {
     const today = new Date().toISOString().split('T')[0]
     
-    const plans = await ipcQuery<any[]>(
+    const plans = await ipcQuery<LessonPlanRow[]>(
       `SELECT lp.* FROM lesson_plans lp
        WHERE lp.plan_date IS NOT NULL 
        AND lp.plan_date < ?
@@ -172,48 +162,32 @@ export const lessonPlanDb = {
       [today]
     )
     
-    return plans.map(plan => {
-      plan.tasks = JSON.parse(plan.tasks || '[]')
-      plan.generated_by_ai = !!plan.generated_by_ai
-      return plan as LessonPlan
-    })
+    return plans.map(mapLessonPlan)
   },
 
   // 按日期范围查询计划
   async getByDateRange(start: string, end: string): Promise<LessonPlan[]> {
-    const plans = await ipcQuery<any[]>(
+    const plans = await ipcQuery<LessonPlanRow[]>(
       `SELECT * FROM lesson_plans WHERE plan_date BETWEEN ? AND ? ORDER BY plan_date ASC`,
       [start, end]
     )
-    return plans.map(plan => {
-      plan.tasks = JSON.parse(plan.tasks || '[]')
-      plan.generated_by_ai = !!plan.generated_by_ai
-      return plan as LessonPlan
-    })
+    return plans.map(mapLessonPlan)
   },
 
   // 获取指定日期的计划
   async getByDate(date: string): Promise<LessonPlan[]> {
-    const plans = await ipcQuery<any[]>(
+    const plans = await ipcQuery<LessonPlanRow[]>(
       `SELECT * FROM lesson_plans WHERE plan_date = ? ORDER BY created_at DESC`,
       [date]
     )
-    return plans.map(plan => {
-      plan.tasks = JSON.parse(plan.tasks || '[]')
-      plan.generated_by_ai = !!plan.generated_by_ai
-      return plan as LessonPlan
-    })
+    return plans.map(mapLessonPlan)
   },
 
   // 获取所有课程计划（用于导出）
   async getAll(): Promise<LessonPlan[]> {
-    const plans = await ipcQuery<any[]>(
+    const plans = await ipcQuery<LessonPlanRow[]>(
       `SELECT * FROM lesson_plans ORDER BY plan_date DESC`
     )
-    return plans.map(plan => {
-      plan.tasks = JSON.parse(plan.tasks || '[]')
-      plan.generated_by_ai = !!plan.generated_by_ai
-      return plan as LessonPlan
-    })
+    return plans.map(mapLessonPlan)
   }
 }

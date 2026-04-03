@@ -371,6 +371,17 @@ function createTables() {
     )
   `)
 
+  // 朗读打卡表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reading_checkins (
+      id TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      checked_date TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      UNIQUE(student_id, checked_date)
+    )
+  `)
+
   // 插入默认词库配置
   const wordbanksCount = db.prepare('SELECT COUNT(*) as count FROM wordbanks').get() as { count: number }
   if (wordbanksCount.count === 0) {
@@ -671,104 +682,6 @@ ipcMain.handle('fs:writeFile', async (_event, filePath: string, base64Data: stri
     return { success: true }
   } catch (error) {
     console.error('Write file error:', error)
-    throw error
-  }
-})
-
-// === 朗读打卡相关 IPC 处理程序 ===
-
-// 获取某月所有在读学员的打卡统计
-ipcMain.handle('reading-checkin:getMonthSummary', async (_event, { year, month }) => {
-  if (!db) throw new Error('Database not initialized')
-  
-  const monthPrefix = `${year}-${String(month).padStart(2, '0')}%`
-  const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
-  
-  const rows = db.prepare(`
-    SELECT
-      s.id,
-      s.name,
-      COUNT(rc.id) AS monthly_count,
-      MAX(CASE WHEN rc.checked_date = ? THEN 1 ELSE 0 END) AS checked_today
-    FROM students s
-    LEFT JOIN reading_checkins rc
-      ON rc.student_id = s.id
-      AND rc.checked_date LIKE ?
-    WHERE s.status = 'active'
-    GROUP BY s.id
-    ORDER BY 
-      MAX(CASE WHEN rc.checked_date = ? THEN 1 ELSE 0 END) ASC,
-      s.name ASC
-  `).all(today, monthPrefix, today) as Array<{
-    id: string
-    name: string
-    monthly_count: number
-    checked_today: number
-  }>
-  
-  // 获取在读学员总数
-  const totalStudents = db.prepare(`
-    SELECT COUNT(*) as count FROM students WHERE status = 'active'
-  `).get() as { count: number }
-  
-  // 获取今日已打卡人数
-  const todayCheckedCount = db.prepare(`
-    SELECT COUNT(DISTINCT student_id) as count 
-    FROM reading_checkins 
-    WHERE checked_date = ?
-  `).get(today) as { count: number }
-  
-  return {
-    students: rows,
-    totalStudents: totalStudents.count,
-    todayCheckedCount: todayCheckedCount.count,
-    today
-  }
-})
-
-// 今日打卡
-ipcMain.handle('reading-checkin:checkToday', async (_event, { studentId }) => {
-  if (!db) throw new Error('Database not initialized')
-  
-  const today = new Date().toISOString().split('T')[0]
-  
-  try {
-    // 使用 INSERT OR IGNORE 防止重复打卡
-    const result = db.prepare(`
-      INSERT OR IGNORE INTO reading_checkins (student_id, checked_date)
-      VALUES (?, ?)
-    `).run(studentId, today)
-    
-    return {
-      success: true,
-      inserted: result.changes > 0,
-      today
-    }
-  } catch (error) {
-    console.error('Check today error:', error)
-    throw error
-  }
-})
-
-// 撤销今日打卡
-ipcMain.handle('reading-checkin:uncheckToday', async (_event, { studentId }) => {
-  if (!db) throw new Error('Database not initialized')
-  
-  const today = new Date().toISOString().split('T')[0]
-  
-  try {
-    const result = db.prepare(`
-      DELETE FROM reading_checkins 
-      WHERE student_id = ? AND checked_date = ?
-    `).run(studentId, today)
-    
-    return {
-      success: true,
-      deleted: result.changes > 0,
-      today
-    }
-  } catch (error) {
-    console.error('Uncheck today error:', error)
     throw error
   }
 })

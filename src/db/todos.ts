@@ -1,4 +1,5 @@
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import type { TodoRow } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, mapTodo, isAllowedField, TODO_UPDATABLE_FIELDS } from './utils'
 import type { Todo } from '@/types'
 
 // 向后兼容：re-export Todo 类型
@@ -7,52 +8,49 @@ export type { Todo } from '@/types'
 export const todoDb = {
   async getAll(): Promise<Todo[]> {
     // 使用 JOIN 查询从 students 表获取最新的学员姓名，避免数据不一致
-    const rows = await ipcQuery<any[]>(
+    const rows = await ipcQuery<TodoRow[]>(
       `SELECT t.*, s.name as student_name 
        FROM todos t 
        LEFT JOIN students s ON t.student_id = s.id 
        ORDER BY t.completed ASC, t.sort_order DESC, t.created_at DESC`
     )
-    return rows.map(r => ({ ...r, completed: !!r.completed }))
+    return rows.map(mapTodo)
   },
 
   async getActive(): Promise<Todo[]> {
     // 使用 JOIN 查询从 students 表获取最新的学员姓名
-    const rows = await ipcQuery<any[]>(
+    const rows = await ipcQuery<TodoRow[]>(
       `SELECT t.*, s.name as student_name 
        FROM todos t 
        LEFT JOIN students s ON t.student_id = s.id 
        WHERE t.completed = 0 
        ORDER BY t.sort_order DESC, t.created_at DESC`
     )
-    return rows.map(r => ({ ...r, completed: false }))
+    return rows.map(mapTodo)
   },
 
   async getCompleted(): Promise<Todo[]> {
     // 使用 JOIN 查询从 students 表获取最新的学员姓名
-    const rows = await ipcQuery<any[]>(
+    const rows = await ipcQuery<TodoRow[]>(
       `SELECT t.*, s.name as student_name 
        FROM todos t 
        LEFT JOIN students s ON t.student_id = s.id 
        WHERE t.completed = 1 
        ORDER BY t.completed_at DESC`
     )
-    return rows.map(r => ({ ...r, completed: true }))
+    return rows.map(mapTodo)
   },
 
   async getById(id: string): Promise<Todo | undefined> {
     // 使用 JOIN 查询从 students 表获取最新的学员姓名
-    const row = await ipcQueryOne<any>(
+    const row = await ipcQueryOne<TodoRow>(
       `SELECT t.*, s.name as student_name 
        FROM todos t 
        LEFT JOIN students s ON t.student_id = s.id 
        WHERE t.id = ?`, 
       [id]
     )
-    if (row) {
-      return { ...row, completed: !!row.completed }
-    }
-    return undefined
+    return row ? mapTodo(row) : undefined
   },
 
   async create(data: Omit<Todo, 'id' | 'created_at' | 'completed' | 'completed_at' | 'student_name'>): Promise<Todo> {
@@ -79,10 +77,11 @@ export const todoDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
+      if (!isAllowedField(key, TODO_UPDATABLE_FIELDS)) continue
       if (key === 'completed') {
         fields.push(`${key} = ?`)
         values.push(value ? 1 : 0)
-      } else if (key !== 'id' && key !== 'created_at') {
+      } else {
         fields.push(`${key} = ?`)
         values.push(value)
       }

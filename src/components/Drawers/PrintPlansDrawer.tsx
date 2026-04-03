@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, FileDown, Check, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -37,7 +38,8 @@ const PLANS_PER_STUDENT_OPTIONS = [
 ]
 
 export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
-  const { students, loadStudents } = useAppStore()
+  const students = useAppStore(s => s.students)
+  const loadStudents = useAppStore(s => s.loadStudents)
   
   const [studentsWithPlans, setStudentsWithPlans] = useState<StudentWithPlan[]>([])
   const [filterGrade, setFilterGrade] = useState<string>('all')
@@ -343,7 +345,7 @@ export function PrintPlansDrawer({ open, onClose }: PrintPlansDrawerProps) {
       }
     } catch (error) {
       console.error('Export PDF error:', error)
-      alert('导出PDF失败：' + (error as Error).message)
+      toast.error('导出PDF失败：' + (error as Error).message)
     } finally {
       setExporting(false)
     }

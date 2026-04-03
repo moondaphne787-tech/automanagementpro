@@ -19,7 +19,11 @@ export const WORDBANK_CATEGORY_OPTIONS: Array<{ value: WordbankCategory; label: 
 ]
 
 export function WordbankManager() {
-  const { wordbanks, loadWordbanks, updateWordbank, createWordbank, deleteWordbank } = useAppStore()
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const loadWordbanks = useAppStore(s => s.loadWordbanks)
+  const updateWordbank = useAppStore(s => s.updateWordbank)
+  const createWordbank = useAppStore(s => s.createWordbank)
+  const deleteWordbank = useAppStore(s => s.deleteWordbank)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
     name: string

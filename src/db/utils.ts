@@ -1,5 +1,292 @@
 // 数据库工具函数
-import type { TaskBlock } from '@/types'
+import type { TaskBlock, ClassRecord, LessonPlan, Student, Teacher, TrialConversion, Todo, TeacherType, DayOfWeek, StudentType, StudentStatus, LevelType } from '@/types'
+
+// ===== 数据库行类型定义 =====
+// SQLite 返回的原始行类型，布尔值为 0/1，JSON 字段为字符串
+
+/** students 表原始行 */
+export interface StudentRow {
+  id: string
+  student_no: string | null
+  name: string
+  school: string | null
+  grade: string | null
+  account: string | null
+  enroll_date: string | null
+  student_type: 'formal' | 'trial'
+  status: 'active' | 'paused' | 'graduated'
+  level: 'weak' | 'medium' | 'advanced'
+  initial_score: number | null
+  initial_vocab: number | null
+  phonics_progress: string | null
+  phonics_completed: number  // SQLite 0/1
+  ipa_completed: number      // SQLite 0/1
+  reading_progress: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** class_records 表原始行 */
+export interface ClassRecordRow {
+  id: string
+  student_id: string
+  class_date: string
+  duration_hours: number
+  teacher_name: string | null
+  attendance: 'present' | 'absent' | 'late'
+  tasks: string  // JSON 字符串
+  task_completed: 'completed' | 'partial' | 'not_completed'
+  incomplete_reason: string | null
+  performance: 'excellent' | 'good' | 'needs_improvement'
+  detail_feedback: string | null
+  highlights: string | null
+  issues: string | null
+  checkin_completed: number  // SQLite 0/1
+  phase_id: string | null
+  plan_id: string | null
+  imported_from_excel: number  // SQLite 0/1
+  created_at: string
+}
+
+/** lesson_plans 表原始行 */
+export interface LessonPlanRow {
+  id: string
+  student_id: string
+  phase_id: string | null
+  plan_date: string | null
+  tasks: string  // JSON 字符串
+  notes: string | null
+  ai_reason: string | null
+  generated_by_ai: number  // SQLite 0/1
+  created_at: string
+}
+
+/** teachers 表原始行 */
+export interface TeacherRow {
+  id: string
+  name: string
+  phone: string | null
+  university: string | null
+  major: string | null
+  enroll_date: string | null
+  status: 'active' | 'inactive'
+  vocab_level: string | null
+  oral_level: 'basic' | 'intermediate' | 'advanced'
+  teaching_style: string | null
+  suitable_grades: string | null
+  suitable_levels: string | null  // JSON 字符串
+  training_stage: 'probation' | 'intern' | 'formal'
+  teacher_types: string  // JSON 字符串
+  total_teaching_hours: number
+  notes: string | null
+  created_at: string
+}
+
+/** trial_conversions 表原始行 */
+export interface TrialConversionRow {
+  id: string
+  student_id: string
+  trial_date: string | null
+  conversion_date: string | null
+  converted: number  // SQLite 0/1
+  commission_note: string | null
+  notes: string | null
+  created_at: string
+}
+
+/** todos 表 JOIN students 的原始行 */
+export interface TodoRow {
+  id: string
+  content: string
+  student_id: string | null
+  student_name: string | null
+  due_date: string | null
+  completed: number  // SQLite 0/1
+  completed_at: string | null
+  created_at: string
+  sort_order: number
+}
+
+/** scheduled_classes JOIN students/teachers 的原始行 */
+export interface ScheduledClassWithJoinRow {
+  id: string
+  student_id: string
+  teacher_id: string | null
+  class_date: string
+  start_time: string | null
+  end_time: string | null
+  duration_hours: number
+  status: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled'
+  rescheduled_from_id: string | null
+  cancel_reason: string | null
+  notes: string | null
+  created_at: string
+  student_name: string
+  grade: string | null
+  level: string | null
+  teacher_name: string | null
+}
+
+/** student_schedule_preferences JOIN students 的原始行 */
+export interface PreferenceWithStudentRow {
+  id: string
+  student_id: string
+  day_of_week: DayOfWeek
+  preferred_start: string | null
+  preferred_end: string | null
+  semester: string | null
+  notes: string | null
+  student_name: string
+  grade: string | null
+  level: LevelType | null
+  status: StudentStatus
+  student_type: StudentType
+}
+
+/** ecords JOIN lesson_plans 的原始行 */
+export interface ClassRecordWithPlanRow extends ClassRecordRow {
+  plan_id_ref: string | null
+  plan_tasks: string | null
+  plan_notes: string | null
+  plan_ai_reason: string | null
+}
+
+/** students JOIN billing 的原始行 */
+export interface StudentWithBillingRow extends StudentRow {
+  billing_id: string | null
+  total_hours: number | null
+  used_hours: number | null
+  remaining_hours: number | null
+  warning_threshold: number | null
+  last_payment_date: string | null
+}
+
+/** trial students JOIN 查询的原始行 */
+export interface TrialStudentRow extends StudentRow {
+  conversion_id: string | null
+  trial_date: string | null
+  conversion_date: string | null
+  converted: number
+  tc_commission_note: string | null
+  tc_notes: string | null
+  tc_created_at: string | null
+  billing_id: string | null
+  total_hours: number | null
+  used_hours: number | null
+  remaining_hours: number | null
+  warning_threshold: number | null
+}
+
+/** trial_conversions JOIN students 的原始行 */
+export interface ConversionWithStudentRow extends TrialConversionRow {
+  student_no: string | null
+  name: string
+  school: string | null
+  grade: string | null
+  account: string | null
+  enroll_date: string | null
+  student_type: StudentType
+  status: StudentStatus
+  level: LevelType
+  initial_score: number | null
+  initial_vocab: number | null
+  phonics_progress: string | null
+  phonics_completed: number
+  ipa_completed: number
+  reading_progress: string | null
+  student_created_at: string
+  updated_at: string
+}
+
+/** reading_checkins 聚合查询的原始行 */
+export interface ReadingCheckinAggRow {
+  id: string
+  name: string
+  monthly_count: number
+  checked_yesterday: number  // SQLite 0/1
+}
+
+// ===== 各表允许更新的字段白名单 =====
+// 用于防止 SQL 注入：运行时校验字段名是否在白名单中
+
+export const STUDENT_UPDATABLE_FIELDS = new Set([
+  'student_no', 'name', 'school', 'grade', 'account', 'enroll_date',
+  'student_type', 'status', 'level', 'initial_score', 'initial_vocab',
+  'phonics_progress', 'phonics_completed', 'ipa_completed', 'reading_progress',
+  'notes', 'updated_at'
+])
+
+export const CLASS_RECORD_UPDATABLE_FIELDS = new Set([
+  'student_id', 'class_date', 'duration_hours', 'teacher_name', 'attendance',
+  'tasks', 'task_completed', 'incomplete_reason', 'performance',
+  'detail_feedback', 'highlights', 'issues', 'checkin_completed',
+  'phase_id', 'plan_id', 'imported_from_excel'
+])
+
+export const LESSON_PLAN_UPDATABLE_FIELDS = new Set([
+  'student_id', 'phase_id', 'plan_date', 'tasks', 'notes',
+  'ai_reason', 'generated_by_ai'
+])
+
+export const BILLING_UPDATABLE_FIELDS = new Set([
+  'total_hours', 'used_hours', 'warning_threshold',
+  'last_payment_date', 'notes', 'updated_at'
+])
+
+export const EXAM_SCORE_UPDATABLE_FIELDS = new Set([
+  'student_id', 'exam_date', 'exam_name', 'exam_type',
+  'score', 'full_score', 'notes'
+])
+
+export const LEARNING_PHASE_UPDATABLE_FIELDS = new Set([
+  'student_id', 'phase_name', 'phase_type', 'start_date', 'end_date',
+  'goal', 'vocab_start', 'vocab_end', 'summary'
+])
+
+export const TRIAL_CONVERSION_UPDATABLE_FIELDS = new Set([
+  'student_id', 'trial_date', 'conversion_date', 'converted',
+  'commission_note', 'notes'
+])
+
+export const TEACHER_UPDATABLE_FIELDS = new Set([
+  'name', 'phone', 'university', 'major', 'enroll_date', 'status',
+  'vocab_level', 'oral_level', 'teaching_style', 'suitable_grades',
+  'suitable_levels', 'training_stage', 'teacher_types',
+  'total_teaching_hours', 'notes'
+])
+
+export const TEACHER_AVAILABILITY_UPDATABLE_FIELDS = new Set([
+  'teacher_id', 'week_start', 'day_of_week', 'start_time', 'end_time', 'notes'
+])
+
+export const STUDENT_SCHEDULE_PREFERENCE_UPDATABLE_FIELDS = new Set([
+  'student_id', 'day_of_week', 'preferred_start', 'preferred_end',
+  'semester', 'notes'
+])
+
+export const SCHEDULED_CLASS_UPDATABLE_FIELDS = new Set([
+  'student_id', 'teacher_id', 'class_date', 'start_time', 'end_time',
+  'duration_hours', 'status', 'rescheduled_from_id', 'cancel_reason', 'notes'
+])
+
+export const WORDBANK_UPDATABLE_FIELDS = new Set([
+  'name', 'total_levels', 'nine_grid_interval', 'category', 'sort_order', 'notes'
+])
+
+export const TODO_UPDATABLE_FIELDS = new Set([
+  'content', 'student_id', 'due_date', 'completed', 'completed_at', 'sort_order'
+])
+
+/**
+ * 校验字段名是否在白名单中，防止 SQL 注入
+ * @param key 字段名
+ * @param allowedFields 允许的字段白名单
+ * @returns 是否允许
+ */
+export function isAllowedField(key: string, allowedFields: Set<string>): boolean {
+  return allowedFields.has(key)
+}
 
 /**
  * 解析 tasks 字段，确保返回 TaskBlock[]
@@ -21,6 +308,83 @@ export function parseTasks(tasks: TaskBlock[] | string | null | undefined): Task
   return Array.isArray(tasks) ? tasks : []
 }
 
+/**
+ * 统一的 ClassRecord 行映射函数
+ * 将数据库原始行转换为 ClassRecord 类型（JSON 解析 + 布尔值转换）
+ */
+export function mapClassRecord(row: ClassRecordRow): ClassRecord {
+  return {
+    ...row,
+    tasks: parseTasks(row.tasks),
+    checkin_completed: !!row.checkin_completed,
+    imported_from_excel: !!row.imported_from_excel,
+    plan_id: row.plan_id || null,
+  }
+}
+
+/**
+ * 统一的 LessonPlan 行映射函数
+ * 将数据库原始行转换为 LessonPlan 类型（JSON 解析 + 布尔值转换）
+ */
+export function mapLessonPlan(row: LessonPlanRow): LessonPlan {
+  return {
+    ...row,
+    tasks: parseTasks(row.tasks),
+    generated_by_ai: !!row.generated_by_ai,
+  }
+}
+
+/**
+ * 统一的 Student 行映射函数
+ * 将数据库原始行转换为 Student 类型（布尔值转换）
+ */
+export function mapStudent(row: StudentRow): Student {
+  return {
+    ...row,
+    phonics_completed: !!row.phonics_completed,
+    ipa_completed: !!row.ipa_completed,
+  }
+}
+
+/**
+ * 统一的 Teacher 行映射函数
+ * 将数据库原始行转换为 Teacher 类型（JSON 解析 + 默认值）
+ */
+export function mapTeacher(row: TeacherRow): Teacher {
+  return {
+    ...row,
+    suitable_levels: row.suitable_levels ? JSON.parse(row.suitable_levels) : null,
+    teacher_types: row.teacher_types ? JSON.parse(row.teacher_types) as TeacherType[] : [],
+    total_teaching_hours: row.total_teaching_hours || 0,
+    training_stage: row.training_stage || 'probation',
+  }
+}
+
+/**
+ * 统一的 TrialConversion 行映射函数
+ * 将数据库原始行转换为 TrialConversion 类型（布尔值转换）
+ */
+export function mapTrialConversion(row: TrialConversionRow): TrialConversion {
+  return {
+    ...row,
+    converted: !!row.converted,
+  }
+}
+
+/**
+ * 统一的 Todo 行映射函数
+ * 将数据库原始行转换为 Todo 类型（布尔值转换）
+ */
+export function mapTodo(row: TodoRow): Todo {
+  return {
+    ...row,
+    completed: !!row.completed,
+    student_id: row.student_id ?? undefined,
+    student_name: row.student_name ?? undefined,
+    due_date: row.due_date ?? undefined,
+    completed_at: row.completed_at ?? undefined,
+  }
+}
 
 // 初始化数据库 - 在 Electron 中由主进程处理
 export async function initDatabase(): Promise<void> {

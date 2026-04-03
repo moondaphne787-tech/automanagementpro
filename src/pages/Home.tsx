@@ -1,18 +1,20 @@
 import { useEffect, useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, Search, ArrowUpDown, AlertTriangle, Upload, Users } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { FileCabinet } from '@/components/FileCabinet/FileCabinet'
+import { QuickRecordPanel, ViewPlansPanel, ViewProgressPanel } from '@/components/FileCabinet/StudentQuickPanels'
 import { SemesterReminder, CurrentSemesterBadge } from '@/components/Reminder/SemesterReminder'
 import { ImportStudentsDrawer } from '@/components/Drawers/ImportStudentsDrawer'
 import { BatchPrefDialog } from '@/components/Preferences/BatchPrefDialog'
+import { useBatchPrefDialog } from '@/hooks/useBatchPrefDialog'
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/lib/utils'
 import { GRADE_OPTIONS, LEVEL_LABELS, STATUS_LABELS } from '@/types'
-import type { SortOptions, DayOfWeek } from '@/types'
+import type { SortOptions } from '@/types'
 
 const statusOptions = [
   { value: 'all', label: '全部状态' },
@@ -60,35 +62,47 @@ const sortOptions = [
 
 export function Home() {
   const navigate = useNavigate()
-  const { 
-    students, 
-    studentsLoading, 
-    filters, 
-    sort, 
-    loadStudents, 
-    loadExpiredPlansCount,
-    setFilters, 
-    setSort 
-  } = useAppStore()
+  const location = useLocation()
+  const students = useAppStore(s => s.students)
+  const studentsLoading = useAppStore(s => s.studentsLoading)
+  const filters = useAppStore(s => s.filters)
+  const sort = useAppStore(s => s.sort)
+  const loadStudents = useAppStore(s => s.loadStudents)
+  const loadExpiredPlansCount = useAppStore(s => s.loadExpiredPlansCount)
+  const setFilters = useAppStore(s => s.setFilters)
+  const setSort = useAppStore(s => s.setSort)
   
   const [searchValue, setSearchValue] = useState(filters.search)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(sort.direction)
   const [importDrawerOpen, setImportDrawerOpen] = useState(false)
   
-  // 批量设置时段偏好状态
-  const [batchPrefOpen, setBatchPrefOpen] = useState(false)
-  const [batchPrefForm, setBatchPrefForm] = useState({
-    day_of_week: 'saturday' as DayOfWeek,
-    preferred_start: '09:00',
-    preferred_end: '11:00',
-    notes: '',
-    grade_filter: 'all'
-  })
-  const [batchSelectedStudents, setBatchSelectedStudents] = useState<string[]>([])
-  const [batchSaving, setBatchSaving] = useState(false)
+  // 快捷面板状态
+  const [quickRecordOpen, setQuickRecordOpen] = useState(false)
+  const [viewPlansOpen, setViewPlansOpen] = useState(false)
+  const [viewProgressOpen, setViewProgressOpen] = useState(false)
+  const [activeStudentId, setActiveStudentId] = useState<string | null>(null)
+  
+  // 批量设置时段偏好（共享 hook）
+  const batchPrefDialog = useBatchPrefDialog(loadStudents)
   
   // 追踪是否已加载过期计划，确保只加载一次
   const expiredPlansLoadedRef = useRef(false)
+
+  // 处理从 Dashboard 跳转过来的筛选条件
+  const [dashboardFilter, setDashboardFilter] = useState<string | null>(null)
+  
+  useEffect(() => {
+    const state = location.state as { filter?: string } | null
+    if (state?.filter === 'low_hours') {
+      // 从 Dashboard 课时预警卡片跳转过来：按剩余课时升序排列，只看在读学员
+      setFilters({ status: 'active' })
+      setSort({ field: 'remaining_hours', direction: 'asc' })
+      setSortDirection('asc')
+      setDashboardFilter('low_hours')
+      // 清除 state 避免刷新后重复触发
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.state])
 
   useEffect(() => {
     // 加载学员列表
@@ -120,46 +134,6 @@ export function Home() {
     s.billing.remaining_hours <= s.billing.warning_threshold
   ).length
 
-  // 批量保存时段偏好
-  const handleBatchSavePreferences = async () => {
-    if (batchSelectedStudents.length === 0) return
-    setBatchSaving(true)
-    try {
-      const { studentSchedulePreferenceDb } = await import('@/db/schedule')
-      let addedCount = 0
-      for (const studentId of batchSelectedStudents) {
-        const existing = await studentSchedulePreferenceDb.getByStudentId(studentId)
-        const hasSame = existing.some(
-          p =>
-            p.day_of_week === batchPrefForm.day_of_week &&
-            p.preferred_start === batchPrefForm.preferred_start &&
-            p.preferred_end === batchPrefForm.preferred_end
-        )
-        if (!hasSame) {
-          await studentSchedulePreferenceDb.create({
-            student_id: studentId,
-            day_of_week: batchPrefForm.day_of_week,
-            preferred_start: batchPrefForm.preferred_start,
-            preferred_end: batchPrefForm.preferred_end,
-            notes: batchPrefForm.notes || undefined
-          })
-          addedCount++
-        }
-      }
-      const skippedCount = batchSelectedStudents.length - addedCount
-      if (skippedCount > 0) {
-        alert(`已为 ${addedCount} 名学生添加时段偏好\n${skippedCount} 名学生已有相同偏好，已跳过`)
-      } else {
-        alert(`已为 ${addedCount} 名学生添加时段偏好`)
-      }
-      setBatchPrefOpen(false)
-      setBatchSelectedStudents([])
-      loadStudents()
-    } catch (error) {
-      alert('保存失败：' + (error as Error).message)
-    }
-    setBatchSaving(false)
-  }
 
   return (
     <div className="h-full flex flex-col">
@@ -168,6 +142,22 @@ export function Home() {
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">学员档案</h1>
           <CurrentSemesterBadge />
+          {dashboardFilter === 'low_hours' && (
+            <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs">
+              ⚡ 课时预警筛选中
+              <button
+                onClick={() => {
+                  setDashboardFilter(null)
+                  setFilters({ status: 'all' })
+                  setSort({ field: 'student_no', direction: 'asc' })
+                  setSortDirection('asc')
+                }}
+                className="ml-1 hover:text-red-800 dark:hover:text-red-200"
+              >
+                ✕
+              </button>
+            </span>
+          )}
           {warningCount > 0 && (
             <motion.div
               initial={{ scale: 0 }}
@@ -180,7 +170,7 @@ export function Home() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setBatchPrefOpen(true)}>
+          <Button variant="outline" onClick={() => batchPrefDialog.setOpen(true)}>
             <Users className="w-4 h-4 mr-1" />
             批量设置时段偏好
           </Button>
@@ -276,7 +266,13 @@ export function Home() {
 
       {/* 档案柜主体 */}
       <div className="flex-1 overflow-auto p-6">
-        <FileCabinet students={students} loading={studentsLoading} />
+        <FileCabinet
+          students={students}
+          loading={studentsLoading}
+          onQuickRecord={(id) => { setActiveStudentId(id); setQuickRecordOpen(true) }}
+          onViewPlans={(id) => { setActiveStudentId(id); setViewPlansOpen(true) }}
+          onViewProgress={(id) => { setActiveStudentId(id); setViewProgressOpen(true) }}
+        />
       </div>
       
       {/* 学员导入抽屉 */}
@@ -287,15 +283,32 @@ export function Home() {
       
       {/* 批量设置时段偏好对话框 */}
       <BatchPrefDialog
-        open={batchPrefOpen}
-        onOpenChange={setBatchPrefOpen}
+        open={batchPrefDialog.open}
+        onOpenChange={batchPrefDialog.setOpen}
         students={students}
-        batchSelectedStudents={batchSelectedStudents}
-        setBatchSelectedStudents={setBatchSelectedStudents}
-        batchPrefForm={batchPrefForm}
-        setBatchPrefForm={setBatchPrefForm}
-        batchSaving={batchSaving}
-        onSave={handleBatchSavePreferences}
+        batchSelectedStudents={batchPrefDialog.selectedStudents}
+        setBatchSelectedStudents={batchPrefDialog.setSelectedStudents}
+        batchPrefForm={batchPrefDialog.form}
+        setBatchPrefForm={batchPrefDialog.setForm}
+        batchSaving={batchPrefDialog.saving}
+        onSave={batchPrefDialog.onSave}
+      />
+      
+      {/* 快捷面板 */}
+      <QuickRecordPanel
+        open={quickRecordOpen}
+        onOpenChange={setQuickRecordOpen}
+        studentId={activeStudentId}
+      />
+      <ViewPlansPanel
+        open={viewPlansOpen}
+        onOpenChange={setViewPlansOpen}
+        studentId={activeStudentId}
+      />
+      <ViewProgressPanel
+        open={viewProgressOpen}
+        onOpenChange={setViewProgressOpen}
+        studentId={activeStudentId}
       />
     </div>
   )

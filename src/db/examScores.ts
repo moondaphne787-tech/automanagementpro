@@ -1,5 +1,5 @@
 import type { ExamScore } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, isAllowedField, EXAM_SCORE_UPDATABLE_FIELDS } from './utils'
 
 // 考试成绩操作
 export const examScoreDb = {
@@ -41,10 +41,9 @@ export const examScoreDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
-      if (key !== 'id') {
-        fields.push(`${key} = ?`)
-        values.push(value)
-      }
+      if (!isAllowedField(key, EXAM_SCORE_UPDATABLE_FIELDS)) continue
+      fields.push(`${key} = ?`)
+      values.push(value)
     }
     
     if (fields.length > 0) {

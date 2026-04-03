@@ -3,6 +3,7 @@ import { Edit, Trash2, Clock, Calendar, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
 import { studentSchedulePreferenceDb } from '@/db'
 import { formatDateCN, formatHours, isHoursWarning, cn } from '@/lib/utils'
@@ -14,7 +15,10 @@ interface InfoTabProps {
 }
 
 export function InfoTab({ studentId }: InfoTabProps) {
-  const { currentStudent, currentBilling, updateBilling, updateStudent } = useAppStore()
+  const currentStudent = useAppStore(s => s.currentStudent)
+  const currentBilling = useAppStore(s => s.currentBilling)
+  const updateBilling = useAppStore(s => s.updateBilling)
+  const updateStudent = useAppStore(s => s.updateStudent)
 
   const [billingForm, setBillingForm] = useState({
     total_hours: '',
@@ -62,7 +66,12 @@ export function InfoTab({ studentId }: InfoTabProps) {
     const hours = parseFloat(billingForm.total_hours)
     if (isNaN(hours) || hours <= 0) return
     const confirmMessage = `确定要增加 ${hours} 课时吗？\n\n当前购买课时：${formatHours(currentBilling?.total_hours || 0)}\n增加后：${formatHours((currentBilling?.total_hours || 0) + hours)}`
-    if (!confirm(confirmMessage)) return
+    const confirmed = await confirmDialog({
+      title: '增加课时',
+      message: confirmMessage,
+      variant: 'warning'
+    })
+    if (!confirmed) return
     await updateBilling(studentId, {
       total_hours: (currentBilling?.total_hours || 0) + hours
     })
@@ -107,7 +116,13 @@ export function InfoTab({ studentId }: InfoTabProps) {
   }
 
   const handleDeletePreference = async (prefId: string) => {
-    if (!confirm('确定要删除这个偏好时段吗？')) return
+    const confirmed = await confirmDialog({
+      title: '删除偏好时段',
+      message: '确定要删除这个偏好时段吗？',
+      confirmText: '删除',
+      variant: 'danger'
+    })
+    if (!confirmed) return
     await studentSchedulePreferenceDb.delete(prefId)
     await loadSchedulePreferences()
   }

@@ -28,7 +28,14 @@ export function WeeklyPlanStatus({ items, loading }: WeeklyPlanStatusProps) {
       <div className="p-3">
         {loading ? (
           <div className="space-y-1.5">
-            {[1, 2, 3].map(i => <div key={i} className="h-8 bg-muted animate-pulse rounded" />)}
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/20">
+                <div className="h-3 w-3 bg-muted animate-pulse rounded-full" />
+                <div className="h-3 w-16 bg-muted animate-pulse rounded flex-1" />
+                <div className="h-2.5 w-20 bg-muted animate-pulse rounded" />
+                <div className="h-4 w-10 bg-muted animate-pulse rounded-full" />
+              </div>
+            ))}
           </div>
         ) : items.length === 0 ? (
           <div className="text-center py-5 text-muted-foreground">

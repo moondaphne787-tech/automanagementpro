@@ -18,13 +18,11 @@ type TabType = 'info' | 'wordbank' | 'growth' | 'records' | 'plans'
 export function StudentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const {
-    currentStudent,
-    updateStudent,
-    deleteStudent,
-    selectStudent,
-    loadWordbanks
-  } = useAppStore()
+  const currentStudent = useAppStore(s => s.currentStudent)
+  const updateStudent = useAppStore(s => s.updateStudent)
+  const deleteStudent = useAppStore(s => s.deleteStudent)
+  const selectStudent = useAppStore(s => s.selectStudent)
+  const loadWordbanks = useAppStore(s => s.loadWordbanks)
 
   const [tab, setTab] = useState<TabType>('info')
   const [editing, setEditing] = useState(false)

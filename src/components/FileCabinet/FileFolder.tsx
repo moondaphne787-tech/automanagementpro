@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Clock, AlertTriangle, CalendarX } from 'lucide-react'
+import { Clock, AlertTriangle, CalendarX, PenLine, ClipboardList, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getLevelColor, formatHours, isHoursWarning } from '@/lib/utils'
 import type { StudentWithBilling, LEVEL_LABELS, STATUS_LABELS } from '@/types'
@@ -9,9 +9,12 @@ import { LEVEL_LABELS as levelLabels, STATUS_LABELS as statusLabels } from '@/ty
 interface FileFolderProps {
   student: StudentWithBilling
   expiredPlansCount?: number
+  onQuickRecord?: (studentId: string) => void
+  onViewPlans?: (studentId: string) => void
+  onViewProgress?: (studentId: string) => void
 }
 
-export function FileFolder({ student, expiredPlansCount = 0 }: FileFolderProps) {
+export function FileFolder({ student, expiredPlansCount = 0, onQuickRecord, onViewPlans, onViewProgress }: FileFolderProps) {
   const navigate = useNavigate()
   const isWarning = isHoursWarning(student.billing)
   const hasExpiredPlans = expiredPlansCount > 0
@@ -22,15 +25,40 @@ export function FileFolder({ student, expiredPlansCount = 0 }: FileFolderProps) 
       transition={{ duration: 0.15 }}
       onClick={() => navigate(`/students/${student.id}`)}
       className={cn(
-        "folder-card cursor-pointer bg-card border rounded-lg p-4 relative",
+        "folder-card cursor-pointer bg-card border rounded-lg p-4 relative group",
         "hover:shadow-lg transition-shadow",
         student.status !== 'active' && "opacity-60"
       )}
     >
-      {/* 体验生标签 */}
+      {/* 体验生标签 — 悬浮时隐藏，让位给快捷按钮 */}
       {student.student_type === 'trial' && (
-        <div className="absolute top-2 right-2 trial-badge">体验</div>
+        <div className="absolute top-2 right-2 trial-badge group-hover:opacity-0 transition-opacity z-[5]">体验</div>
       )}
+
+      {/* 悬浮快捷操作按钮 */}
+      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button
+          title="快速录入"
+          className="w-7 h-7 rounded-md bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
+          onClick={(e) => { e.stopPropagation(); onQuickRecord?.(student.id) }}
+        >
+          <PenLine className="w-3.5 h-3.5" />
+        </button>
+        <button
+          title="查看计划"
+          className="w-7 h-7 rounded-md bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 flex items-center justify-center transition-colors"
+          onClick={(e) => { e.stopPropagation(); onViewPlans?.(student.id) }}
+        >
+          <ClipboardList className="w-3.5 h-3.5" />
+        </button>
+        <button
+          title="查看进度"
+          className="w-7 h-7 rounded-md bg-green-500/10 hover:bg-green-500/20 text-green-600 flex items-center justify-center transition-colors"
+          onClick={(e) => { e.stopPropagation(); onViewProgress?.(student.id) }}
+        >
+          <BarChart3 className="w-3.5 h-3.5" />
+        </button>
+      </div>
       
       {/* 课时预警角标 */}
       {isWarning && student.billing && !hasExpiredPlans && (

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Database, FolderOpen, History, AlertCircle, Download, FileSpreadsheet } from 'lucide-react'
+import { Database, FolderOpen, History, AlertCircle, Download, FileSpreadsheet, HardDrive } from 'lucide-react'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -35,6 +35,8 @@ export function DatabaseManagementCard() {
   const [showBackupHistory, setShowBackupHistory] = useState(false)
   const [creatingBackup, setCreatingBackup] = useState(false)
   const [exportingExcel, setExportingExcel] = useState(false)
+  const [walInfo, setWalInfo] = useState<{ exists: boolean; size: number; path: string } | null>(null)
+  const [runningCheckpoint, setRunningCheckpoint] = useState(false)
 
   useEffect(() => {
     loadDatabaseInfo()
@@ -47,15 +49,17 @@ export function DatabaseManagementCard() {
     }
 
     try {
-      const [stats, history, backups] = await Promise.all([
+      const [stats, history, backups, wal] = await Promise.all([
         window.electronAPI.dbGetStats(),
         window.electronAPI.dbGetMigrationHistory(),
-        window.electronAPI.dbGetBackupHistory(10)
+        window.electronAPI.dbGetBackupHistory(10),
+        window.electronAPI.dbGetWalInfo()
       ])
       
       setDbStats(stats)
       setMigrationHistory(history)
       setBackupHistory(backups)
+      setWalInfo(wal)
     } catch (error) {
       console.error('Failed to load database info:', error)
     } finally {
@@ -121,6 +125,40 @@ export function DatabaseManagementCard() {
     }
   }
 
+  const handleWalCheckpoint = async () => {
+    if (!window.electronAPI) return
+    
+    const confirmed = await confirmDialog({
+      title: '执行 WAL Checkpoint',
+      message: '确定要执行 WAL Checkpoint 吗？\n\n此操作将把 WAL 文件中的待写入数据合并到主数据库文件中，可以减少数据库文件总体大小。',
+      confirmText: '执行',
+      variant: 'warning'
+    })
+    
+    if (!confirmed) return
+    
+    setRunningCheckpoint(true)
+    try {
+      const result = await window.electronAPI.dbCheckpoint('TRUNCATE')
+      if (result.success) {
+        toast.success(result.message)
+        // 重新加载 WAL 信息和数据库统计
+        const [wal, stats] = await Promise.all([
+          window.electronAPI.dbGetWalInfo(),
+          window.electronAPI.dbGetStats()
+        ])
+        setWalInfo(wal)
+        if (stats) setDbStats(stats)
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      toast.error('Checkpoint 失败：' + (error as Error).message)
+    } finally {
+      setRunningCheckpoint(false)
+    }
+  }
+
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -179,6 +217,64 @@ export function DatabaseManagementCard() {
 
   return (
     <>
+      {/* WAL 文件管理卡片 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <HardDrive className="w-4 h-4" />
+            WAL 文件管理
+          </CardTitle>
+          <CardDescription>
+            WAL (Write-Ahead Logging) 文件状态与 Checkpoint 操作
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* WAL 文件信息 */}
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-muted-foreground">WAL 文件状态</div>
+                <div className="font-semibold">
+                  {walInfo?.exists ? (
+                    <span className="text-green-600">存在</span>
+                  ) : (
+                    <span className="text-muted-foreground">不存在（已合并）</span>
+                  )}
+                </div>
+              </div>
+              {walInfo?.exists && (
+                <div>
+                  <div className="text-xs text-muted-foreground">WAL 文件大小</div>
+                  <div className="font-semibold text-lg">{formatFileSize(walInfo.size)}</div>
+                </div>
+              )}
+            </div>
+            {walInfo?.exists && walInfo.size > 1024 * 100 && (
+              <div className="mt-2 flex items-center gap-2 text-orange-500 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                <span>WAL 文件较大，建议执行 Checkpoint 以优化数据库</span>
+              </div>
+            )}
+          </div>
+
+          {/* WAL 操作按钮 */}
+          <Button 
+            variant="outline" 
+            onClick={handleWalCheckpoint} 
+            disabled={runningCheckpoint || !walInfo?.exists}
+          >
+            <HardDrive className="w-4 h-4 mr-2" />
+            {runningCheckpoint ? '执行中...' : '执行 WAL Checkpoint'}
+          </Button>
+
+          <p className="text-xs text-muted-foreground">
+            WAL (Write-Ahead Logging) 是 SQLite 的日志模式，用于提高写入性能。
+            执行 Checkpoint 可以将 WAL 文件中的待写入数据合并到主数据库文件中，
+            减少 WAL 文件大小并优化数据库性能。系统退出时会自动执行 Checkpoint。
+          </p>
+        </CardContent>
+      </Card>
+
       {/* 数据库状态卡片 */}
       <Card>
         <CardHeader>

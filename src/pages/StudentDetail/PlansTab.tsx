@@ -21,13 +21,11 @@ interface PlansTabProps {
 }
 
 export function PlansTab({ studentId }: PlansTabProps) {
-  const {
-    currentStudent,
-    currentProgress,
-    wordbanks,
-    createLessonPlan,
-    deleteLessonPlan
-  } = useAppStore()
+  const currentStudent = useAppStore(s => s.currentStudent)
+  const currentProgress = useAppStore(s => s.currentProgress)
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const createLessonPlan = useAppStore(s => s.createLessonPlan)
+  const deleteLessonPlan = useAppStore(s => s.deleteLessonPlan)
 
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([])
   const [expiredPlans, setExpiredPlans] = useState<LessonPlan[]>([])

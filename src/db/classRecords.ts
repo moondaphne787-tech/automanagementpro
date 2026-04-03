@@ -1,5 +1,6 @@
 import type { ClassRecord, LessonPlan } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne, ipcTransaction } from './utils'
+import type { ClassRecordRow, ClassRecordWithPlanRow } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, ipcTransaction, mapClassRecord, parseTasks, isAllowedField, CLASS_RECORD_UPDATABLE_FIELDS } from './utils'
 
 // 课堂记录操作
 export const classRecordDb = {
@@ -65,14 +66,8 @@ export const classRecordDb = {
   },
   
   async getById(id: string): Promise<ClassRecord | undefined> {
-    const record = await ipcQueryOne<any>(`SELECT * FROM class_records WHERE id = ?`, [id])
-    if (record) {
-      record.tasks = JSON.parse(record.tasks || '[]')
-      record.checkin_completed = !!record.checkin_completed
-      record.imported_from_excel = !!record.imported_from_excel
-      record.plan_id = record.plan_id || null
-    }
-    return record as ClassRecord | undefined
+    const record = await ipcQueryOne<ClassRecordRow>(`SELECT * FROM class_records WHERE id = ?`, [id])
+    return record ? mapClassRecord(record) : undefined
   },
   
   async getByStudentId(studentId: string, limit?: number): Promise<ClassRecord[]> {
@@ -80,14 +75,8 @@ export const classRecordDb = {
     if (limit) {
       sql += ` LIMIT ${limit}`
     }
-    const records = await ipcQuery<any[]>(sql, [studentId])
-    return records.map(record => {
-      record.tasks = JSON.parse(record.tasks || '[]')
-      record.checkin_completed = !!record.checkin_completed
-      record.imported_from_excel = !!record.imported_from_excel
-      record.plan_id = record.plan_id || null
-      return record as ClassRecord
-    })
+    const records = await ipcQuery<ClassRecordRow[]>(sql, [studentId])
+    return records.map(mapClassRecord)
   },
   
   // 获取课堂记录及关联的计划信息
@@ -116,27 +105,10 @@ export const classRecordDb = {
       sql += ` LIMIT ${options.limit}`
     }
     
-    const records = await ipcQuery<any[]>(sql, params)
+    const records = await ipcQuery<ClassRecordWithPlanRow[]>(sql, params)
     return records.map(record => {
       const classRecord: ClassRecord & { plan?: LessonPlan } = {
-        id: record.id,
-        student_id: record.student_id,
-        class_date: record.class_date,
-        duration_hours: record.duration_hours,
-        teacher_name: record.teacher_name,
-        attendance: record.attendance,
-        tasks: JSON.parse(record.tasks || '[]'),
-        task_completed: record.task_completed,
-        incomplete_reason: record.incomplete_reason,
-        performance: record.performance,
-        detail_feedback: record.detail_feedback,
-        highlights: record.highlights,
-        issues: record.issues,
-        checkin_completed: !!record.checkin_completed,
-        phase_id: record.phase_id,
-        plan_id: record.plan_id || null,
-        imported_from_excel: !!record.imported_from_excel,
-        created_at: record.created_at
+        ...mapClassRecord(record),
       }
       
       if (record.plan_id_ref) {
@@ -145,7 +117,7 @@ export const classRecordDb = {
           student_id: record.student_id,
           phase_id: null,
           plan_date: record.class_date,
-          tasks: JSON.parse(record.plan_tasks || '[]'),
+          tasks: parseTasks(record.plan_tasks),
           notes: record.plan_notes,
           ai_reason: record.plan_ai_reason,
           generated_by_ai: false,
@@ -162,13 +134,14 @@ export const classRecordDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
+      if (!isAllowedField(key, CLASS_RECORD_UPDATABLE_FIELDS)) continue
       if (key === 'tasks') {
         fields.push(`${key} = ?`)
         values.push(JSON.stringify(value))
       } else if (key === 'checkin_completed' || key === 'imported_from_excel') {
         fields.push(`${key} = ?`)
         values.push(value ? 1 : 0)
-      } else if (key !== 'id' && key !== 'created_at') {
+      } else {
         fields.push(`${key} = ?`)
         values.push(value)
       }
@@ -248,19 +221,15 @@ export const classRecordDb = {
     
     sql += ` ORDER BY class_date DESC`
     
-    const records = await ipcQuery<any[]>(sql, params)
+    const records = await ipcQuery<ClassRecordRow[]>(sql, params)
     
     const result = new Map<string, ClassRecord[]>()
     for (const record of records) {
-      record.tasks = JSON.parse(record.tasks || '[]')
-      record.checkin_completed = !!record.checkin_completed
-      record.imported_from_excel = !!record.imported_from_excel
-      record.plan_id = record.plan_id || null
-      
-      if (!result.has(record.student_id)) {
-        result.set(record.student_id, [])
+      const mapped = mapClassRecord(record)
+      if (!result.has(mapped.student_id)) {
+        result.set(mapped.student_id, [])
       }
-      result.get(record.student_id)!.push(record as ClassRecord)
+      result.get(mapped.student_id)!.push(mapped)
     }
     
     return result
@@ -268,31 +237,19 @@ export const classRecordDb = {
   
   // 按日期范围查询课堂记录
   async getByDateRange(start: string, end: string): Promise<ClassRecord[]> {
-    const records = await ipcQuery<any[]>(
+    const records = await ipcQuery<ClassRecordRow[]>(
       `SELECT * FROM class_records WHERE class_date BETWEEN ? AND ? ORDER BY class_date ASC`,
       [start, end]
     )
-    return records.map(record => {
-      record.tasks = JSON.parse(record.tasks || '[]')
-      record.checkin_completed = !!record.checkin_completed
-      record.imported_from_excel = !!record.imported_from_excel
-      record.plan_id = record.plan_id || null
-      return record as ClassRecord
-    })
+    return records.map(mapClassRecord)
   },
 
   // 获取所有课堂记录（用于导出）
   async getAll(): Promise<ClassRecord[]> {
-    const records = await ipcQuery<any[]>(
+    const records = await ipcQuery<ClassRecordRow[]>(
       `SELECT * FROM class_records ORDER BY class_date DESC`
     )
-    return records.map(record => {
-      record.tasks = JSON.parse(record.tasks || '[]')
-      record.checkin_completed = !!record.checkin_completed
-      record.imported_from_excel = !!record.imported_from_excel
-      record.plan_id = record.plan_id || null
-      return record as ClassRecord
-    })
+    return records.map(mapClassRecord)
   },
 
   /**
@@ -503,7 +460,7 @@ export const classRecordDb = {
     startDate.setMonth(startDate.getMonth() - months)
     const startDateStr = startDate.toISOString().split('T')[0]
     
-    const records = await ipcQuery<any[]>(
+    const records = await ipcQuery<Pick<ClassRecordRow, 'class_date' | 'task_completed'>[]>(
       `SELECT class_date, task_completed FROM class_records 
        WHERE student_id = ? AND class_date >= ? 
        ORDER BY class_date ASC`,

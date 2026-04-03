@@ -2,6 +2,12 @@ import type { StateCreator } from 'zustand'
 import type { AppState, StudentSlice } from './types'
 import { studentDb, billingDb, progressDb, lessonPlanDb, trialConversionDb } from '@/db'
 
+// 防抖定时器，用于 setFilters/setSort 触发的 loadStudents
+let loadStudentsTimer: ReturnType<typeof setTimeout> | null = null
+// 用于取消过期请求的版本号
+let loadStudentsVersion = 0
+const LOAD_STUDENTS_DEBOUNCE_MS = 150
+
 export const createStudentSlice: StateCreator<AppState, [], [], StudentSlice> = (set, get) => ({
   // 初始状态
   students: [],
@@ -25,16 +31,23 @@ export const createStudentSlice: StateCreator<AppState, [], [], StudentSlice> = 
   expiredPlansLoading: false,
 
   // 加载学员列表（不含过期计划查询，提高性能）
+  // 使用版本号机制：如果在请求期间又触发了新的加载，旧请求的结果会被丢弃
   loadStudents: async () => {
+    const version = ++loadStudentsVersion
     set({ studentsLoading: true })
     try {
       const { filters, sort } = get()
       const students = await studentDb.getAllWithBilling(filters, sort)
       
-      set({ students, studentsLoading: false })
+      // 仅当此次请求仍是最新版本时才更新状态，避免过期响应覆盖新数据
+      if (version === loadStudentsVersion) {
+        set({ students, studentsLoading: false })
+      }
     } catch (error) {
-      console.error('Failed to load students:', error)
-      set({ studentsLoading: false })
+      if (version === loadStudentsVersion) {
+        console.error('Failed to load students:', error)
+        set({ studentsLoading: false })
+      }
     }
   },
 
@@ -55,7 +68,7 @@ export const createStudentSlice: StateCreator<AppState, [], [], StudentSlice> = 
     }
   },
 
-  // 设置筛选条件
+  // 设置筛选条件（防抖触发 loadStudents，避免快速切换多个筛选条件时产生多次查询）
   setFilters: (newFilters) => {
     const current = get().filters
     const updated = {
@@ -67,13 +80,19 @@ export const createStudentSlice: StateCreator<AppState, [], [], StudentSlice> = 
       day_of_week: newFilters.day_of_week ?? current.day_of_week
     }
     set({ filters: updated })
-    get().loadStudents()
+    if (loadStudentsTimer) clearTimeout(loadStudentsTimer)
+    loadStudentsTimer = setTimeout(() => {
+      get().loadStudents()
+    }, LOAD_STUDENTS_DEBOUNCE_MS)
   },
 
-  // 设置排序
+  // 设置排序（防抖触发 loadStudents）
   setSort: (sort) => {
     set({ sort })
-    get().loadStudents()
+    if (loadStudentsTimer) clearTimeout(loadStudentsTimer)
+    loadStudentsTimer = setTimeout(() => {
+      get().loadStudents()
+    }, LOAD_STUDENTS_DEBOUNCE_MS)
   },
 
   // 创建学员

@@ -13,7 +13,10 @@ interface WordbankTabProps {
 }
 
 export function WordbankTab({ studentId }: WordbankTabProps) {
-  const { currentProgress, wordbanks, upsertProgress, deleteProgress } = useAppStore()
+  const currentProgress = useAppStore(s => s.currentProgress)
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const upsertProgress = useAppStore(s => s.upsertProgress)
+  const deleteProgress = useAppStore(s => s.deleteProgress)
 
   // PromptDialog 状态（用于"输入新关数"）
   const [promptState, setPromptState] = useState<{

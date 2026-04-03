@@ -6,6 +6,7 @@ interface StatCardProps {
   color: 'blue' | 'orange' | 'red' | 'green' | 'purple'
   loading?: boolean
   alert?: boolean
+  onClick?: () => void
 }
 
 const colorMap = {
@@ -16,10 +17,16 @@ const colorMap = {
   purple: { bg: 'bg-purple-50 dark:bg-purple-950/30', text: 'text-purple-600 dark:text-purple-400', icon: 'text-purple-500' },
 }
 
-export function StatCard({ label, value, unit, icon, color, loading, alert }: StatCardProps) {
+export function StatCard({ label, value, unit, icon, color, loading, alert, onClick }: StatCardProps) {
   const c = colorMap[color]
   return (
-    <div className={`rounded-xl border p-4 ${alert ? 'border-current/30' : 'border-border'} ${c.bg}`}>
+    <div
+      className={`rounded-xl border p-4 ${alert ? 'border-current/30' : 'border-border'} ${c.bg} ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
+    >
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-muted-foreground">{label}</span>
         <span className={c.icon}>{icon}</span>

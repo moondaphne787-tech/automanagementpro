@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { settingsDb, scheduledClassDb } from '@/db'
 import { sendAIRequest } from '@/ai/client'
 import {
@@ -52,17 +53,17 @@ export function useAISchedule({
   // AI排课
   const handleAISchedule = async () => {
     if (students.length === 0) {
-      alert('没有需要排课的学生')
+      toast.warning('没有需要排课的学生')
       return
     }
 
     if (teachers.length === 0) {
-      alert('没有可用的助教')
+      toast.warning('没有可用的助教')
       return
     }
 
     if (scheduleDates.length === 0) {
-      alert('请先添加排课日期')
+      toast.warning('请先添加排课日期')
       return
     }
 
@@ -78,7 +79,7 @@ export function useAISchedule({
       const model = await settingsDb.get('ai_model') || 'deepseek-chat'
 
       if (!apiKey) {
-        alert('请先在设置页面配置 AI API Key')
+        toast.error('请先在设置页面配置 AI API Key')
         setAiScheduling(false)
         return
       }
@@ -132,7 +133,7 @@ export function useAISchedule({
     const toSave = aiResults.filter(r => selectedAiResults.has(r.student_id) && !r.unmatched)
 
     if (toSave.length === 0) {
-      alert('请至少选择一个排课结果')
+      toast.warning('请至少选择一个排课结果')
       return
     }
 
@@ -151,7 +152,11 @@ export function useAISchedule({
         }))
       )
 
-      alert(`排课完成：成功 ${results.success} 条，失败 ${results.failed} 条${results.conflicts.length > 0 ? `，冲突 ${results.conflicts.length} 条` : ''}`)
+      if (results.failed > 0 || results.conflicts.length > 0) {
+        toast.warning(`排课完成：成功 ${results.success} 条，失败 ${results.failed} 条${results.conflicts.length > 0 ? `，冲突 ${results.conflicts.length} 条` : ''}`)
+      } else {
+        toast.success(`排课成功：${results.success} 条`)
+      }
 
       setAiResults([])
       setAiConflicts([])
@@ -160,7 +165,7 @@ export function useAISchedule({
 
     } catch (error) {
       console.error('Failed to save AI schedule:', error)
-      alert('保存失败，请重试')
+      toast.error('保存失败，请重试')
     } finally {
       setSaving(false)
     }

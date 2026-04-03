@@ -9,7 +9,7 @@ import type { Student, StudentType } from '@/types'
 export function StudentNew() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { createStudent } = useAppStore()
+  const createStudent = useAppStore(s => s.createStudent)
   
   // 从URL参数判断是否为体验生
   const isTrial = searchParams.get('trial') === 'true'

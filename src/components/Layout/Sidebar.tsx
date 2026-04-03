@@ -43,7 +43,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onQuickAction }: SidebarProps) {
-  const { sidebarCollapsed, toggleSidebar } = useAppStore()
+  const sidebarCollapsed = useAppStore(s => s.sidebarCollapsed)
+  const toggleSidebar = useAppStore(s => s.toggleSidebar)
   
   return (
     <aside className={cn(

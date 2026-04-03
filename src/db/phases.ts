@@ -1,5 +1,5 @@
 import type { LearningPhase } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, isAllowedField, LEARNING_PHASE_UPDATABLE_FIELDS } from './utils'
 
 // 学习阶段操作
 export const learningPhaseDb = {
@@ -52,10 +52,9 @@ export const learningPhaseDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
-      if (key !== 'id' && key !== 'created_at') {
-        fields.push(`${key} = ?`)
-        values.push(value)
-      }
+      if (!isAllowedField(key, LEARNING_PHASE_UPDATABLE_FIELDS)) continue
+      fields.push(`${key} = ?`)
+      values.push(value)
     }
     
     if (fields.length > 0) {

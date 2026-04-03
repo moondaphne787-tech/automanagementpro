@@ -497,9 +497,68 @@ export const migrations: Migration[] = [
     }
   },
   
+  // ===== 版本 16: 统一 reading_checkins 表主键为 UUID TEXT =====
+  // 解决问题：reading_checkins 使用 INTEGER PRIMARY KEY，与其他表的 UUID TEXT 主键不一致
+  {
+    version: 16,
+    description: '统一 reading_checkins 表主键为 UUID TEXT，保持与其他表一致',
+    up: (db: Database.Database) => {
+      // 步骤 1: 检查是否需要迁移（检查 id 列类型）
+      const tableDef = db.prepare(
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reading_checkins'`
+      ).get() as { sql: string } | undefined
+      
+      // 如果表定义中包含 INTEGER PRIMARY KEY AUTOINCREMENT，需要迁移
+      if (tableDef?.sql && tableDef.sql.includes('INTEGER PRIMARY KEY AUTOINCREMENT')) {
+        console.log('Migration v16: Migrating reading_checkins to use UUID primary key...')
+        
+        // 步骤 2: 创建新表（使用 TEXT PRIMARY KEY）
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS reading_checkins_new (
+            id TEXT PRIMARY KEY,
+            student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            checked_date TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(student_id, checked_date)
+          )
+        `)
+        
+        // 步骤 3: 迁移现有数据，为每条记录生成 UUID
+        // 使用 SQLite 内置的 hex() 和 randomblob() 生成类 UUID
+        db.exec(`
+          INSERT INTO reading_checkins_new (id, student_id, checked_date, created_at)
+          SELECT 
+            lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))),
+            student_id, 
+            checked_date, 
+            created_at 
+          FROM reading_checkins
+        `)
+        
+        // 步骤 4: 删除旧表
+        db.exec(`DROP TABLE reading_checkins`)
+        
+        // 步骤 5: 重命名新表
+        db.exec(`ALTER TABLE reading_checkins_new RENAME TO reading_checkins`)
+        
+        // 步骤 6: 重建索引
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_reading_checkins_student_id ON reading_checkins(student_id)
+        `)
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_reading_checkins_date ON reading_checkins(checked_date)
+        `)
+        
+        console.log('Migration v16: Successfully migrated reading_checkins to UUID primary key')
+      } else {
+        console.log('Migration v16: reading_checkins already using UUID primary key, skipping')
+      }
+    }
+  },
+  
   // ===== 后续迁移在此添加 =====
   // {
-  //   version: 16,
+  //   version: 17,
   //   description: '描述此次迁移的目的',
   //   up: (db: Database.Database) => {
   //     // 迁移逻辑

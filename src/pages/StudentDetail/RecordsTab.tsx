@@ -37,7 +37,10 @@ function getLast3MonthsRange() {
 }
 
 export function RecordsTab({ studentId }: RecordsTabProps) {
-  const { wordbanks, createClassRecord, updateClassRecord, deleteClassRecord } = useAppStore()
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const createClassRecord = useAppStore(s => s.createClassRecord)
+  const updateClassRecord = useAppStore(s => s.updateClassRecord)
+  const deleteClassRecord = useAppStore(s => s.deleteClassRecord)
 
   const [showRecordForm, setShowRecordForm] = useState(false)
   const [editingRecord, setEditingRecord] = useState<ClassRecord | null>(null)

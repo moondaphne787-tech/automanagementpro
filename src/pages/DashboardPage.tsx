@@ -1,4 +1,7 @@
+import { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Calendar, FileQuestion, BatteryLow, UserPlus, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { useDashboard } from '../hooks/useDashboard'
 import { StatCard } from '../components/Dashboard/StatCard'
 import { TodoPanel } from '../components/Dashboard/TodoPanel'
@@ -8,9 +11,30 @@ import { AlertStudents } from '../components/Dashboard/AlertStudents'
 import { WeeklyClassSummary } from '../components/Dashboard/WeeklyClassSummary'
 import { StudentOverview } from '../components/Dashboard/StudentOverview'
 import { Button } from '../components/ui/button'
+import { Dialog, DialogHeader, DialogTitle, DialogContent } from '../components/ui/dialog'
+import { ClassRecordForm } from '../components/ClassRecord/ClassRecordForm'
+import { useAppStore } from '../store/appStore'
+import type { TodayScheduleItem } from '../types'
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const { data, loading, error, refresh } = useDashboard()
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const createClassRecord = useAppStore(s => s.createClassRecord)
+  
+  // 快速录入 Dialog 状态
+  const [quickRecordTarget, setQuickRecordTarget] = useState<TodayScheduleItem | null>(null)
+  
+  const handleQuickRecord = useCallback((schedule: TodayScheduleItem) => {
+    setQuickRecordTarget(schedule)
+  }, [])
+  
+  const handleQuickRecordSave = useCallback(async (data: any) => {
+    await createClassRecord(data)
+    toast.success('课堂记录创建成功')
+    setQuickRecordTarget(null)
+    refresh()
+  }, [createClassRecord, refresh])
 
   if (error) {
     return (
@@ -42,8 +66,8 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      {/* 顶部统计卡片 - 一行四列 */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      {/* 顶部统计卡片 - 响应式布局 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard
           label="今日排课"
           value={data?.stats.todayScheduleCount ?? 0}
@@ -51,6 +75,7 @@ export function DashboardPage() {
           icon={<Calendar className="w-4 h-4" />}
           color="blue"
           loading={loading}
+          onClick={() => navigate('/schedule')}
         />
         <StatCard
           label="本周缺计划"
@@ -60,6 +85,13 @@ export function DashboardPage() {
           color="orange"
           loading={loading}
           alert={(data?.stats.missingPlanCount ?? 0) > 0}
+          onClick={() => {
+            // 跳转到第一个缺计划学员的计划页，如果有的话
+            const first = data?.problemPlanStudents?.[0]
+            if (first) {
+              navigate(`/students/${first.studentId}?tab=plans`)
+            }
+          }}
         />
         <StatCard
           label="课时预警"
@@ -69,6 +101,7 @@ export function DashboardPage() {
           color="red"
           loading={loading}
           alert={(data?.stats.lowHoursCount ?? 0) > 0}
+          onClick={() => navigate('/students', { state: { filter: 'low_hours' } })}
         />
         <StatCard
           label="体验生待跟进"
@@ -77,17 +110,19 @@ export function DashboardPage() {
           icon={<UserPlus className="w-4 h-4" />}
           color="purple"
           loading={loading}
+          onClick={() => navigate('/trial')}
         />
       </div>
 
-      {/* 主内容区 - 左宽右窄双列布局 */}
-      <div className="grid grid-cols-12 gap-4">
+      {/* 主内容区 - 响应式双列布局 */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* 左侧宽列 (7/12) */}
-        <div className="col-span-7 space-y-4">
+        <div className="lg:col-span-7 space-y-4">
           {/* 今日排课 */}
           <TodaySchedulePanel
             schedules={data?.todaySchedules ?? []}
             loading={loading}
+            onQuickRecord={handleQuickRecord}
           />
 
           {/* 本周计划状态 */}
@@ -104,7 +139,7 @@ export function DashboardPage() {
         </div>
 
         {/* 右侧窄列 (5/12) */}
-        <div className="col-span-5 space-y-4">
+        <div className="lg:col-span-5 space-y-4">
           {/* 待办清单 */}
           <TodoPanel
             todos={data?.todos ?? []}
@@ -125,6 +160,29 @@ export function DashboardPage() {
           />
         </div>
       </div>
+      {/* 快速录入课堂记录 Dialog */}
+      <Dialog
+        open={!!quickRecordTarget}
+        onOpenChange={(open) => { if (!open) setQuickRecordTarget(null) }}
+      >
+        {quickRecordTarget && (
+          <>
+            <DialogHeader>
+              <DialogTitle>快速录入 - {quickRecordTarget.studentName}</DialogTitle>
+            </DialogHeader>
+            <DialogContent>
+              <ClassRecordForm
+                studentId={quickRecordTarget.studentId}
+                wordbanks={wordbanks}
+                initialDate={new Date().toISOString().split('T')[0]}
+                initialTeacherName={quickRecordTarget.teacherName}
+                onSave={handleQuickRecordSave}
+                onCancel={() => setQuickRecordTarget(null)}
+              />
+            </DialogContent>
+          </>
+        )}
+      </Dialog>
     </div>
   )
 }

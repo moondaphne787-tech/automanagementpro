@@ -26,7 +26,10 @@ interface ImportStudentsDrawerProps {
 type Step = 'upload' | 'preview' | 'result'
 
 export function ImportStudentsDrawer({ open, onClose }: ImportStudentsDrawerProps) {
-  const { students, loadStudents, wordbanks, loadWordbanks } = useAppStore()
+  const students = useAppStore(s => s.students)
+  const loadStudents = useAppStore(s => s.loadStudents)
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const loadWordbanks = useAppStore(s => s.loadWordbanks)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   const [step, setStep] = useState<Step>('upload')

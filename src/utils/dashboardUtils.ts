@@ -181,9 +181,9 @@ export function buildAlertStudents(
   for (const student of activeStudents) {
     const studentAlerts: AlertStudentItem['alerts'] = []
 
-    // 课时预警
+    // 课时预警：使用学员个性化阈值，默认为10（与数据库 billing 表默认值一致）
     const billing = allBillings.find(b => b.student_id === student.id)
-    if (billing && (billing.remaining_hours ?? 99) <= 3) {
+    if (billing && (billing.remaining_hours ?? 99) <= (billing.warning_threshold ?? 10)) {
       studentAlerts.push({
         type: 'low_hours',
         message: `剩余课时仅 ${billing.remaining_hours?.toFixed(1) ?? '?'} 小时`
@@ -226,9 +226,11 @@ export function buildAlertStudents(
 
 /**
  * 构建学员总览数据
+ * @param convertedThisMonth 本月成交数，从 trial_conversions 表查询获得
  */
 export function buildStudentOverview(
-  allStudents: Student[]
+  allStudents: Student[],
+  convertedThisMonth: number = 0
 ): StudentOverviewData {
   const thisMonthStart = new Date()
   thisMonthStart.setDate(1)
@@ -243,11 +245,7 @@ export function buildStudentOverview(
     trialThisMonth: allStudents.filter(s =>
       s.student_type === 'trial' && s.created_at >= thisMonthStartStr
     ).length,
-    convertedThisMonth: allStudents.filter((s: Student & { trial_converted_date?: string }) =>
-      s.status === 'active' &&
-      s.trial_converted_date &&
-      s.trial_converted_date >= thisMonthStartStr
-    ).length,
+    convertedThisMonth,
   }
 }
 
@@ -261,7 +259,9 @@ export function buildDashboardStats(
   allBillings: (Billing & { remaining_hours: number })[],
   allStudents: Student[]
 ): DashboardStats {
-  const lowHoursStudents = allBillings.filter(b => (b.remaining_hours ?? 0) <= 3)
+  const lowHoursStudents = allBillings.filter(b => 
+    (b.remaining_hours ?? 0) <= (b.warning_threshold ?? 10)
+  )
   const trialStudents = allStudents.filter(s =>
     s.student_type === 'trial' && s.status === 'active'
   )

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, Search, CheckCircle, Clock, TrendingUp, Calendar, User, Phone, GraduationCap, BookOpen } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -78,7 +79,7 @@ export function TrialList() {
       await loadTrialStudents()
     } catch (error) {
       console.error('Failed to mark conversion:', error)
-      alert('标记成交失败，请重试')
+      toast.error('标记成交失败，请重试')
     } finally {
       setConverting(false)
     }

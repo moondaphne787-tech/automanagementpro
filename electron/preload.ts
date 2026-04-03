@@ -52,6 +52,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   dbOpenBackupDir: () => 
     ipcRenderer.invoke('db:openBackupDir'),
 
+  // === WAL Checkpoint 相关 API ===
+  
+  // 获取 WAL 文件信息
+  dbGetWalInfo: () => 
+    ipcRenderer.invoke('db:getWalInfo'),
+  
+  // 执行 WAL checkpoint
+  dbCheckpoint: (mode?: 'PASSIVE' | 'RESTART' | 'TRUNCATE' | 'FULL') => 
+    ipcRenderer.invoke('db:checkpoint', mode),
+
   // 显示保存对话框
   showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) =>
     ipcRenderer.invoke('dialog:showSaveDialog', options),
@@ -59,10 +69,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 写入文件到指定路径
   writeFile: (filePath: string, base64Data: string) =>
     ipcRenderer.invoke('fs:writeFile', filePath, base64Data),
-
-  // 获取 WASM 文件路径
-  getWasmPath: (filename: string) => 
-    ipcRenderer.invoke('getWasmPath', filename),
 
   // 打印课程计划
   printLessonPlans: (htmlContent: string) => 

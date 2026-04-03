@@ -188,31 +188,48 @@ export interface DashboardSlice {
   isDashboardCacheValid: (staleTime: number) => boolean
 }
 
+// ===== 朗读打卡行数据类型 =====
+export interface CheckinStudent {
+  id: string
+  name: string
+  monthlyCount: number
+  checkedYesterday: boolean
+}
+
 // ===== 朗读打卡 Slice 类型 =====
 export interface ReadingCheckinSlice {
   // 状态
   selectedYear: number
   selectedMonth: number
-  checkinStudents: import('./readingCheckinSlice').CheckinStudent[]
+  checkinStudents: CheckinStudent[]
   totalStudents: number
-  todayCheckedCount: number
-  todayDate: string
+  yesterdayCheckedCount: number  // 改为昨日打卡数
+  yesterdayDate: string  // 昨日日期
+  todayDate: string  // 今日日期（用于显示）
   checkinLoading: boolean
   
   // 搜索和过滤
   searchQuery: string
   showOnlyUnchecked: boolean
   
+  // 批量选择
+  selectedStudentIds: Set<string>
+  
   // 操作
   setSelectedMonth: (year: number, month: number) => void
   fetchMonthSummary: () => Promise<void>
-  checkToday: (studentId: string, studentName: string) => Promise<void>
-  uncheckToday: (studentId: string, studentName: string) => Promise<void>
+  checkYesterday: (studentId: string, studentName: string) => Promise<void>
+  uncheckYesterday: (studentId: string, studentName: string) => Promise<void>
+  batchCheckYesterday: () => Promise<void>
+  toggleSelectStudent: (studentId: string) => void
+  selectAllUnchecked: (filteredIds: string[]) => void
+  clearSelection: () => void
   setSearchQuery: (query: string) => void
   toggleShowOnlyUnchecked: () => void
 }
 
 // ===== 完整 AppState 类型 =====
+// 注意：ReadingCheckinSlice 已拆分为独立的 useReadingCheckinStore
 export type AppState = StudentSlice & 
   WordbankSlice & 
   ClassRecordSlice & 
@@ -221,5 +238,4 @@ export type AppState = StudentSlice &
   LearningPhaseSlice & 
   SemesterConfigSlice &
   UISlice & 
-  DashboardSlice &
-  ReadingCheckinSlice
+  DashboardSlice

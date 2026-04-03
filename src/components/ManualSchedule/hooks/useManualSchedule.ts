@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { studentDb, teacherDb, scheduledClassDb, studentSchedulePreferenceDb, teacherAvailabilityDb } from '@/db'
 import { getGradesFromSuitableGrades } from '@/types'
 import { formatDateISO, getDayOfWeek, timeToMinutes, minutesToTime } from '@/lib/utils'
@@ -453,19 +455,23 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
   }, [teachers, checkTeacherConflict])
   
   // 分配助教
-  const handleAssign = useCallback((slotId: string, teacherId: string) => {
+  const handleAssign = useCallback(async (slotId: string, teacherId: string) => {
     const slot = studentRows.flatMap(row => row.slots).find(s => s.id === slotId)
     if (!slot) return
     
     const conflict = checkTeacherConflict(teacherId, slot)
     
     if (conflict.type === 'hard') {
-      alert(`无法分配：${conflict.reasons.join('；')}`)
+      toast.error(`无法分配：${conflict.reasons.join('；')}`)
       return
     }
     
     if (conflict.type === 'soft') {
-      const confirmed = confirm(`警告：${conflict.reasons.join('；')}\n\n是否仍然分配？`)
+      const confirmed = await confirmDialog({
+        title: '分配警告',
+        message: `${conflict.reasons.join('；')}\n\n是否仍然分配？`,
+        variant: 'warning'
+      })
       if (!confirmed) return
     }
     
@@ -495,7 +501,13 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
   
   // 清空本日排课
   const handleClearDay = useCallback(async () => {
-    if (!confirm('确定要清空本日所有排课吗？此操作不可恢复。')) return
+    const confirmed = await confirmDialog({
+      title: '清空本日排课',
+      message: '确定要清空本日所有排课吗？此操作不可恢复。',
+      confirmText: '清空',
+      variant: 'danger'
+    })
+    if (!confirmed) return
     
     try {
       for (const cls of scheduledClasses) {
@@ -505,16 +517,17 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
       }
       setLocalSchedules(new Map())
       loadSchedulesForDate(selectedDate)
+      toast.success('本日排课已清空')
     } catch (error) {
       console.error('Failed to clear day:', error)
-      alert('清空失败')
+      toast.error('清空失败')
     }
   }, [scheduledClasses, selectedDate, loadSchedulesForDate])
   
   // 保存排课
   const handleSave = useCallback(async () => {
     if (localSchedules.size === 0) {
-      alert('没有需要保存的排课')
+      toast.warning('没有需要保存的排课')
       return
     }
     
@@ -537,12 +550,12 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
         })
       }
       
-      alert('保存成功')
+      toast.success('保存成功')
       loadSchedulesForDate(selectedDate)
       
     } catch (error) {
       console.error('Failed to save:', error)
-      alert('保存失败')
+      toast.error('保存失败')
     } finally {
       setSaving(false)
     }

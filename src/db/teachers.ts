@@ -1,5 +1,6 @@
 import type { Teacher } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import type { TeacherRow } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, mapTeacher, isAllowedField, TEACHER_UPDATABLE_FIELDS } from './utils'
 
 // 助教操作
 export const teacherDb = {
@@ -35,36 +36,18 @@ export const teacherDb = {
   },
   
   async getById(id: string): Promise<Teacher | undefined> {
-    const teacher = await ipcQueryOne<any>(`SELECT * FROM teachers WHERE id = ?`, [id])
-    if (teacher) {
-      teacher.suitable_levels = teacher.suitable_levels ? JSON.parse(teacher.suitable_levels) : null
-      teacher.teacher_types = teacher.teacher_types ? JSON.parse(teacher.teacher_types) : []
-      teacher.total_teaching_hours = teacher.total_teaching_hours || 0
-      teacher.training_stage = teacher.training_stage || 'probation'
-    }
-    return teacher as Teacher | undefined
+    const teacher = await ipcQueryOne<TeacherRow>(`SELECT * FROM teachers WHERE id = ?`, [id])
+    return teacher ? mapTeacher(teacher) : undefined
   },
   
   async getAll(): Promise<Teacher[]> {
-    const teachers = await ipcQuery<any[]>(`SELECT * FROM teachers ORDER BY created_at DESC`)
-    return teachers.map(teacher => {
-      teacher.suitable_levels = teacher.suitable_levels ? JSON.parse(teacher.suitable_levels) : null
-      teacher.teacher_types = teacher.teacher_types ? JSON.parse(teacher.teacher_types) : []
-      teacher.total_teaching_hours = teacher.total_teaching_hours || 0
-      teacher.training_stage = teacher.training_stage || 'probation'
-      return teacher as Teacher
-    })
+    const teachers = await ipcQuery<TeacherRow[]>(`SELECT * FROM teachers ORDER BY created_at DESC`)
+    return teachers.map(mapTeacher)
   },
   
   async getActive(): Promise<Teacher[]> {
-    const teachers = await ipcQuery<any[]>(`SELECT * FROM teachers WHERE status = 'active' ORDER BY name`)
-    return teachers.map(teacher => {
-      teacher.suitable_levels = teacher.suitable_levels ? JSON.parse(teacher.suitable_levels) : null
-      teacher.teacher_types = teacher.teacher_types ? JSON.parse(teacher.teacher_types) : []
-      teacher.total_teaching_hours = teacher.total_teaching_hours || 0
-      teacher.training_stage = teacher.training_stage || 'probation'
-      return teacher as Teacher
-    })
+    const teachers = await ipcQuery<TeacherRow[]>(`SELECT * FROM teachers WHERE status = 'active' ORDER BY name`)
+    return teachers.map(mapTeacher)
   },
   
   async update(id: string, data: Partial<Teacher>): Promise<Teacher | undefined> {
@@ -72,10 +55,11 @@ export const teacherDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
+      if (!isAllowedField(key, TEACHER_UPDATABLE_FIELDS)) continue
       if (key === 'suitable_levels' || key === 'teacher_types') {
         fields.push(`${key} = ?`)
         values.push(value ? JSON.stringify(value) : (key === 'teacher_types' ? '[]' : null))
-      } else if (key !== 'id' && key !== 'created_at') {
+      } else {
         fields.push(`${key} = ?`)
         values.push(value)
       }

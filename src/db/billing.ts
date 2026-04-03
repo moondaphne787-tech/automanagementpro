@@ -1,5 +1,5 @@
 import type { Billing } from '@/types'
-import { ipcQuery, ipcQueryOne } from './utils'
+import { ipcQuery, ipcQueryOne, isAllowedField, BILLING_UPDATABLE_FIELDS } from './utils'
 
 // 课时操作
 // 注意：remaining_hours 是 SQLite 生成列（v11 迁移添加），会自动计算 total_hours - used_hours
@@ -16,10 +16,9 @@ export const billingDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
-      if (key !== 'id' && key !== 'student_id' && key !== 'created_at' && key !== 'remaining_hours') {
-        fields.push(`${key} = ?`)
-        values.push(value)
-      }
+      if (!isAllowedField(key, BILLING_UPDATABLE_FIELDS)) continue
+      fields.push(`${key} = ?`)
+      values.push(value)
     }
     
     if (fields.length > 0) {

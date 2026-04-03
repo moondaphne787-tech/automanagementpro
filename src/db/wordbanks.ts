@@ -1,5 +1,5 @@
 import type { Wordbank } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, isAllowedField, WORDBANK_UPDATABLE_FIELDS } from './utils'
 
 // 词库操作
 export const wordbankDb = {
@@ -51,10 +51,9 @@ export const wordbankDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
-      if (key !== 'id' && key !== 'created_at') {
-        fields.push(`${key} = ?`)
-        values.push(value)
-      }
+      if (!isAllowedField(key, WORDBANK_UPDATABLE_FIELDS)) continue
+      fields.push(`${key} = ?`)
+      values.push(value)
     }
     
     if (fields.length > 0) {

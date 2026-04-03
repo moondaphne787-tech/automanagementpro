@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Trash2, Loader2, AlertTriangle } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import type { 
   TeacherCardData, 
   ScheduledClass, 
@@ -139,7 +140,13 @@ export function TeacherDetailCard({
   
   // 处理取消排课
   const handleRemoveClass = async (classId: string) => {
-    if (!confirm('确定要取消该节排课吗？')) return
+    const confirmed = await confirmDialog({
+      title: '取消排课',
+      message: '确定要取消该节排课吗？',
+      confirmText: '取消排课',
+      variant: 'danger'
+    })
+    if (!confirmed) return
     setRemovingClassId(classId)
     try {
       await onRemoveClass(classId)

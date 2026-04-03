@@ -1,5 +1,6 @@
 import type { Student, Billing, FilterOptions, SortOptions } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import type { StudentRow, StudentWithBillingRow } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, ipcTransaction, mapStudent, isAllowedField, STUDENT_UPDATABLE_FIELDS } from './utils'
 
 // 学员操作
 export const studentDb = {
@@ -26,13 +27,8 @@ export const studentDb = {
   },
   
   async getById(id: string): Promise<Student | undefined> {
-    const student = await ipcQueryOne<Record<string, unknown>>(`SELECT * FROM students WHERE id = ?`, [id])
-    if (student) {
-      student.phonics_completed = !!student.phonics_completed
-      student.ipa_completed = !!student.ipa_completed
-      return student as unknown as Student
-    }
-    return undefined
+    const student = await ipcQueryOne<StudentRow>(`SELECT * FROM students WHERE id = ?`, [id])
+    return student ? mapStudent(student) : undefined
   },
   
   async getAllWithBilling(filters: FilterOptions, sort: SortOptions): Promise<(Student & { billing: Billing | null })[]> {
@@ -93,51 +89,29 @@ export const studentDb = {
     const sortFieldMap: Record<string, string> = {
       student_no: 's.student_no',
       total_hours: 'b.total_hours',
-      remaining_hours: 'b.total_hours - b.used_hours',
+      remaining_hours: 'b.remaining_hours',  // 使用 v11 添加的生成列
       enroll_date: 's.enroll_date',
       last_class: `(SELECT IFNULL(MAX(cr.class_date), '1970-01-01') FROM class_records cr WHERE cr.student_id = s.id)`
     }
     sql += ` ORDER BY ${sortFieldMap[sort.field] || 's.student_no'} ${sort.direction === 'desc' ? 'DESC' : 'ASC'}`
     
-    const results = await ipcQuery(sql, params) as any[]
+    const results = await ipcQuery<StudentWithBillingRow[]>(sql, params)
     
-    return results.map((row: any) => {
-      const student: Student & { billing: Billing | null } = {
-        id: row.id,
-        student_no: row.student_no,
-        name: row.name,
-        school: row.school,
-        grade: row.grade,
-        account: row.account,
-        enroll_date: row.enroll_date,
-        student_type: row.student_type,
-        status: row.status,
-        level: row.level,
-        initial_score: row.initial_score,
-        initial_vocab: row.initial_vocab,
-        phonics_progress: row.phonics_progress,
-        phonics_completed: !!row.phonics_completed,
-        ipa_completed: !!row.ipa_completed,
-        reading_progress: row.reading_progress,
-        notes: row.notes,
+    return results.map((row) => ({
+      ...mapStudent(row),
+      billing: row.billing_id ? {
+        id: row.billing_id,
+        student_id: row.id,
+        total_hours: row.total_hours || 0,
+        used_hours: row.used_hours || 0,
+        remaining_hours: row.remaining_hours ?? 0,
+        warning_threshold: row.warning_threshold || 10,
+        last_payment_date: row.last_payment_date,
+        notes: null,
         created_at: row.created_at,
-        updated_at: row.updated_at,
-        billing: row.billing_id ? {
-          id: row.billing_id,
-          student_id: row.id,
-          total_hours: row.total_hours || 0,
-          used_hours: row.used_hours || 0,
-          // remaining_hours 是生成列，直接从查询结果获取
-          remaining_hours: row.remaining_hours ?? 0,
-          warning_threshold: row.warning_threshold || 10,
-          last_payment_date: row.last_payment_date,
-          notes: null,
-          created_at: row.created_at,
-          updated_at: row.updated_at
-        } : null
-      }
-      return student
-    })
+        updated_at: row.updated_at
+      } : null
+    }))
   },
   
   async update(id: string, data: Partial<Student>): Promise<Student | undefined> {
@@ -145,10 +119,11 @@ export const studentDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
+      if (!isAllowedField(key, STUDENT_UPDATABLE_FIELDS)) continue
       if (key === 'phonics_completed' || key === 'ipa_completed') {
         fields.push(`${key} = ?`)
         values.push(value ? 1 : 0)
-      } else if (key !== 'id' && key !== 'created_at') {
+      } else {
         fields.push(`${key} = ?`)
         values.push(value)
       }
@@ -166,15 +141,27 @@ export const studentDb = {
   },
   
   async delete(id: string): Promise<void> {
-    await ipcQuery(`DELETE FROM students WHERE id = ?`, [id])
+    // 级联清理所有关联数据，使用事务保证原子性
+    await ipcTransaction([
+      { sql: `DELETE FROM billing WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM class_records WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM lesson_plans WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM scheduled_classes WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM student_schedule_preferences WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM exam_scores WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM student_wordbank_progress WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM learning_phases WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM reading_checkins WHERE student_id = ?`, params: [id] },
+      { sql: `DELETE FROM trial_conversions WHERE student_id = ?`, params: [id] },
+      // todos 的 student_id 置空而非删除，保留待办事项本身
+      { sql: `UPDATE todos SET student_id = NULL WHERE student_id = ?`, params: [id] },
+      // 最后删除学员主记录
+      { sql: `DELETE FROM students WHERE id = ?`, params: [id] },
+    ])
   },
 
   async getAll(): Promise<Student[]> {
-    const results = await ipcQuery<Record<string, unknown>[]>(`SELECT * FROM students ORDER BY name ASC`)
-    return results.map(row => {
-      row.phonics_completed = !!row.phonics_completed
-      row.ipa_completed = !!row.ipa_completed
-      return row as unknown as Student
-    })
+    const results = await ipcQuery<StudentRow[]>(`SELECT * FROM students ORDER BY name ASC`)
+    return results.map(mapStudent)
   }
 }

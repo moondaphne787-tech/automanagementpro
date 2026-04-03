@@ -1,5 +1,10 @@
 // 主组件
 export { ManualSchedule } from './ManualSchedule'
+export type { ManualScheduleSidebarProps } from './ManualSchedule'
+
+// 侧边栏组件
+export { ScheduleSidebar } from './ScheduleSidebar'
+export type { ScheduleSidebarProps, ScheduleItem as SidebarScheduleItem } from './ScheduleSidebar'
 
 // 子组件
 export { StudentRowComponent } from './StudentRow'

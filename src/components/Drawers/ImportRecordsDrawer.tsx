@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Upload, FileSpreadsheet, Check, AlertCircle, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
@@ -20,7 +21,9 @@ interface ImportRecordsDrawerProps {
 type Step = 'upload' | 'preview' | 'result'
 
 export function ImportRecordsDrawer({ open, onClose }: ImportRecordsDrawerProps) {
-  const { students, batchImportClassRecords, loadStudents } = useAppStore()
+  const students = useAppStore(s => s.students)
+  const batchImportClassRecords = useAppStore(s => s.batchImportClassRecords)
+  const loadStudents = useAppStore(s => s.loadStudents)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   const [step, setStep] = useState<Step>('upload')
@@ -88,7 +91,7 @@ export function ImportRecordsDrawer({ open, onClose }: ImportRecordsDrawerProps)
     const validItems = previewItems.filter(item => item.matched && item.student_id)
     
     if (validItems.length === 0) {
-      alert('没有可导入的记录，请确保学员已正确匹配')
+      toast.warning('没有可导入的记录，请确保学员已正确匹配')
       return
     }
     

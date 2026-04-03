@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, Trash2, TrendingUp, TrendingDown } from 'lucide-react'
+import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/lib/utils'
 import { classRecordDb } from '@/db'
@@ -29,15 +30,13 @@ interface SemesterConfig {
 
 // 主组件
 export function GrowthPanel({ studentId }: { studentId: string }) {
-  const {
-    examScores,
-    loadExamScores,
-    createExamScore,
-    updateExamScore,
-    deleteExamScore,
-    currentProgress,
-    classRecords
-  } = useAppStore()
+  const examScores = useAppStore(s => s.examScores)
+  const loadExamScores = useAppStore(s => s.loadExamScores)
+  const createExamScore = useAppStore(s => s.createExamScore)
+  const updateExamScore = useAppStore(s => s.updateExamScore)
+  const deleteExamScore = useAppStore(s => s.deleteExamScore)
+  const currentProgress = useAppStore(s => s.currentProgress)
+  const classRecords = useAppStore(s => s.classRecords)
 
   const [showExamForm, setShowExamForm] = useState(false)
   const [editingExam, setEditingExam] = useState<ExamScore | null>(null)
@@ -358,7 +357,13 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
                             size="sm"
                             className="text-destructive"
                             onClick={async () => {
-                              if (confirm('确定删除此成绩记录？')) {
+                              const confirmed = await confirmDialog({
+                                title: '删除成绩记录',
+                                message: '确定删除此成绩记录？',
+                                confirmText: '删除',
+                                variant: 'danger'
+                              })
+                              if (confirmed) {
                                 await deleteExamScore(score.id)
                               }
                             }}

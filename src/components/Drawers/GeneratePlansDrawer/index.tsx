@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/appStore'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
@@ -17,7 +18,11 @@ interface GeneratePlansDrawerProps {
 }
 
 export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps) {
-  const { students, wordbanks, loadStudents, loadWordbanks, createLessonPlan } = useAppStore()
+  const students = useAppStore(s => s.students)
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const loadStudents = useAppStore(s => s.loadStudents)
+  const loadWordbanks = useAppStore(s => s.loadWordbanks)
+  const createLessonPlan = useAppStore(s => s.createLessonPlan)
 
   const [selectedStudents, setSelectedStudents] = useState<StudentPlanState[]>([])
   const [extraInstruction, setExtraInstruction] = useState('')
@@ -194,7 +199,7 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
         s.student.id === studentId ? { ...s, status: 'saved' as GenerationStatus } : s
       ))
     } catch (error) {
-      alert('保存失败：' + (error as Error).message)
+      toast.error('保存失败：' + (error as Error).message)
     }
   }
 

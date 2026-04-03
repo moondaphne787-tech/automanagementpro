@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, Settings2 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   Popover,
   PopoverContent,
@@ -207,7 +208,7 @@ export function StudentRowComponent({
                       setQuickPrefForm({ start_time: '09:00', end_time: '11:00' })
                     } catch (error) {
                       console.error('Failed to add preference:', error)
-                      alert('添加偏好失败')
+                      toast.error('添加偏好失败')
                     } finally {
                       setIsAddingPref(false)
                     }

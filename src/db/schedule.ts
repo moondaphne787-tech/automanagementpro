@@ -1,5 +1,6 @@
 import type { Teacher, TeacherAvailability, StudentSchedulePreference, ScheduledClass, DayOfWeek, Student } from '@/types'
-import { generateId, ipcQuery, ipcQueryOne } from './utils'
+import type { ScheduledClassWithJoinRow, PreferenceWithStudentRow } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, isAllowedField, TEACHER_AVAILABILITY_UPDATABLE_FIELDS, STUDENT_SCHEDULE_PREFERENCE_UPDATABLE_FIELDS, SCHEDULED_CLASS_UPDATABLE_FIELDS } from './utils'
 
 // 老师可用时段操作
 export const teacherAvailabilityDb = {
@@ -47,10 +48,9 @@ export const teacherAvailabilityDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
-      if (key !== 'id') {
-        fields.push(`${key} = ?`)
-        values.push(value)
-      }
+      if (!isAllowedField(key, TEACHER_AVAILABILITY_UPDATABLE_FIELDS)) continue
+      fields.push(`${key} = ?`)
+      values.push(value)
     }
     
     if (fields.length > 0) {
@@ -106,7 +106,7 @@ export const studentSchedulePreferenceDb = {
   
   // 获取所有学员的时段偏好（带学员信息）
   async getAllWithStudents(): Promise<(StudentSchedulePreference & { student: Student })[]> {
-    const results = await ipcQuery<any[]>(`
+    const results = await ipcQuery<PreferenceWithStudentRow[]>(`
       SELECT ssp.*, s.id as student_id, s.name as student_name, s.grade, s.level, s.status, s.student_type
       FROM student_schedule_preferences ssp
       LEFT JOIN students s ON ssp.student_id = s.id
@@ -157,15 +157,53 @@ export const studentSchedulePreferenceDb = {
     return { success, failed }
   },
   
+  // 批量创建时段偏好（跳过已存在的相同偏好）
+  // 用于批量设置学生时段偏好，会检查 day_of_week, preferred_start, preferred_end 是否完全匹配
+  async batchCreateIfNotExists(preferences: Array<{
+    student_id: string
+    day_of_week: DayOfWeek
+    preferred_start?: string
+    preferred_end?: string
+    notes?: string
+  }>): Promise<{ success: number; skipped: number; failed: number }> {
+    let success = 0
+    let skipped = 0
+    let failed = 0
+    
+    for (const pref of preferences) {
+      try {
+        // 检查是否已存在相同的偏好
+        const existing = await this.getByStudentId(pref.student_id)
+        const hasSame = existing.some(
+          p =>
+            p.day_of_week === pref.day_of_week &&
+            p.preferred_start === pref.preferred_start &&
+            p.preferred_end === pref.preferred_end
+        )
+        
+        if (hasSame) {
+          skipped++
+        } else {
+          await this.create(pref)
+          success++
+        }
+      } catch (error) {
+        console.error('Failed to create preference:', error)
+        failed++
+      }
+    }
+    
+    return { success, skipped, failed }
+  },
+  
   async update(id: string, data: Partial<StudentSchedulePreference>): Promise<StudentSchedulePreference | undefined> {
     const fields: string[] = []
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
-      if (key !== 'id') {
-        fields.push(`${key} = ?`)
-        values.push(value)
-      }
+      if (!isAllowedField(key, STUDENT_SCHEDULE_PREFERENCE_UPDATABLE_FIELDS)) continue
+      fields.push(`${key} = ?`)
+      values.push(value)
     }
     
     if (fields.length > 0) {
@@ -234,7 +272,7 @@ export const scheduledClassDb = {
   },
   
   async getByDate(date: string): Promise<(ScheduledClass & { student?: Student; teacher?: Teacher })[]> {
-    const results = await ipcQuery<any[]>(`
+    const results = await ipcQuery<ScheduledClassWithJoinRow[]>(`
       SELECT sc.*, s.name as student_name, s.grade, s.level, t.name as teacher_name
       FROM scheduled_classes sc
       LEFT JOIN students s ON sc.student_id = s.id
@@ -270,7 +308,7 @@ export const scheduledClassDb = {
   },
   
   async getByWeek(startDate: string, endDate: string): Promise<(ScheduledClass & { student?: Student; teacher?: Teacher })[]> {
-    const results = await ipcQuery<any[]>(`
+    const results = await ipcQuery<ScheduledClassWithJoinRow[]>(`
       SELECT sc.*, s.name as student_name, s.grade, s.level, t.name as teacher_name
       FROM scheduled_classes sc
       LEFT JOIN students s ON sc.student_id = s.id
@@ -324,10 +362,9 @@ export const scheduledClassDb = {
     const values: unknown[] = []
     
     for (const [key, value] of Object.entries(data)) {
-      if (key !== 'id' && key !== 'created_at') {
-        fields.push(`${key} = ?`)
-        values.push(value)
-      }
+      if (!isAllowedField(key, SCHEDULED_CLASS_UPDATABLE_FIELDS)) continue
+      fields.push(`${key} = ?`)
+      values.push(value)
     }
     
     if (fields.length > 0) {

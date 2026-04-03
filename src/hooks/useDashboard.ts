@@ -5,6 +5,7 @@ import { lessonPlanDb } from '../db/lessonPlans'
 import { classRecordDb } from '../db/classRecords'
 import { scheduledClassDb } from '../db/schedule'
 import { billingDb } from '../db/billing'
+import { trialConversionDb } from '../db/trialConversions'
 import { todoDb } from '../db/todos'
 import { getWeekRange, getTodayStr } from '../lib/dateUtils'
 import {
@@ -90,8 +91,14 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
     try {
       const today = getTodayStr()
       const week = getWeekRange()
+      const now = new Date()
+      const currentYear = now.getFullYear()
+      const currentMonth = now.getMonth() + 1
 
-      // 并行加载所有基础数据
+      // 预先计算上周范围，一并纳入并行查询，避免本周无记录时额外发起请求
+      const lastWeek = getWeekRange(-1)
+
+      // 并行加载所有基础数据（含上周数据）
       const [
         allStudents,
         allBillings,
@@ -101,6 +108,9 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
         todaySchedules,
         expiredPlans,
         weekSchedulesAll,
+        monthlyConversions,
+        lastWeekRecords,
+        lastWeekSchedules,
       ] = await Promise.all([
         studentDb.getAll(),
         billingDb.getAll(),
@@ -110,6 +120,9 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
         scheduledClassDb.getByDate(today),
         lessonPlanDb.getAllExpiredPlans(),
         scheduledClassDb.getByWeek(week.start, week.end),
+        trialConversionDb.getMonthlyConversions(currentYear, currentMonth),
+        classRecordDb.getByDateRange(lastWeek.start, lastWeek.end),
+        scheduledClassDb.getByWeek(lastWeek.start, lastWeek.end),
       ])
 
       const activeStudents = allStudents.filter((s: Student) => s.status === 'active')
@@ -151,20 +164,14 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
         weekSchedulesAll.map((s: ScheduledClass) => s.student_id)
       )
 
-      // 如果本周没有课堂记录，尝试获取上周的数据
-      if (weekRecords.length === 0) {
-        const lastWeek = getWeekRange(-1)
-        const lastWeekRecords = await classRecordDb.getByDateRange(lastWeek.start, lastWeek.end)
-        const lastWeekSchedules = await scheduledClassDb.getByWeek(lastWeek.start, lastWeek.end)
+      // 如果本周没有课堂记录，使用已并行加载的上周数据（无需额外请求）
+      if (weekRecords.length === 0 && lastWeekRecords.length > 0) {
         const lastWeekScheduledStudents = new Set<string>(
           lastWeekSchedules.map((s: ScheduledClass) => s.student_id)
         )
-
-        if (lastWeekRecords.length > 0) {
-          summaryWeekRange = lastWeek
-          summaryRecords = lastWeekRecords
-          summaryScheduledStudents = lastWeekScheduledStudents
-        }
+        summaryWeekRange = lastWeek
+        summaryRecords = lastWeekRecords
+        summaryScheduledStudents = lastWeekScheduledStudents
       }
 
       const weeklySummary = calculateWeeklySummary(
@@ -185,8 +192,8 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
         scheduleCountByStudent
       )
 
-      // 学员总览
-      const studentOverview = buildStudentOverview(allStudents)
+      // 学员总览（传入本月成交数）
+      const studentOverview = buildStudentOverview(allStudents, monthlyConversions.converted)
 
       const result: DashboardData = {
         stats,

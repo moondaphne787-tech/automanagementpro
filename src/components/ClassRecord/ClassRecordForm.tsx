@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Save, X, Link, Unlink, Edit } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskBlock, createEmptyTask } from '@/components/TaskBlock/TaskBlock'
 import { parseFeedback, extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
 import { lessonPlanDb } from '@/db'
-import type { TaskBlock as TaskBlockType, AttendanceType, PerformanceType, TaskCompletedType, Wordbank, LessonPlan, ClassRecord } from '@/types'
+import { teacherDb } from '@/db/teachers'
+import type { TaskBlock as TaskBlockType, AttendanceType, PerformanceType, TaskCompletedType, Wordbank, LessonPlan, ClassRecord, Teacher } from '@/types'
 
 interface ClassRecordFormProps {
   studentId: string
@@ -32,16 +33,17 @@ interface ClassRecordFormProps {
   }) => Promise<void>
   onCancel: () => void
   initialDate?: string
+  initialTeacherName?: string
   initialData?: ClassRecord  // 用于编辑模式
 }
 
-export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, initialDate, initialData }: ClassRecordFormProps) {
+export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, initialDate, initialTeacherName, initialData }: ClassRecordFormProps) {
   // 判断是否为编辑模式
   const isEditMode = !!initialData
   
   const [classDate, setClassDate] = useState(initialData?.class_date || initialDate || new Date().toISOString().split('T')[0])
   const [durationHours, setDurationHours] = useState(initialData?.duration_hours || 1)
-  const [teacherName, setTeacherName] = useState(initialData?.teacher_name || '')
+  const [teacherName, setTeacherName] = useState(initialData?.teacher_name || initialTeacherName || '')
   const [attendance, setAttendance] = useState<AttendanceType>(initialData?.attendance || 'present')
   const [tasks, setTasks] = useState<TaskBlockType[]>(initialData?.tasks?.length ? [...initialData.tasks] : [createEmptyTask()])
   const [taskCompleted, setTaskCompleted] = useState<TaskCompletedType>(initialData?.task_completed || 'completed')
@@ -52,10 +54,34 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
   const [issues, setIssues] = useState(initialData?.issues || '')
   const [saving, setSaving] = useState(false)
   
+  // 助教列表
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+  
   // 关联计划相关状态
   const [availablePlans, setAvailablePlans] = useState<LessonPlan[]>([])
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
   const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null)
+  
+  // Ctrl+S / Cmd+S 保存快捷键，Escape 取消
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+        if (!saving) handleSave()
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onCancel()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [saving, onCancel])
+  
+  // 加载助教列表
+  useEffect(() => {
+    teacherDb.getActive().then(setTeachers)
+  }, [])
   
   // 加载指定日期的课程计划
   useEffect(() => {
@@ -210,10 +236,13 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
           </div>
           <div>
             <label className="text-sm text-muted-foreground mb-1 block">助教老师</label>
-            <Input
+            <Select
               value={teacherName}
+              options={[
+                { value: '', label: '请选择助教' },
+                ...teachers.map(t => ({ value: t.name, label: t.name }))
+              ]}
               onChange={(e) => setTeacherName(e.target.value)}
-              placeholder="输入助教姓名"
             />
           </div>
           <div>
@@ -392,14 +421,19 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
         </div>
         
         {/* 操作按钮 */}
-        <div className="flex justify-end gap-3 pt-3 border-t">
-          <Button variant="outline" onClick={onCancel}>
-            取消
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            <Save className="w-4 h-4 mr-1" />
-            {saving ? '保存中...' : '保存记录'}
-          </Button>
+        <div className="flex items-center justify-between pt-3 border-t">
+          <span className="text-xs text-muted-foreground">
+            ⌘S / Ctrl+S 快速保存 · Esc 取消
+          </span>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onCancel}>
+              取消
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              <Save className="w-4 h-4 mr-1" />
+              {saving ? '保存中...' : '保存记录'}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

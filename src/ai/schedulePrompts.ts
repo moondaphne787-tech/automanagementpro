@@ -237,60 +237,6 @@ export function getWeekendWithFridayConfigs(date: Date = new Date()): ScheduleDa
   return configs
 }
 
-// 兼容旧接口：获取周末日期配置
-export function getWeekendDateConfigs(date: Date = new Date(), includeFridayEvening: boolean = false): ScheduleDateConfig[] {
-  const configs: ScheduleDateConfig[] = []
-  
-  // 获取周五日期
-  const friday = new Date(date)
-  const day = date.getDay()
-  if (day === 0) {
-    // 今天是周日，周五是前两天
-    friday.setDate(date.getDate() - 2)
-  } else if (day === 6) {
-    // 今天是周六，周五是昨天
-    friday.setDate(date.getDate() - 1)
-  } else if (day !== 5) {
-    // 不是周五，找到本周五
-    friday.setDate(date.getDate() + (5 - day))
-  }
-  
-  // 获取周六日期
-  const saturday = new Date(friday)
-  saturday.setDate(friday.getDate() + 1)
-  
-  // 获取周日日期
-  const sunday = new Date(saturday)
-  sunday.setDate(saturday.getDate() + 1)
-  
-  // 周五晚上（如果需要）
-  if (includeFridayEvening) {
-    configs.push({
-      date: friday.toISOString().split('T')[0],
-      type: 'friday_evening',
-      label: '周五晚上',
-      timeRange: { start: '18:00', end: '21:00' }
-    })
-  }
-  
-  // 周六白天
-  configs.push({
-    date: saturday.toISOString().split('T')[0],
-    type: 'regular_weekend',
-    label: '周六',
-    timeRange: { start: '08:00', end: '18:00' }
-  })
-  
-  // 周日白天
-  configs.push({
-    date: sunday.toISOString().split('T')[0],
-    type: 'regular_weekend',
-    label: '周日',
-    timeRange: { start: '08:00', end: '18:00' }
-  })
-  
-  return configs
-}
 
 // AI排课响应类型
 export interface AIScheduleResult {
@@ -405,24 +351,3 @@ function isTimeOverlap(start1: string, end1: string, start2: string, end2: strin
   return (s1 < e2 && s2 < e1)
 }
 
-// 获取本周末日期
-export function getWeekendDates(date: Date = new Date()): { saturday: string; sunday: string } {
-  const day = date.getDay()
-  const saturday = new Date(date)
-  
-  if (day === 0) {
-    // 今天是周日，周六是昨天
-    saturday.setDate(date.getDate() - 1)
-  } else if (day !== 6) {
-    // 不是周六，找到下一个周六
-    saturday.setDate(date.getDate() + (6 - day))
-  }
-  
-  const sunday = new Date(saturday)
-  sunday.setDate(saturday.getDate() + 1)
-  
-  return {
-    saturday: saturday.toISOString().split('T')[0],
-    sunday: sunday.toISOString().split('T')[0]
-  }
-}

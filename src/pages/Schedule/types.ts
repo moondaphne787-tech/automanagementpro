@@ -2,7 +2,7 @@ import type { DayOfWeek } from '@/types'
 import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
 
 // 视图模式类型
-export type ViewMode = 'week' | 'arrange' | 'manual'
+export type ViewMode = 'week' | 'manual'
 
 // 预设排课模式
 export type SchedulePreset = 'weekend_with_friday' | 'week' | 'custom'
