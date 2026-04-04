@@ -25,14 +25,14 @@ export function WeeklyPlanStatus({ items, loading }: WeeklyPlanStatusProps) {
         </span>
       </div>
 
-      <div className="p-3">
+      <div className="p-2">
         {loading ? (
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {[1, 2, 3].map(i => (
-              <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/20">
-                <div className="h-3 w-3 bg-muted animate-pulse rounded-full" />
-                <div className="h-3 w-16 bg-muted animate-pulse rounded flex-1" />
-                <div className="h-2.5 w-20 bg-muted animate-pulse rounded" />
+              <div key={i} className="grid grid-cols-[1fr_auto_2fr_auto] gap-2 items-center px-2 py-1.5">
+                <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                <div className="h-2.5 w-10 bg-muted animate-pulse rounded" />
+                <div className="h-2.5 w-24 bg-muted animate-pulse rounded" />
                 <div className="h-4 w-10 bg-muted animate-pulse rounded-full" />
               </div>
             ))}
@@ -42,32 +42,41 @@ export function WeeklyPlanStatus({ items, loading }: WeeklyPlanStatusProps) {
             <p className="text-xs">本周所有学员计划已就绪</p>
           </div>
         ) : (
-          <div className="space-y-1">
-            {items.map(item => {
-              const cfg = issueConfig[item.issue]
-              return (
-                <button
-                  key={item.studentId}
-                  onClick={() => navigate(`/students/${item.studentId}?tab=plans`)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg ${cfg.bg} hover:opacity-80 transition-opacity text-left`}
-                >
-                  {cfg.icon}
-                  <span className="text-xs font-medium text-foreground flex-1">{item.studentName}</span>
-                  {item.grade && <span className="text-[10px] text-muted-foreground">{item.grade}</span>}
-                  <span className="text-[10px] text-muted-foreground">
-                    {item.issue === 'missing' && `本周 ${item.scheduledCount} 节课，0 条计划`}
-                    {item.issue === 'expired' && `${item.expiredCount} 条过期`}
-                    {item.issue === 'partial' && `${item.planCount}/${item.scheduledCount} 条`}
-                  </span>
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full
-                    ${item.issue === 'missing' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
-                      item.issue === 'expired' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' :
-                      'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
-                    {cfg.label}
-                  </span>
-                </button>
-              )
-            })}
+          <div>
+            {/* 表头 */}
+            <div className="grid grid-cols-[1fr_auto_2fr_auto] gap-2 items-center px-2 py-1 text-[10px] text-muted-foreground font-medium border-b border-border/50">
+              <span>学员</span>
+              <span>年级</span>
+              <span>状态</span>
+              <span>类型</span>
+            </div>
+            {/* 数据行 */}
+            <div className="space-y-0.5 mt-0.5">
+              {items.map(item => {
+                const cfg = issueConfig[item.issue]
+                return (
+                  <button
+                    key={item.studentId}
+                    onClick={() => navigate(`/students/${item.studentId}?tab=plans`)}
+                    className={`w-full grid grid-cols-[1fr_auto_2fr_auto] gap-2 items-center px-2 py-1.5 rounded-lg ${cfg.bg} hover:opacity-80 transition-opacity text-left`}
+                  >
+                    <span className="text-xs font-medium text-foreground truncate">{item.studentName}</span>
+                    <span className="text-[10px] text-muted-foreground">{item.grade || '-'}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {item.issue === 'missing' && `本周 ${item.scheduledCount} 节课，0 条计划`}
+                      {item.issue === 'expired' && `${item.expiredCount} 条过期`}
+                      {item.issue === 'partial' && `${item.planCount}/${item.scheduledCount} 条`}
+                    </span>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full
+                      ${item.issue === 'missing' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
+                        item.issue === 'expired' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' :
+                        'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
+                      {cfg.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

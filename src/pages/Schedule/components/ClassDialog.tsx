@@ -66,11 +66,18 @@ export function ClassDialog({
 
   // 添加排课项
   const handleAddScheduleItem = () => {
+    // 新时段的开始时间 = 上一个时段的结束时间
+    const lastSchedule = classForm.schedules[classForm.schedules.length - 1]
+    const startTime = lastSchedule ? lastSchedule.end_time : '09:00'
+    const [hours, minutes] = startTime.split(':').map(Number)
+    const endHours = hours + 2
+    const endTime = `${endHours.toString().padStart(2, '0')}:${(minutes || 0).toString().padStart(2, '0')}`
+
     const newItem: ScheduleItem = {
       id: generateId(),
       date: scheduleDates.find(d => !classForm.schedules.some(s => s.date === d.date))?.date || scheduleDates[0]?.date || new Date().toISOString().split('T')[0],
-      start_time: '09:00',
-      end_time: '11:00',
+      start_time: startTime,
+      end_time: endTime,
       duration_hours: 2
     }
     setClassForm(prev => ({
@@ -87,28 +94,47 @@ export function ClassDialog({
     }))
   }
 
-  // 更新排课项
-  const handleUpdateScheduleItem = (id: string, field: keyof ScheduleItem, value: string | number) => {
-    setClassForm(prev => ({
-      ...prev,
-      schedules: prev.schedules.map(s => {
-        if (s.id !== id) return s
+  // 计算结束时间（开始时间 + 2小时）
+  const calcEndTime = (startTime: string) => {
+    const [hours, minutes] = startTime.split(':').map(Number)
+    const endHours = hours + 2
+    return `${endHours.toString().padStart(2, '0')}:${(minutes || 0).toString().padStart(2, '0')}`
+  }
 
-        if (field === 'start_time') {
-          const startTime = value as string
-          const [hours, minutes] = startTime.split(':').map(Number)
-          const endHours = hours + 2
-          const endTime = `${endHours.toString().padStart(2, '0')}:${(minutes || 0).toString().padStart(2, '0')}`
-          return {
-            ...s,
-            start_time: startTime,
-            end_time: endTime,
-            duration_hours: 2
-          }
+  // 更新排课项，并联动后续时段的开始时间
+  const handleUpdateScheduleItem = (id: string, field: keyof ScheduleItem, value: string | number) => {
+    setClassForm(prev => {
+      const index = prev.schedules.findIndex(s => s.id === id)
+      if (index === -1) return prev
+
+      let newSchedules = [...prev.schedules]
+
+      if (field === 'start_time') {
+        const startTime = value as string
+        const endTime = calcEndTime(startTime)
+        newSchedules[index] = { ...newSchedules[index], start_time: startTime, end_time: endTime, duration_hours: 2 }
+        // 联动更新后续时段
+        let prevEnd = endTime
+        for (let i = index + 1; i < newSchedules.length; i++) {
+          const nextEnd = calcEndTime(prevEnd)
+          newSchedules[i] = { ...newSchedules[i], start_time: prevEnd, end_time: nextEnd, duration_hours: 2 }
+          prevEnd = nextEnd
         }
-        return { ...s, [field]: value }
-      })
-    }))
+      } else if (field === 'end_time') {
+        newSchedules[index] = { ...newSchedules[index], end_time: value as string }
+        // 联动更新后续时段
+        let prevEnd = value as string
+        for (let i = index + 1; i < newSchedules.length; i++) {
+          const nextEnd = calcEndTime(prevEnd)
+          newSchedules[i] = { ...newSchedules[i], start_time: prevEnd, end_time: nextEnd, duration_hours: 2 }
+          prevEnd = nextEnd
+        }
+      } else {
+        newSchedules[index] = { ...newSchedules[index], [field]: value }
+      }
+
+      return { ...prev, schedules: newSchedules }
+    })
   }
 
   // 获取日期配置

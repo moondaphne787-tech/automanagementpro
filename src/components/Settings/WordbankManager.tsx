@@ -155,9 +155,9 @@ export function WordbankManager() {
 
   return (
     <>
-      <div className="space-y-3">
+      <div className="space-y-1.5">
         {/* 表头 */}
-        <div className="grid grid-cols-12 gap-2 text-xs text-muted-foreground font-medium px-3 py-2 bg-muted/30 rounded">
+        <div className="grid grid-cols-12 gap-2 text-xs text-muted-foreground font-medium px-3 py-2 bg-muted/30 rounded sticky top-0 z-10">
           <div className="col-span-3">词库名称</div>
           <div className="col-span-2 text-center">总关数</div>
           <div className="col-span-2 text-center">九宫格间隔</div>
@@ -172,7 +172,8 @@ export function WordbankManager() {
             暂无词库，请点击下方按钮添加
           </div>
         ) : (
-          wordbanks.map((wb) => (
+          <div className={wordbanks.length > 6 ? "max-h-[400px] overflow-y-auto space-y-1.5" : "space-y-1.5"}>
+          {wordbanks.map((wb) => (
             <div key={wb.id} className="grid grid-cols-12 gap-2 items-center p-3 bg-muted/50 rounded-lg">
               {editingId === wb.id ? (
                 // 编辑模式
@@ -275,7 +276,8 @@ export function WordbankManager() {
                 </>
               )}
             </div>
-          ))
+          ))}
+          </div>
         )}
 
         <Button 

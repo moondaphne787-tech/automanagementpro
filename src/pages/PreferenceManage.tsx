@@ -398,7 +398,7 @@ export function PreferenceManage() {
                       {prefs.map(pref => (
                         <div 
                           key={pref.id}
-                          className="px-4 py-2 hover:bg-muted/30"
+                          className="px-4 py-1.5 hover:bg-muted/30"
                         >
                           {editingPrefId === pref.id ? (
                             // 编辑模式
@@ -558,23 +558,26 @@ export function PreferenceManage() {
                     未设置时段偏好的学员 ({studentsWithoutPrefs.length}人)
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {studentsWithoutPrefs.slice(0, 10).map(s => (
-                    <span 
+                    <button 
                       key={s.id}
-                      className="text-xs bg-muted px-2 py-1 rounded"
+                      className="text-xs bg-muted px-2 py-1 rounded hover:bg-primary/10 hover:text-primary transition-colors"
+                      onClick={() => handleStartAdd(s.id)}
+                      title={`为 ${s.name} 添加时段偏好`}
                     >
                       {s.name}
-                    </span>
+                      <Plus className="inline w-3 h-3 ml-0.5 opacity-50" />
+                    </button>
                   ))}
                   {studentsWithoutPrefs.length > 10 && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground self-center">
                       等 {studentsWithoutPrefs.length - 10} 人...
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  这些学员尚未设置时段偏好，点击上方卡片中的"添加时段"按钮为其添加
+                  点击学员姓名可快速为其添加时段偏好
                 </p>
               </div>
             )}

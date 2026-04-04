@@ -1,12 +1,12 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, Search, ArrowUpDown, AlertTriangle, Upload, Users } from 'lucide-react'
+import { Plus, Search, ArrowUpDown, AlertTriangle, Upload, Users, SlidersHorizontal } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { FileCabinet } from '@/components/FileCabinet/FileCabinet'
-import { QuickRecordPanel, ViewPlansPanel, ViewProgressPanel } from '@/components/FileCabinet/StudentQuickPanels'
+import { EditPlansPanel, ViewProgressPanel } from '@/components/FileCabinet/StudentQuickPanels'
 import { SemesterReminder, CurrentSemesterBadge } from '@/components/Reminder/SemesterReminder'
 import { ImportStudentsDrawer } from '@/components/Drawers/ImportStudentsDrawer'
 import { BatchPrefDialog } from '@/components/Preferences/BatchPrefDialog'
@@ -75,10 +75,10 @@ export function Home() {
   const [searchValue, setSearchValue] = useState(filters.search)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(sort.direction)
   const [importDrawerOpen, setImportDrawerOpen] = useState(false)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   
   // 快捷面板状态
-  const [quickRecordOpen, setQuickRecordOpen] = useState(false)
-  const [viewPlansOpen, setViewPlansOpen] = useState(false)
+  const [editPlansOpen, setEditPlansOpen] = useState(false)
   const [viewProgressOpen, setViewProgressOpen] = useState(false)
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null)
   
@@ -189,9 +189,9 @@ export function Home() {
       <SemesterReminder />
       
       {/* 筛选和排序栏 */}
-      <div className="border-b bg-card/50 px-6 py-3">
-        <div className="flex items-center gap-4 flex-wrap">
-          {/* 搜索 */}
+      <div className="border-b bg-card/50 px-6 py-3 space-y-2">
+        {/* 主筛选行：搜索 + 状态 + 类型 + 更多筛选 + 排序 */}
+        <div className="flex items-center gap-4">
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -202,7 +202,6 @@ export function Home() {
             />
           </div>
           
-          {/* 筛选条件 */}
           <Select
             value={filters.status}
             onChange={(e) => setFilters({ status: e.target.value as any })}
@@ -217,26 +216,18 @@ export function Home() {
             className="w-32"
           />
           
-          <Select
-            value={filters.level}
-            onChange={(e) => setFilters({ level: e.target.value as any })}
-            options={levelOptions}
-            className="w-32"
-          />
-          
-          <Select
-            value={filters.grade}
-            onChange={(e) => setFilters({ grade: e.target.value })}
-            options={gradeOptions}
-            className="w-32"
-          />
-          
-          <Select
-            value={filters.day_of_week}
-            onChange={(e) => setFilters({ day_of_week: e.target.value as any })}
-            options={dayOfWeekOptions}
-            className="w-32"
-          />
+          <Button
+            variant={showAdvancedFilters ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className="gap-1.5"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            更多筛选
+            {(filters.level !== 'all' || filters.grade !== 'all' || filters.day_of_week !== 'all') && (
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+            )}
+          </Button>
           
           {/* 排序 */}
           <div className="flex items-center gap-2 ml-auto">
@@ -262,6 +253,31 @@ export function Home() {
             </Button>
           </div>
         </div>
+        
+        {/* 高级筛选行（折叠） */}
+        {showAdvancedFilters && (
+          <div className="flex items-center gap-3 pt-1">
+            <span className="text-xs text-muted-foreground">高级筛选:</span>
+            <Select
+              value={filters.level}
+              onChange={(e) => setFilters({ level: e.target.value as any })}
+              options={levelOptions}
+              className="w-32"
+            />
+            <Select
+              value={filters.grade}
+              onChange={(e) => setFilters({ grade: e.target.value })}
+              options={gradeOptions}
+              className="w-32"
+            />
+            <Select
+              value={filters.day_of_week}
+              onChange={(e) => setFilters({ day_of_week: e.target.value as any })}
+              options={dayOfWeekOptions}
+              className="w-32"
+            />
+          </div>
+        )}
       </div>
 
       {/* 档案柜主体 */}
@@ -269,8 +285,8 @@ export function Home() {
         <FileCabinet
           students={students}
           loading={studentsLoading}
-          onQuickRecord={(id) => { setActiveStudentId(id); setQuickRecordOpen(true) }}
-          onViewPlans={(id) => { setActiveStudentId(id); setViewPlansOpen(true) }}
+          onQuickRecord={(id) => { navigate(`/students/${id}`, { state: { editMode: true } }) }}
+          onViewPlans={(id) => { setActiveStudentId(id); setEditPlansOpen(true) }}
           onViewProgress={(id) => { setActiveStudentId(id); setViewProgressOpen(true) }}
         />
       </div>
@@ -295,14 +311,9 @@ export function Home() {
       />
       
       {/* 快捷面板 */}
-      <QuickRecordPanel
-        open={quickRecordOpen}
-        onOpenChange={setQuickRecordOpen}
-        studentId={activeStudentId}
-      />
-      <ViewPlansPanel
-        open={viewPlansOpen}
-        onOpenChange={setViewPlansOpen}
+      <EditPlansPanel
+        open={editPlansOpen}
+        onOpenChange={setEditPlansOpen}
         studentId={activeStudentId}
       />
       <ViewProgressPanel

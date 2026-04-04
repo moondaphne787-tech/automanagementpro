@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Edit, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,6 +24,7 @@ export function StudentDetail() {
   const selectStudent = useAppStore(s => s.selectStudent)
   const loadWordbanks = useAppStore(s => s.loadWordbanks)
 
+  const location = useLocation()
   const [tab, setTab] = useState<TabType>('info')
   const [editing, setEditing] = useState(false)
 
@@ -35,6 +36,13 @@ export function StudentDetail() {
       if (targetTab && ['info', 'wordbank', 'growth', 'records', 'plans'].includes(targetTab)) {
         setTab(targetTab as TabType)
         sessionStorage.removeItem('studentDetailTab')
+      }
+      // 从档案柜"修改学员信息"跳转过来，自动进入编辑模式
+      const state = location.state as { editMode?: boolean } | null
+      if (state?.editMode) {
+        setEditing(true)
+        // 清除 state 避免刷新后重复触发
+        navigate(`/students/${id}`, { replace: true, state: null })
       }
     }
   }, [id])

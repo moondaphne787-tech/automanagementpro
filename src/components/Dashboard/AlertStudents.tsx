@@ -34,7 +34,7 @@ export function AlertStudents({ students, loading }: AlertStudentsProps) {
         <h3 className="text-sm font-semibold text-foreground">需关注学员</h3>
         {students.length > 8 && (
           <button
-         onClick={() => navigate('/students?filter=alerts')}
+            onClick={() => navigate('/students?filter=alerts')}
             className="text-xs text-primary"
           >
             +{students.length - 8} 更多
@@ -44,17 +44,14 @@ export function AlertStudents({ students, loading }: AlertStudentsProps) {
 
       <div className="p-2">
         {loading ? (
-          <div className="space-y-1.5">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="flex items-start gap-2 px-2 py-2 rounded-lg">
-                <div className="flex-1 space-y-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-3 w-14 bg-muted animate-pulse rounded" />
-                    <div className="h-2.5 w-8 bg-muted animate-pulse rounded" />
-                  </div>
-                  <div className="h-2 w-32 bg-muted animate-pulse rounded" />
+          <div className="grid grid-cols-2 gap-2">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="p-2 rounded-lg border border-border/50">
+                <div className="space-y-1.5">
+                  <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+                  <div className="h-2 w-16 bg-muted animate-pulse rounded" />
+                  <div className="h-5 w-10 bg-muted animate-pulse rounded" />
                 </div>
-                <div className="h-5 w-10 bg-muted animate-pulse rounded" />
               </div>
             ))}
           </div>
@@ -63,7 +60,7 @@ export function AlertStudents({ students, loading }: AlertStudentsProps) {
             <p className="text-xs">无需特别关注的学员</p>
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="grid grid-cols-2 gap-2">
             {displayStudents.map(s => {
               const primaryAlert = s.alerts[0]
               const action = primaryAlert ? alertActionConfig[primaryAlert.type] : null
@@ -71,29 +68,34 @@ export function AlertStudents({ students, loading }: AlertStudentsProps) {
               return (
                 <div
                   key={s.studentId}
-                  className="w-full flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                  className="p-2 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors"
                 >
+                  {/* 姓名行 */}
                   <button
                     onClick={() => navigate(`/students/${s.studentId}`)}
-                    className="flex-1 min-w-0 text-left"
+                    className="w-full text-left"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-foreground">{s.studentName}</span>
-                      {s.grade && <span className="text-[10px] text-muted-foreground">{s.grade}</span>}
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-0.5">
-                      {s.alerts.map((a, i) => {
-                        const cfg = alertTypeConfig[a.type]
-                        return (
-                          <span key={i} className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                            <span>{cfg.emoji}</span>
-                            {a.message}
-                          </span>
-                        )
-                      })}
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-medium text-foreground truncate">{s.studentName}</span>
+                      {s.grade && <span className="text-[10px] text-muted-foreground shrink-0">· {s.grade}</span>}
                     </div>
                   </button>
-                  <div className="flex items-center gap-1 shrink-0">
+                  
+                  {/* 预警标签行 */}
+                  <div className="flex flex-wrap gap-0.5 mt-1">
+                    {s.alerts.map((a, i) => {
+                      const cfg = alertTypeConfig[a.type]
+                      return (
+                        <span key={i} className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                          <span>{cfg.emoji}</span>
+                          {a.message}
+                        </span>
+                      )
+                    })}
+                  </div>
+                  
+                  {/* 操作按钮行 */}
+                  <div className="flex items-center justify-between mt-1.5">
                     {action && (
                       <button
                         onClick={(e) => {
@@ -107,7 +109,7 @@ export function AlertStudents({ students, loading }: AlertStudentsProps) {
                         {action.label}
                       </button>
                     )}
-                    <span className="text-[10px] px-1 py-0.5 rounded bg-muted font-medium">
+                    <span className="text-[10px] px-1 py-0.5 rounded bg-muted font-medium ml-auto">
                       {s.alerts.length} 项
                     </span>
                   </div>

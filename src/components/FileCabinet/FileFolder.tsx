@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Clock, AlertTriangle, CalendarX, PenLine, ClipboardList, BarChart3 } from 'lucide-react'
+import { Clock, AlertTriangle, CalendarX, UserCog, FilePenLine, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getLevelColor, formatHours, isHoursWarning } from '@/lib/utils'
 import type { StudentWithBilling, LEVEL_LABELS, STATUS_LABELS } from '@/types'
@@ -38,18 +38,18 @@ export function FileFolder({ student, expiredPlansCount = 0, onQuickRecord, onVi
       {/* 悬浮快捷操作按钮 */}
       <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <button
-          title="快速录入"
+          title="修改学员信息"
           className="w-7 h-7 rounded-md bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
           onClick={(e) => { e.stopPropagation(); onQuickRecord?.(student.id) }}
         >
-          <PenLine className="w-3.5 h-3.5" />
+          <UserCog className="w-3.5 h-3.5" />
         </button>
         <button
-          title="查看计划"
+          title="编辑计划"
           className="w-7 h-7 rounded-md bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 flex items-center justify-center transition-colors"
           onClick={(e) => { e.stopPropagation(); onViewPlans?.(student.id) }}
         >
-          <ClipboardList className="w-3.5 h-3.5" />
+          <FilePenLine className="w-3.5 h-3.5" />
         </button>
         <button
           title="查看进度"

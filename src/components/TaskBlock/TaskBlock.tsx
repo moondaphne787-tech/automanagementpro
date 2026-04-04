@@ -1,10 +1,11 @@
 import { X, GripVertical } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { TASK_TYPE_LABELS } from '@/types'
 import type { TaskBlock as TaskBlockType, TaskType, Wordbank } from '@/types'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { settingsDb } from '@/db'
 
 // 任务类型选项
 const TASK_TYPE_OPTIONS = [
@@ -19,9 +20,6 @@ const TASK_TYPE_OPTIONS = [
   { value: 'other', label: '其他' },
 ]
 
-// 需要词库和关数的任务类型
-const WORDBANK_TASK_TYPES: TaskType[] = ['vocab_new', 'vocab_review', 'nine_grid']
-
 interface TaskBlockProps {
   task: TaskBlockType
   index: number
@@ -29,7 +27,6 @@ interface TaskBlockProps {
   onChange?: (task: TaskBlockType) => void
   onDelete?: () => void
   className?: string
-  // 词库列表，用于限制关数
   wordbanks?: Wordbank[]
 }
 
@@ -42,19 +39,23 @@ export function TaskBlock({
   className,
   wordbanks = []
 }: TaskBlockProps) {
-  const needsWordbank = WORDBANK_TASK_TYPES.includes(task.type)
-  
-  // 获取当前选中词库的总关数
-  const getWordbankMaxLevel = (wordbankLabel: string | undefined): number => {
-    if (!wordbankLabel) return 999 // 默认最大值
-    const wordbank = wordbanks.find(w => w.name === wordbankLabel)
-    return wordbank?.total_levels || 999
-  }
-  
-  // 词库选项（从传入的 wordbanks 生成）
-  const wordbankOptions = wordbanks.map(w => ({ value: w.name, label: w.name }))
-  
-  const maxLevel = getWordbankMaxLevel(task.wordbank_label)
+  const [defaultText, setDefaultText] = useState('')
+
+  // 加载该任务类型的默认文本
+  useEffect(() => {
+    if (editable) {
+      settingsDb.get(`task_default_${task.type}`).then(val => {
+        setDefaultText(val || '')
+      })
+    }
+  }, [task.type, editable])
+
+  // 当任务类型切换时，如果 content 为空且有默认文本，自动填充
+  useEffect(() => {
+    if (editable && defaultText && !task.content) {
+      onChange?.({ ...task, content: defaultText })
+    }
+  }, [defaultText])
   
   // 获取任务类型颜色
   const getTypeColor = (type: TaskType) => {
@@ -97,116 +98,43 @@ export function TaskBlock({
           )}
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">任务类型</label>
-            <Select
-              value={task.type}
-              options={TASK_TYPE_OPTIONS}
-              onChange={(e) => {
-                const newType = e.target.value as TaskType
-                const updated: TaskBlockType = { ...task, type: newType }
-                // 如果不需要词库，清空词库相关字段
-                if (!WORDBANK_TASK_TYPES.includes(newType)) {
-                  delete updated.wordbank_label
-                  delete updated.level_from
-                  delete updated.level_to
-                  delete updated.level_reached
-                }
-                onChange?.(updated)
-              }}
-            />
-          </div>
-          
-          {needsWordbank && (
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">词库</label>
-              <Select
-                value={task.wordbank_label || ''}
-                options={[{ value: '', label: '选择词库' }, ...wordbankOptions]}
-                onChange={(e) => {
-                  const newLabel = e.target.value || undefined
-                  // 切换词库时，如果当前关数超过新词库的总关数，需要重置
-                  const newMaxLevel = getWordbankMaxLevel(newLabel)
-                  const updated: TaskBlockType = { ...task, wordbank_label: newLabel }
-                  if (task.level_from && task.level_from > newMaxLevel) {
-                    delete updated.level_from
-                  }
-                  if (task.level_to && task.level_to > newMaxLevel) {
-                    delete updated.level_to
-                  }
-                  onChange?.(updated)
-                }}
-              />
-            </div>
-          )}
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">任务类型</label>
+          <Select
+            value={task.type}
+            options={TASK_TYPE_OPTIONS}
+            onChange={(e) => {
+              const newType = e.target.value as TaskType
+              const updated: TaskBlockType = { ...task, type: newType }
+              // 清空旧字段
+              delete updated.wordbank_label
+              delete updated.level_from
+              delete updated.level_to
+              delete updated.level_reached
+              // content 保留，让 useEffect 处理默认文本
+              updated.content = ''
+              onChange?.(updated)
+            }}
+          />
         </div>
         
-        {needsWordbank && (
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">
-                起始关 {maxLevel < 999 && <span className="text-primary">(最大 {maxLevel})</span>}
-              </label>
-              <Input
-                type="number"
-                min={1}
-                max={maxLevel}
-                value={task.level_from || ''}
-                onChange={(e) => {
-                  let value = parseInt(e.target.value) || undefined
-                  // 限制不超过最大关数
-                  if (value && value > maxLevel) {
-                    value = maxLevel
-                  }
-                  onChange?.({ 
-                    ...task, 
-                    level_from: value,
-                    level_reached: task.level_to ? parseInt(e.target.value) : undefined
-                  })
-                }}
-                placeholder="起始关数"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">
-                结束关 {maxLevel < 999 && <span className="text-primary">(最大 {maxLevel})</span>}
-              </label>
-              <Input
-                type="number"
-                min={task.level_from || 1}
-                max={maxLevel}
-                value={task.level_to || ''}
-                onChange={(e) => {
-                  let levelTo = parseInt(e.target.value) || undefined
-                  // 限制不超过最大关数
-                  if (levelTo && levelTo > maxLevel) {
-                    levelTo = maxLevel
-                  }
-                  onChange?.({ 
-                    ...task, 
-                    level_to: levelTo,
-                    level_reached: levelTo
-                  })
-                }}
-                placeholder="结束关数"
-              />
-            </div>
-          </div>
-        )}
-        
-        {!needsWordbank && (
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">内容描述</label>
-            <Input
-              value={task.content || ''}
-              onChange={(e) => {
-                onChange?.({ ...task, content: e.target.value })
-              }}
-              placeholder="输入任务内容描述"
-            />
-          </div>
-        )}
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">
+            任务内容
+            {defaultText && (
+              <span className="text-primary ml-1">(已有默认模板)</span>
+            )}
+          </label>
+          <textarea
+            value={task.content || ''}
+            onChange={(e) => {
+              onChange?.({ ...task, content: e.target.value })
+            }}
+            placeholder={defaultText || '输入任务内容描述'}
+            rows={3}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y min-h-[60px]"
+          />
+        </div>
       </div>
     )
   }
@@ -214,30 +142,30 @@ export function TaskBlock({
   // 只读模式
   return (
     <div className={cn(
-      "flex items-center gap-2 px-3 py-2 rounded-lg border",
+      "flex items-start gap-2 px-3 py-2 rounded-lg border",
       getTypeColor(task.type),
       className
     )}>
-      <span className="text-xs font-medium">{TASK_TYPE_LABELS[task.type]}</span>
+      <span className="text-xs font-medium whitespace-nowrap">{TASK_TYPE_LABELS[task.type]}</span>
       
-      {needsWordbank && task.wordbank_label && (
+      {task.content && (
+        <>
+          <span className="text-xs opacity-60">·</span>
+          <span className="text-xs whitespace-pre-wrap">{task.content}</span>
+        </>
+      )}
+
+      {/* 兼容旧数据：如果有 wordbank_label 和 level 信息，也显示 */}
+      {!task.content && task.wordbank_label && (
         <>
           <span className="text-xs opacity-60">·</span>
           <span className="text-xs">{task.wordbank_label}</span>
-          
           {task.level_from && task.level_to && (
             <>
               <span className="text-xs opacity-60">·</span>
               <span className="text-xs">第{task.level_from}-{task.level_to}关</span>
             </>
           )}
-        </>
-      )}
-      
-      {!needsWordbank && task.content && (
-        <>
-          <span className="text-xs opacity-60">·</span>
-          <span className="text-xs truncate max-w-[200px]">{task.content}</span>
         </>
       )}
     </div>
@@ -247,6 +175,7 @@ export function TaskBlock({
 // 创建空任务
 export function createEmptyTask(): TaskBlockType {
   return {
-    type: 'vocab_new'
+    type: 'vocab_new',
+    content: ''
   }
 }

@@ -167,37 +167,28 @@ export function ReadingCheckin() {
 
   return (
     <div className="h-full flex flex-col" onKeyDown={handleKeyDown} tabIndex={0}>
-      {/* 页面标题 */}
-      <div className="p-6 border-b bg-card">
+      {/* 页面标题 - 紧凑合并 */}
+      <div className="px-6 py-3 border-b bg-card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BookOpen className="w-6 h-6 text-primary" />
-            <h1 className="text-xl font-semibold">朗读打卡快录</h1>
+            <BookOpen className="w-5 h-5 text-primary" />
+            <h1 className="text-lg font-semibold">朗读打卡快录</h1>
+            <span className="text-sm text-muted-foreground">
+              当月已打卡 <span className="font-semibold text-primary">{monthlyCheckedStudents}</span>/{totalStudents} 人
+              {isCurrentMonth && yesterdayDate && (
+                <> · {formatDate(yesterdayDate)}已打卡 <span className="font-semibold text-green-600">{yesterdayCheckedCount}</span> 人</>
+              )}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={handlePrevMonth}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="text-lg font-medium px-4">{monthDisplay}</span>
+            <span className="text-sm font-medium px-2">{monthDisplay}</span>
             <Button variant="outline" size="icon" onClick={handleNextMonth}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
-        </div>
-        <div className="mt-4 flex items-center gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">当月已打卡学员</span>
-            <span className="font-semibold text-primary">{monthlyCheckedStudents}</span>
-            <span className="text-muted-foreground">/</span>
-            <span className="text-muted-foreground">共 {totalStudents} 人</span>
-          </div>
-          {isCurrentMonth && yesterdayDate && (
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">{formatDate(yesterdayDate)}已打卡</span>
-              <span className="font-semibold text-green-600">{yesterdayCheckedCount}</span>
-              <span className="text-muted-foreground">人</span>
-            </div>
-          )}
         </div>
       </div>
 

@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Plus, Search, CheckCircle, Clock, TrendingUp, Calendar, User, Phone, GraduationCap, BookOpen } from 'lucide-react'
+import { Plus, Search, CheckCircle, Clock, TrendingUp, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { DateInput } from '@/components/ui/date-input'
 import { trialConversionDb } from '@/db'
@@ -148,91 +146,64 @@ export function TrialList() {
             {search ? '没有找到匹配的体验生' : '暂无体验生'}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredStudents.map((student, index) => (
-              <motion.div
+          <div className="border rounded-lg">
+            {/* 表头 */}
+            <div className="grid grid-cols-[1fr_5rem_5rem_7rem_7rem_5rem_6rem] gap-4 py-2 px-4 bg-muted/50 border-b text-sm font-medium text-muted-foreground">
+              <div>姓名</div>
+              <div>年级</div>
+              <div>程度</div>
+              <div>体验日期</div>
+              <div>成交日期</div>
+              <div className="text-center">状态</div>
+              <div className="text-center">操作</div>
+            </div>
+            
+            {/* 数据行 */}
+            {filteredStudents.map(student => (
+              <div
                 key={student.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
+                className="grid grid-cols-[1fr_5rem_5rem_7rem_7rem_5rem_6rem] gap-4 py-2 px-4 border-b last:border-b-0 items-center hover:bg-muted/30 transition-colors cursor-pointer"
+                onClick={() => navigate(`/students/${student.id}`)}
               >
-                <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/students/${student.id}`)}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-base">{student.name}</CardTitle>
-                        <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                          {student.grade && (
-                            <span className="flex items-center gap-1">
-                              <GraduationCap className="w-3 h-3" />
-                              {student.grade}
-                            </span>
-                          )}
-                          {student.school && (
-                            <span className="flex items-center gap-1">
-                              <BookOpen className="w-3 h-3" />
-                              {student.school}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* 状态标签 */}
-                      {student.conversion?.converted ? (
-                        <span className="px-2 py-0.5 bg-green-500/10 text-green-600 text-xs rounded-full">
-                          已成交
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 text-xs rounded-full">
-                          待跟进
-                        </span>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="space-y-2 text-sm">
-                      {/* 程度 */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">程度</span>
-                        <span>{LEVEL_LABELS[student.level]}</span>
-                      </div>
-                      
-                      {/* 体验日期 */}
-                      {student.conversion?.trial_date && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">体验日期</span>
-                          <span>{student.conversion.trial_date}</span>
-                        </div>
-                      )}
-                      
-                      {/* 成交日期 */}
-                      {student.conversion?.converted && student.conversion.conversion_date && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">成交日期</span>
-                          <span className="text-green-600">{student.conversion.conversion_date}</span>
-                        </div>
-                      )}
-                      
-                      {/* 操作按钮 */}
-                      {!student.conversion?.converted && (
-                        <div className="pt-2">
-                          <Button 
-                            size="sm" 
-                            className="w-full"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleOpenConvertDialog(student)
-                            }}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            标记成交
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
+                <div className="font-medium text-sm truncate">{student.name}</div>
+                <div className="text-sm text-muted-foreground">{student.grade || '-'}</div>
+                <div className="text-sm">{LEVEL_LABELS[student.level]}</div>
+                <div className="text-sm text-muted-foreground">
+                  {student.conversion?.trial_date || '-'}
+                </div>
+                <div className="text-sm">
+                  {student.conversion?.converted && student.conversion.conversion_date ? (
+                    <span className="text-green-600">{student.conversion.conversion_date}</span>
+                  ) : '-'}
+                </div>
+                <div className="text-center">
+                  {student.conversion?.converted ? (
+                    <span className="px-2 py-0.5 bg-green-500/10 text-green-600 text-xs rounded-full">
+                      已成交
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 bg-amber-500/10 text-amber-600 text-xs rounded-full">
+                      待跟进
+                    </span>
+                  )}
+                </div>
+                <div className="text-center">
+                  {!student.conversion?.converted && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleOpenConvertDialog(student)
+                      }}
+                    >
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      成交
+                    </Button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}
