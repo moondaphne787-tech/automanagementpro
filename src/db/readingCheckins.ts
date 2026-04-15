@@ -29,6 +29,7 @@ function getTodayDate(): string {
 // 打卡记录行类型
 export interface ReadingCheckinRow {
   id: string
+  studentNo: string | null
   name: string
   monthlyCount: number
   checkedYesterday: boolean  // 改为昨日打卡状态
@@ -45,16 +46,18 @@ export interface MonthSummaryResult {
 
 /**
  * 获取某月所有在读学员的打卡统计
- * 统计基准日期为昨日（因为学生可能晚上10点后才打卡）
+ * @param targetDate 可选，指定统计基准日期，默认为昨日
  */
-export async function getMonthSummary(year: number, month: number): Promise<MonthSummaryResult> {
+export async function getMonthSummary(year: number, month: number, targetDate?: string): Promise<MonthSummaryResult> {
   const yesterday = getYesterdayDate()
   const today = getTodayDate()
+  const referenceDate = targetDate || yesterday
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}%`
-  
+
   const result = await ipcQuery<ReadingCheckinAggRow[]>(
     `SELECT
       s.id,
+      s.student_no,
       s.name,
       COUNT(rc.id) AS monthly_count,
       MAX(CASE WHEN rc.checked_date = ? THEN 1 ELSE 0 END) AS checked_yesterday
@@ -64,35 +67,36 @@ export async function getMonthSummary(year: number, month: number): Promise<Mont
       AND rc.checked_date LIKE ?
     WHERE s.status = 'active'
     GROUP BY s.id
-    ORDER BY 
+    ORDER BY
       MAX(CASE WHEN rc.checked_date = ? THEN 1 ELSE 0 END) ASC,
       s.name ASC`,
-    [yesterday, monthPrefix, yesterday]
+    [referenceDate, monthPrefix, referenceDate]
   )
-  
+
   // 获取在读学员总数
   const totalResult = await ipcQueryOne<{ count: number }>(
     `SELECT COUNT(*) as count FROM students WHERE status = 'active'`
   )
-  
-  // 获取昨日已打卡人数
-  const yesterdayResult = await ipcQueryOne<{ count: number }>(
-    `SELECT COUNT(DISTINCT student_id) as count 
-     FROM reading_checkins 
+
+  // 获取该日期已打卡人数
+  const dateResult = await ipcQueryOne<{ count: number }>(
+    `SELECT COUNT(DISTINCT student_id) as count
+     FROM reading_checkins
      WHERE checked_date = ?`,
-    [yesterday]
+    [referenceDate]
   )
-  
+
   // 转换字段名
   return {
     students: result.map((row) => ({
       id: row.id,
+      studentNo: row.student_no,
       name: row.name,
       monthlyCount: row.monthly_count,
       checkedYesterday: row.checked_yesterday === 1
     })),
     totalStudents: totalResult?.count ?? 0,
-    yesterdayCheckedCount: yesterdayResult?.count ?? 0,
+    yesterdayCheckedCount: dateResult?.count ?? 0,
     yesterday,
     today
   }
@@ -158,10 +162,75 @@ export async function uncheckYesterday(studentId: string): Promise<{ success: bo
   }
 }
 
+/**
+ * 获取某月每日打卡人数统计
+ * 返回该月每天的打卡人数
+ */
+export async function getDailyCheckinCounts(year: number, month: number): Promise<{ date: string; count: number }[]> {
+  const monthPrefix = `${year}-${String(month).padStart(2, '0')}%`
+  
+  const result = await ipcQuery<{ checked_date: string; count: number }[]>(
+    `SELECT checked_date, COUNT(DISTINCT student_id) as count
+     FROM reading_checkins
+     WHERE checked_date LIKE ?
+     GROUP BY checked_date
+     ORDER BY checked_date ASC`,
+    [monthPrefix]
+  )
+  
+  return result.map(row => ({
+    date: row.checked_date,
+    count: row.count
+  }))
+}
+
+/**
+ * 为某学生记录指定日期的打卡
+ */
+export async function checkForDate(studentId: string, date: string): Promise<{ success: boolean; inserted: boolean; date: string }> {
+  const id = generateId()
+  const result = await ipcQuery<{ changes: number }>(
+    `INSERT OR IGNORE INTO reading_checkins (id, student_id, checked_date) VALUES (?, ?, ?)`,
+    [id, studentId, date]
+  )
+  return { success: true, inserted: result.changes > 0, date }
+}
+
+/**
+ * 撤销指定日期的打卡记录
+ */
+export async function uncheckForDate(studentId: string, date: string): Promise<{ success: boolean; deleted: boolean; date: string }> {
+  const result = await ipcQuery<{ changes: number }>(
+    `DELETE FROM reading_checkins WHERE student_id = ? AND checked_date = ?`,
+    [studentId, date]
+  )
+  return { success: true, deleted: result.changes > 0, date }
+}
+
+/**
+ * 批量为多个学生记录指定日期的打卡
+ */
+export async function batchCheckForDate(studentIds: string[], date: string): Promise<{ success: boolean; insertedCount: number; date: string }> {
+  let insertedCount = 0
+  for (const studentId of studentIds) {
+    const id = generateId()
+    const result = await ipcQuery<{ changes: number }>(
+      `INSERT OR IGNORE INTO reading_checkins (id, student_id, checked_date) VALUES (?, ?, ?)`,
+      [id, studentId, date]
+    )
+    if (result.changes > 0) insertedCount++
+  }
+  return { success: true, insertedCount, date }
+}
+
 // 导出为 db 对象
 export const readingCheckinDb = {
   getMonthSummary,
   checkYesterday,
   batchCheckYesterday,
-  uncheckYesterday
+  uncheckYesterday,
+  checkForDate,
+  uncheckForDate,
+  batchCheckForDate,
+  getDailyCheckinCounts
 }

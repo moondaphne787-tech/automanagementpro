@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, XCircle, Clock } from 'lucide-react'
+import { AlertTriangle, XCircle, Clock, Sparkles } from 'lucide-react'
+import { useAppStore } from '@/store/appStore'
 import type { PlanStatusItem } from '@/types'
 
 const issueConfig = {
@@ -15,14 +16,26 @@ interface WeeklyPlanStatusProps {
 
 export function WeeklyPlanStatus({ items, loading }: WeeklyPlanStatusProps) {
   const navigate = useNavigate()
+  const openGenerateDrawer = useAppStore(s => s.openGenerateDrawer)
 
   return (
     <div className="rounded-xl border border-border bg-card">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h3 className="text-sm font-semibold text-foreground">本周计划状态</h3>
-        <span className="text-xs text-muted-foreground">
-          {loading ? '...' : items.length === 0 ? '全部已就绪' : `${items.length} 位需处理`}
-        </span>
+        <div className="flex items-center gap-2">
+          {!loading && items.length > 0 && (
+            <button
+              onClick={() => openGenerateDrawer(items.map(i => i.studentId))}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
+            >
+              <Sparkles className="w-3 h-3" />
+              批量生成
+            </button>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {loading ? '...' : items.length === 0 ? '全部已就绪' : `${items.length} 位需处理`}
+          </span>
+        </div>
       </div>
 
       <div className="p-2">

@@ -10,7 +10,36 @@ import { useAppStore } from '@/store/appStore'
 import { classRecordDb } from '@/db'
 import { extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
 import { cn } from '@/lib/utils'
-import type { ClassRecord, LessonPlan } from '@/types'
+import type { ClassRecord, LessonPlan, TaskCompletedType, PerformanceType } from '@/types'
+
+/** 完成状态 + 表现标签（消除重复渲染逻辑） */
+function RecordStatusBadges({ taskCompleted, performance }: {
+  taskCompleted: TaskCompletedType
+  performance: PerformanceType
+}) {
+  return (
+    <>
+      <span className={cn(
+        "text-sm",
+        taskCompleted === 'completed' && "text-green-600",
+        taskCompleted === 'partial' && "text-yellow-600",
+        taskCompleted === 'not_completed' && "text-red-600"
+      )}>
+        {taskCompleted === 'completed' ? '✓ 全部完成' :
+         taskCompleted === 'partial' ? '◐ 部分完成' : '✗ 未完成'}
+      </span>
+      <span className={cn(
+        "text-sm",
+        performance === 'excellent' && "text-green-600",
+        performance === 'good' && "text-blue-600",
+        performance === 'needs_improvement' && "text-orange-600"
+      )}>
+        {performance === 'excellent' ? '表现优秀' :
+         performance === 'good' ? '表现良好' : '待提高'}
+      </span>
+    </>
+  )
+}
 
 interface RecordsTabProps {
   studentId: string
@@ -288,24 +317,7 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
                             
                             {/* 完成状态对比 */}
                             <div className="border-t p-2 bg-muted/30 flex items-center gap-4">
-                              <span className={cn(
-                                "text-sm font-medium",
-                                record.task_completed === 'completed' && "text-green-600",
-                                record.task_completed === 'partial' && "text-yellow-600",
-                                record.task_completed === 'not_completed' && "text-red-600"
-                              )}>
-                                {record.task_completed === 'completed' ? '✓ 全部完成' : 
-                                 record.task_completed === 'partial' ? '◐ 部分完成' : '✗ 未完成'}
-                              </span>
-                              <span className={cn(
-                                "text-sm",
-                                record.performance === 'excellent' && "text-green-600",
-                                record.performance === 'good' && "text-blue-600",
-                                record.performance === 'needs_improvement' && "text-orange-600"
-                              )}>
-                                表现: {record.performance === 'excellent' ? '优秀' : 
-                                 record.performance === 'good' ? '良好' : '待提高'}
-                              </span>
+                              <RecordStatusBadges taskCompleted={record.task_completed} performance={record.performance} />
                             </div>
                           </div>
                         ) : (
@@ -323,22 +335,7 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
                             
                             {/* 完成状态和表现 */}
                             <div className="flex items-center gap-4 text-sm">
-                              <span className={cn(
-                                record.task_completed === 'completed' && "text-green-600",
-                                record.task_completed === 'partial' && "text-yellow-600",
-                                record.task_completed === 'not_completed' && "text-red-600"
-                              )}>
-                                {record.task_completed === 'completed' ? '✓ 全部完成' : 
-                                 record.task_completed === 'partial' ? '◐ 部分完成' : '✗ 未完成'}
-                              </span>
-                              <span className={cn(
-                                record.performance === 'excellent' && "text-green-600",
-                                record.performance === 'good' && "text-blue-600",
-                                record.performance === 'needs_improvement' && "text-orange-600"
-                              )}>
-                                {record.performance === 'excellent' ? '表现优秀' : 
-                                 record.performance === 'good' ? '表现良好' : '待提高'}
-                              </span>
+                              <RecordStatusBadges taskCompleted={record.task_completed} performance={record.performance} />
                             </div>
                           </>
                         )}

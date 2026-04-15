@@ -1,5 +1,5 @@
-import { X, GripVertical } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { X, GripVertical, ChevronsUpDown } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
 import { TASK_TYPE_LABELS } from '@/types'
 import type { TaskBlock as TaskBlockType, TaskType, Wordbank } from '@/types'
 import { cn } from '@/lib/utils'
@@ -24,22 +24,29 @@ interface TaskBlockProps {
   task: TaskBlockType
   index: number
   editable?: boolean
+  compact?: boolean
   onChange?: (task: TaskBlockType) => void
   onDelete?: () => void
   className?: string
   wordbanks?: Wordbank[]
+  /** dnd-kit 拖拽监听器，传入后 GripVertical 图标变为真正的拖拽手柄 */
+  dragListeners?: Record<string, unknown>
 }
 
 export function TaskBlock({ 
   task, 
   index, 
   editable = false, 
+  compact = false,
   onChange, 
   onDelete,
   className,
-  wordbanks = []
+  wordbanks = [],
+  dragListeners
 }: TaskBlockProps) {
   const [defaultText, setDefaultText] = useState('')
+  const [expanded, setExpanded] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // 加载该任务类型的默认文本
   useEffect(() => {
@@ -81,6 +88,75 @@ export function TaskBlock({
     }
   }
   
+  // 类型切换处理（compact 和标准模式共用）
+  const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newType = e.target.value as TaskType
+    const updated: TaskBlockType = { ...task, type: newType }
+    delete updated.wordbank_label
+    delete updated.level_from
+    delete updated.level_to
+    delete updated.level_reached
+    updated.content = ''
+    onChange?.(updated)
+  }
+
+  // 紧凑编辑模式：一行搞定类型+内容+删除
+  if (editable && compact) {
+    return (
+      <div className={cn("space-y-1", className)}>
+        <div className="flex items-center gap-1.5">
+          <GripVertical
+            className="w-3.5 h-3.5 text-muted-foreground cursor-grab shrink-0 touch-none"
+            {...(dragListeners || {})}
+          />
+          <Select
+            value={task.type}
+            options={TASK_TYPE_OPTIONS}
+            onChange={handleTypeChange}
+            className="w-[120px] h-8 text-xs shrink-0"
+          />
+          {!expanded ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={task.content || ''}
+              onChange={(e) => onChange?.({ ...task, content: e.target.value })}
+              placeholder={defaultText || '任务内容'}
+              className="flex-1 min-w-0 h-8 rounded-md border border-input bg-transparent px-2 py-1 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          ) : (
+            <div className="flex-1" />
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 shrink-0"
+            onClick={() => setExpanded(!expanded)}
+            title={expanded ? '收起' : '展开多行输入'}
+          >
+            <ChevronsUpDown className="w-3.5 h-3.5" />
+          </Button>
+          {onDelete && (
+            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={onDelete}>
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
+        {expanded && (
+          <textarea
+            value={task.content || ''}
+            onChange={(e) => onChange?.({ ...task, content: e.target.value })}
+            placeholder={defaultText || '输入任务内容描述'}
+            rows={2}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y ml-5"
+            style={{ width: 'calc(100% - 20px)', marginLeft: 20 }}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // 标准编辑模式
   if (editable) {
     return (
       <div className={cn(
@@ -88,7 +164,10 @@ export function TaskBlock({
         className
       )}>
         <div className="flex items-center gap-2">
-          <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab" />
+          <GripVertical
+            className="w-4 h-4 text-muted-foreground cursor-grab touch-none"
+            {...(dragListeners || {})}
+          />
           <span className="text-sm font-medium">任务 {index + 1}</span>
           <div className="flex-1" />
           {onDelete && (
@@ -103,18 +182,7 @@ export function TaskBlock({
           <Select
             value={task.type}
             options={TASK_TYPE_OPTIONS}
-            onChange={(e) => {
-              const newType = e.target.value as TaskType
-              const updated: TaskBlockType = { ...task, type: newType }
-              // 清空旧字段
-              delete updated.wordbank_label
-              delete updated.level_from
-              delete updated.level_to
-              delete updated.level_reached
-              // content 保留，让 useEffect 处理默认文本
-              updated.content = ''
-              onChange?.(updated)
-            }}
+            onChange={handleTypeChange}
           />
         </div>
         

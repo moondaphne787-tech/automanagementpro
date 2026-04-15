@@ -560,10 +560,14 @@ export function PreferenceManage() {
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {studentsWithoutPrefs.slice(0, 10).map(s => (
-                    <button 
+                    <button
                       key={s.id}
-                      className="text-xs bg-muted px-2 py-1 rounded hover:bg-primary/10 hover:text-primary transition-colors"
-                      onClick={() => handleStartAdd(s.id)}
+                      className={`text-xs px-2 py-1 rounded transition-colors ${
+                        addingForStudentId === s.id
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted hover:bg-primary/10 hover:text-primary'
+                      }`}
+                      onClick={() => addingForStudentId === s.id ? handleCancelAdd() : handleStartAdd(s.id)}
                       title={`为 ${s.name} 添加时段偏好`}
                     >
                       {s.name}
@@ -576,6 +580,58 @@ export function PreferenceManage() {
                     </span>
                   )}
                 </div>
+
+                {/* 未设置偏好学员的内联添加表单 */}
+                {addingForStudentId && studentsWithoutPrefs.some(s => s.id === addingForStudentId) && (
+                  <div className="mt-3 bg-card border rounded-lg p-3">
+                    <div className="text-sm font-medium mb-2">
+                      为 {studentsWithoutPrefs.find(s => s.id === addingForStudentId)?.name} 添加时段偏好
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={addForm.day_of_week}
+                        onChange={(e) => setAddForm(prev => ({ ...prev, day_of_week: e.target.value as DayOfWeek }))}
+                        className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        {DAY_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="time"
+                        value={addForm.preferred_start}
+                        onChange={(e) => setAddForm(prev => ({ ...prev, preferred_start: e.target.value }))}
+                        className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <span className="text-muted-foreground">-</span>
+                      <input
+                        type="time"
+                        value={addForm.preferred_end}
+                        onChange={(e) => setAddForm(prev => ({ ...prev, preferred_end: e.target.value }))}
+                        className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <div className="flex items-center gap-1 ml-auto">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleSaveAdd(addingForStudentId)}
+                          disabled={operating}
+                        >
+                          保存
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleCancelAdd}
+                          disabled={operating}
+                        >
+                          取消
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-xs text-muted-foreground mt-2">
                   点击学员姓名可快速为其添加时段偏好
                 </p>

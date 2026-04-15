@@ -6,12 +6,13 @@ import type { StudentWithBilling } from '@/types'
 interface FileCabinetProps {
   students: StudentWithBilling[]
   loading?: boolean
+  scheduleInfoMap?: Map<string, { nextClassDate: string | null; hasThisWeekClass: boolean }>
   onQuickRecord?: (studentId: string) => void
   onViewPlans?: (studentId: string) => void
   onViewProgress?: (studentId: string) => void
 }
 
-export function FileCabinet({ students, loading, onQuickRecord, onViewPlans, onViewProgress }: FileCabinetProps) {
+export function FileCabinet({ students, loading, scheduleInfoMap, onQuickRecord, onViewPlans, onViewProgress }: FileCabinetProps) {
   const expiredPlansMap = useAppStore(state => state.expiredPlansMap)
   
   if (loading) {
@@ -51,6 +52,7 @@ export function FileCabinet({ students, loading, onQuickRecord, onViewPlans, onV
             <FileFolder 
               student={student} 
               expiredPlansCount={expiredPlansMap.get(student.id) || 0}
+              scheduleInfo={scheduleInfoMap?.get(student.id)}
               onQuickRecord={onQuickRecord}
               onViewPlans={onViewPlans}
               onViewProgress={onViewProgress}

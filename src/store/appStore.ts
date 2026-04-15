@@ -5,10 +5,12 @@ import { createWordbankSlice } from './wordbankSlice'
 import { createClassRecordSlice } from './classRecordSlice'
 import { createLessonPlanSlice } from './lessonPlanSlice'
 import { createExamScoreSlice } from './examScoreSlice'
+import { createVocabTestSlice } from './vocabTestSlice'
 import { createLearningPhaseSlice } from './learningPhaseSlice'
 import { createSemesterConfigSlice } from './semesterConfigSlice'
 import { createUISlice } from './uiSlice'
 import { createDashboardSlice } from './dashboardSlice'
+import { createGenerationSlice } from './generationSlice'
 
 // 组合所有 slices 创建统一的 store
 // 注意：readingCheckinSlice 已拆分为独立的 useReadingCheckinStore，
@@ -20,10 +22,12 @@ export const useAppStore = create<AppState>()(
     ...createClassRecordSlice(...a),
     ...createLessonPlanSlice(...a),
     ...createExamScoreSlice(...a),
+    ...createVocabTestSlice(...a),
     ...createLearningPhaseSlice(...a),
     ...createSemesterConfigSlice(...a),
     ...createUISlice(...a),
     ...createDashboardSlice(...a),
+    ...createGenerationSlice(...a),
   })
 )
 

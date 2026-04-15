@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
-import { Edit, Trash2, Plus, Calendar, FileText, Sparkles, Printer, Loader2, CalendarX, RefreshCw, Copy } from 'lucide-react'
+import { Trash2, Calendar, Sparkles, Printer, Loader2, CalendarX, RefreshCw, Copy, PanelRightClose, PanelRightOpen, ChevronDown, ChevronUp, StickyNote, BookOpen, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PromptDialog } from '@/components/ui/dialog'
-import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
+import { PlanEditor } from '@/components/PlanEditor/PlanEditor'
 import { useAppStore } from '@/store/appStore'
-import { settingsDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
 import { sendAIRequestStream } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { printLessonPlan } from '@/utils/pdfExport'
 import { formatLocalDate, cn } from '@/lib/utils'
-import { LEVEL_LABELS } from '@/types'
-import type { LessonPlan, AIConfig, TaskBlock as TaskBlockType } from '@/types'
+import { LEVEL_LABELS, TASK_TYPE_LABELS } from '@/types'
 
 interface PlansTabProps {
   studentId: string
@@ -24,21 +22,31 @@ export function PlansTab({ studentId }: PlansTabProps) {
   const currentStudent = useAppStore(s => s.currentStudent)
   const currentProgress = useAppStore(s => s.currentProgress)
   const wordbanks = useAppStore(s => s.wordbanks)
+
+  // 从 Store 读取课程计划相关状态
+  const lessonPlans = useAppStore(s => s.lessonPlans)
+  const expiredPlans = useAppStore(s => s.expiredPlans)
+  const recentRecords = useAppStore(s => s.recentRecords)
+  const aiConfig = useAppStore(s => s.aiConfig)
+
+  // 从 Store 获取操作方法
+  const loadLessonPlans = useAppStore(s => s.loadLessonPlans)
+  const loadExpiredPlans = useAppStore(s => s.loadExpiredPlans)
+  const loadRecentRecords = useAppStore(s => s.loadRecentRecords)
+  const loadAIConfig = useAppStore(s => s.loadAIConfig)
+  const getLastPlanSummary = useAppStore(s => s.getLastPlanSummary)
   const createLessonPlan = useAppStore(s => s.createLessonPlan)
+  const updateLessonPlan = useAppStore(s => s.updateLessonPlan)
   const deleteLessonPlan = useAppStore(s => s.deleteLessonPlan)
 
-  const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([])
-  const [expiredPlans, setExpiredPlans] = useState<LessonPlan[]>([])
   const [generatingPlan, setGeneratingPlan] = useState(false)
   const [streamContent, setStreamContent] = useState('')
-  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
   const [extraInstruction, setExtraInstruction] = useState('')
   const [showPlanGenerator, setShowPlanGenerator] = useState(false)
-  // 直接点击编辑：哪个 plan 正在编辑
-  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
-  const [editingPlanTasks, setEditingPlanTasks] = useState<TaskBlockType[]>([])
-  const [editingPlanNotes, setEditingPlanNotes] = useState('')
-  const [editingPlanDate, setEditingPlanDate] = useState('')
+
+  // 参考面板状态
+  const [showRefPanel, setShowRefPanel] = useState(true)
+  const [mobileRefExpanded, setMobileRefExpanded] = useState(false)
 
   // PromptDialog 状态
   const [promptState, setPromptState] = useState<{
@@ -57,33 +65,16 @@ export function PlansTab({ studentId }: PlansTabProps) {
   }
 
   useEffect(() => {
-    loadLessonPlans()
+    loadLessonPlans(studentId)
+    loadExpiredPlans(studentId)
+    loadRecentRecords(studentId)
     loadAIConfig()
   }, [studentId])
 
-  const loadLessonPlans = async () => {
-    const plans = await lessonPlanDb.getByStudentId(studentId)
-    setLessonPlans(plans)
-    const expired = await lessonPlanDb.getExpiredPlans(studentId)
-    setExpiredPlans(expired)
-  }
-
-  const loadAIConfig = async () => {
-    const url = await settingsDb.get('ai_api_url')
-    const key = await settingsDb.get('ai_api_key')
-    const model = await settingsDb.get('ai_model')
-    const temp = await settingsDb.get('ai_temperature')
-    const tokens = await settingsDb.get('ai_max_tokens')
-    
-    if (key) {
-      setAiConfig({
-        api_url: url || 'https://api.deepseek.com/v1',
-        api_key: key,
-        model: model || 'deepseek-chat',
-        temperature: parseFloat(temp || '0.7'),
-        max_tokens: parseInt(tokens || '2048')
-      })
-    }
+  // 刷新计划列表（供 PlanEditor 回调使用）
+  const refreshPlans = async () => {
+    await loadLessonPlans(studentId)
+    await loadExpiredPlans(studentId)
   }
 
   const handleGeneratePlan = async () => {
@@ -93,13 +84,11 @@ export function PlansTab({ studentId }: PlansTabProps) {
     setStreamContent('')
     
     try {
-      const progress = await progressDb.getByStudentId(studentId)
-      const recentRecords = await classRecordDb.getByStudentId(studentId, 3)
-      const lastPlanSummary = await lessonPlanDb.getLastPlanSummary(studentId)
+      const lastPlanSummary = await getLastPlanSummary(studentId)
       
       const userInput = buildUserInput({
         student: currentStudent,
-        wordbankProgress: progress,
+        wordbankProgress: currentProgress,
         wordbanks,
         recentRecords,
         lastPlanSummary,
@@ -126,7 +115,6 @@ export function PlansTab({ studentId }: PlansTabProps) {
           generated_by_ai: true
         })
         
-        await loadLessonPlans()
         setShowPlanGenerator(false)
         setStreamContent('')
         setExtraInstruction('')
@@ -141,54 +129,129 @@ export function PlansTab({ studentId }: PlansTabProps) {
     setGeneratingPlan(false)
   }
 
-  const openEditPlan = (plan: LessonPlan) => {
-    setEditingPlanId(plan.id)
-    setEditingPlanTasks([...plan.tasks])
-    setEditingPlanNotes(plan.notes || '')
-    setEditingPlanDate(plan.plan_date || '')
-  }
 
-  const cancelEditPlan = () => {
-    setEditingPlanId(null)
-    setEditingPlanTasks([])
-    setEditingPlanNotes('')
-    setEditingPlanDate('')
-  }
+  // 参考面板内容渲染
+  const renderRefPanelContent = () => (
+    <div className="space-y-4">
+      {/* 学员备注 */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-2">
+          <StickyNote className="w-3.5 h-3.5 text-amber-500" />
+          <span className="text-xs font-medium text-muted-foreground">学员备注</span>
+        </div>
+        {currentStudent!.notes ? (
+          <p className="text-sm bg-amber-500/5 border border-amber-200 rounded-lg p-2.5 leading-relaxed">
+            {currentStudent!.notes}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">暂无备注</p>
+        )}
+      </div>
 
-  const handleUpdatePlan = async () => {
-    if (!editingPlanId) return
-    
-    await lessonPlanDb.update(editingPlanId, {
-      plan_date: editingPlanDate || null,
-      tasks: editingPlanTasks,
-      notes: editingPlanNotes || null
-    })
-    
-    await loadLessonPlans()
-    cancelEditPlan()
-    toast.success('计划已保存')
-  }
+      {/* 最近课堂记录 */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-2">
+          <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+          <span className="text-xs font-medium text-muted-foreground">最近 {recentRecords.length} 次课堂</span>
+        </div>
+        {recentRecords.length > 0 ? (
+          <div className="space-y-2">
+            {recentRecords.map(record => (
+              <div key={record.id} className="bg-muted/40 rounded-lg p-2.5 text-sm">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="font-medium text-xs">{record.class_date}</span>
+                  <span className={cn(
+                    "text-xs px-1.5 py-0.5 rounded",
+                    record.task_completed === 'completed' ? 'bg-green-500/10 text-green-600' :
+                    record.task_completed === 'partial' ? 'bg-yellow-500/10 text-yellow-600' :
+                    'bg-red-500/10 text-red-600'
+                  )}>
+                    {record.task_completed === 'completed' ? '全部完成' :
+                     record.task_completed === 'partial' ? '部分完成' : '未完成'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {record.tasks.map((task, idx) => (
+                    <span key={idx} className="text-xs bg-background px-1.5 py-0.5 rounded border">
+                      {TASK_TYPE_LABELS[task.type]}
+                      {task.content ? `·${task.content.slice(0, 15)}${task.content.length > 15 ? '…' : ''}` : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">暂无课堂记录</p>
+        )}
+      </div>
 
-  const handleAddPlanTask = () => {
-    setEditingPlanTasks([...editingPlanTasks, { type: 'vocab_new' }])
-  }
-
-  const handleUpdatePlanTask = (index: number, updatedTask: TaskBlockType) => {
-    const newTasks = [...editingPlanTasks]
-    newTasks[index] = updatedTask
-    setEditingPlanTasks(newTasks)
-  }
-
-  const handleDeletePlanTask = (index: number) => {
-    const newTasks = editingPlanTasks.filter((_, i) => i !== index)
-    setEditingPlanTasks(newTasks)
-  }
+      {/* 词库进度 */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-2">
+          <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
+          <span className="text-xs font-medium text-muted-foreground">词库进度</span>
+        </div>
+        {currentProgress.length > 0 ? (
+          <div className="space-y-1.5">
+            {currentProgress.map(p => {
+              const wb = wordbanks.find(w => w.id === p.wordbank_id)
+              const total = p.total_levels_override || wb?.total_levels || 0
+              const pct = total > 0 ? Math.round((p.current_level / total) * 100) : 0
+              return (
+                <div key={p.id} className="text-sm">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-xs">{p.wordbank_label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      第 {p.current_level} 关{total > 0 ? ` / ${total}` : ''}
+                    </span>
+                  </div>
+                  {total > 0 && (
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all"
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">暂无词库进度</p>
+        )}
+      </div>
+    </div>
+  )
 
   if (!currentStudent) return null
 
   return (
     <>
-      <div className="space-y-6">
+      {/* 移动端：顶部可展开参考面板 */}
+      <div className="lg:hidden mb-4">
+        <button
+          onClick={() => setMobileRefExpanded(!mobileRefExpanded)}
+          className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/50 rounded-lg border text-sm font-medium text-muted-foreground hover:bg-muted/70 transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            参考信息
+            {currentStudent.notes && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+          </span>
+          {mobileRefExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+        {mobileRefExpanded && (
+          <div className="mt-2 p-4 bg-card border rounded-lg">
+            {renderRefPanelContent()}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-6">
+        {/* 左侧：课程计划主区域 */}
+        <div className={cn("flex-1 min-w-0 space-y-6", showRefPanel && "lg:mr-0")}>
         {/* AI 生成计划区域 */}
         {showPlanGenerator ? (
           <Card>
@@ -320,8 +383,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
                                 onClick={() => {
                                   showPrompt('请输入新的计划日期 (YYYY-MM-DD):', formatLocalDate(new Date()), async (newDate) => {
                                     if (newDate) {
-                                      await lessonPlanDb.update(plan.id, { plan_date: newDate })
-                                      loadLessonPlans()
+                                      await updateLessonPlan(plan.id, { plan_date: newDate })
                                     }
                                   })
                                 }}
@@ -336,15 +398,14 @@ export function PlansTab({ studentId }: PlansTabProps) {
                                 onClick={() => {
                                   showPrompt('请输入新计划的日期 (YYYY-MM-DD):', formatLocalDate(new Date()), async (newDate) => {
                                     if (newDate) {
-                                      await lessonPlanDb.create({
+                                      await createLessonPlan({
                                         student_id: studentId,
                                         plan_date: newDate,
                                         tasks: plan.tasks,
                                         notes: plan.notes || undefined,
                                         generated_by_ai: false
                                       })
-                                      await lessonPlanDb.delete(plan.id)
-                                      loadLessonPlans()
+                                      await deleteLessonPlan(plan.id)
                                     }
                                   })
                                 }}
@@ -364,8 +425,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
                                     variant: 'danger'
                                   })
                                   if (confirmed) {
-                                    await lessonPlanDb.delete(plan.id)
-                                    loadLessonPlans()
+                                    await deleteLessonPlan(plan.id)
                                     toast.success('过期计划已删除')
                                   }
                                 }}
@@ -382,160 +442,91 @@ export function PlansTab({ studentId }: PlansTabProps) {
               </Card>
             )}
             
-            {/* 课程计划列表 */}
-            {lessonPlans.length === 0 ? (
-              <div className="text-center text-muted-foreground py-12">
-                <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>暂无课程计划</p>
-                <p className="text-sm mt-1">点击「AI 生成计划」创建新计划</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {lessonPlans.map((plan) => {
-                  const isExpired = expiredPlans.some(ep => ep.id === plan.id)
-                  const isEditing = editingPlanId === plan.id
-
-                  // 内联编辑模式
-                  if (isEditing) {
-                    return (
-                      <Card key={plan.id} className="border-blue-300 bg-blue-50/30">
-                        <CardContent className="p-4 space-y-4">
-                          <div>
-                            <label className="text-xs text-muted-foreground mb-1 block">计划日期</label>
-                            <Input
-                              type="date"
-                              value={editingPlanDate}
-                              onChange={(e) => setEditingPlanDate(e.target.value)}
-                              className="h-8 max-w-[200px]"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="text-xs text-muted-foreground">任务列表</label>
-                              <Button variant="ghost" size="sm" onClick={handleAddPlanTask}>
-                                <Plus className="w-3.5 h-3.5 mr-1" /> 添加任务
-                              </Button>
-                            </div>
-                            <div className="space-y-3">
-                              {editingPlanTasks.map((task, index) => (
-                                <TaskBlock
-                                  key={index}
-                                  task={task}
-                                  index={index}
-                                  editable
-                                  onChange={(updatedTask) => handleUpdatePlanTask(index, updatedTask)}
-                                  onDelete={editingPlanTasks.length > 1 ? () => handleDeletePlanTask(index) : undefined}
-                                  wordbanks={wordbanks}
-                                />
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="text-xs text-muted-foreground mb-1 block">助教提示</label>
-                            <Input
-                              value={editingPlanNotes}
-                              onChange={(e) => setEditingPlanNotes(e.target.value)}
-                              placeholder="可选备注"
-                              className="h-8"
-                            />
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={handleUpdatePlan}>保存</Button>
-                            <Button size="sm" variant="outline" onClick={cancelEditPlan}>取消</Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  }
-
-                  // 只读模式 — 点击编辑按钮或卡片进入编辑
-                  return (
-                  <Card key={plan.id} className={cn(
-                    "cursor-pointer hover:border-blue-200 transition-colors",
-                    isExpired && "border-orange-300 bg-orange-50/30"
-                  )} onClick={() => openEditPlan(plan)}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-3 flex-1">
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-muted-foreground" />
-                              <span className="font-medium">{plan.plan_date || '未设定日期'}</span>
-                            </div>
-                            {plan.generated_by_ai && (
-                              <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-600">AI 生成</span>
-                            )}
-                            {isExpired && (
-                              <span className="text-xs px-2 py-0.5 rounded bg-orange-500/10 text-orange-600">已过期</span>
-                            )}
-                            <span className="text-xs text-muted-foreground ml-auto">点击编辑</span>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            {plan.tasks.map((task, index) => (
-                              <TaskBlock key={index} task={task} index={index} />
-                            ))}
-                          </div>
-
-                          {plan.notes && (
-                            <div className="bg-yellow-500/5 border border-yellow-200 rounded p-2">
-                              <span className="text-xs text-yellow-700">助教提示：</span>
-                              <span className="text-sm">{plan.notes}</span>
-                            </div>
-                          )}
-
-                          {plan.ai_reason && (
-                            <div className="bg-blue-500/5 border border-blue-200 rounded p-2">
-                              <span className="text-xs text-blue-700">计划说明：</span>
-                              <span className="text-sm">{plan.ai_reason}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 快捷操作 */}
-                        <div className="flex items-center gap-1 ml-4" onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="sm" title="复制" onClick={async () => {
-                            await createLessonPlan({
-                              student_id: studentId,
-                              plan_date: new Date().toISOString().split('T')[0],
-                              tasks: plan.tasks,
-                              notes: plan.notes || undefined,
-                              generated_by_ai: false
-                            })
-                            loadLessonPlans()
-                          }}>
-                            <Copy className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" title="打印" onClick={() => printLessonPlan(currentStudent, plan)}>
-                            <Printer className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={async () => {
-                            const confirmed = await confirmDialog({
-                              title: '删除课程计划',
-                              message: '确定删除此课程计划？',
-                              confirmText: '删除',
-                              variant: 'danger'
-                            })
-                            if (confirmed) {
-                              await deleteLessonPlan(plan.id)
-                              loadLessonPlans()
-                              toast.success('课程计划已删除')
-                            }
-                          }}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  )
-                })}
-              </div>
-            )}
+            {/* 课程计划列表 — 使用共享 PlanEditor 组件 */}
+            <PlanEditor
+              studentId={studentId}
+              plans={lessonPlans}
+              onPlansChange={refreshPlans}
+              wordbanks={wordbanks}
+              renderCardActions={(plan) => (
+                <>
+                  <Button variant="ghost" size="sm" title="复制" onClick={async () => {
+                    await createLessonPlan({
+                      student_id: studentId,
+                      plan_date: new Date().toISOString().split('T')[0],
+                      tasks: plan.tasks,
+                      notes: plan.notes || undefined,
+                      generated_by_ai: false
+                    })
+                  }}>
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" title="打印" onClick={() => printLessonPlan(currentStudent!, plan)}>
+                    <Printer className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={async () => {
+                    const confirmed = await confirmDialog({
+                      title: '删除课程计划',
+                      message: '确定删除此课程计划？',
+                      confirmText: '删除',
+                      variant: 'danger'
+                    })
+                    if (confirmed) {
+                      await deleteLessonPlan(plan.id)
+                      toast.success('课程计划已删除')
+                    }
+                  }}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </>
+              )}
+            />
           </>
+        )}
+        </div>
+
+        {/* 右侧：参考信息面板（桌面端） */}
+        <div className={cn(
+          "hidden lg:block flex-shrink-0 transition-all duration-300",
+          showRefPanel ? "w-72 xl:w-80" : "w-0 overflow-hidden"
+        )}>
+          {showRefPanel && (
+            <div className="sticky top-0">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                  📋 参考信息
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  title="收起参考面板"
+                  onClick={() => setShowRefPanel(false)}
+                >
+                  <PanelRightClose className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="border rounded-lg p-4 bg-card">
+                {renderRefPanelContent()}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 面板收起时的展开按钮 */}
+        {!showRefPanel && (
+          <div className="hidden lg:flex flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              title="展开参考面板"
+              onClick={() => setShowRefPanel(true)}
+            >
+              <PanelRightOpen className="w-4 h-4 mr-1" />
+              <span className="text-xs">参考</span>
+            </Button>
+          </div>
         )}
       </div>
 

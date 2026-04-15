@@ -69,6 +69,8 @@ export function Home() {
   const sort = useAppStore(s => s.sort)
   const loadStudents = useAppStore(s => s.loadStudents)
   const loadExpiredPlansCount = useAppStore(s => s.loadExpiredPlansCount)
+  const loadScheduleInfo = useAppStore(s => s.loadScheduleInfo)
+  const scheduleInfoMap = useAppStore(s => s.scheduleInfoMap)
   const setFilters = useAppStore(s => s.setFilters)
   const setSort = useAppStore(s => s.setSort)
   
@@ -109,11 +111,12 @@ export function Home() {
     loadStudents()
   }, [])
   
-  // 过期计划查询只在学员首次加载完成后执行一次
+  // 过期计划和排课信息查询只在学员首次加载完成后执行一次
   useEffect(() => {
     if (!expiredPlansLoadedRef.current && students.length > 0 && !studentsLoading) {
       expiredPlansLoadedRef.current = true
       loadExpiredPlansCount()
+      loadScheduleInfo()
     }
   }, [students.length, studentsLoading])
 
@@ -195,7 +198,7 @@ export function Home() {
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="搜索学员姓名..."
+              placeholder="搜索姓名或学号..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               className="pl-9"
@@ -285,7 +288,8 @@ export function Home() {
         <FileCabinet
           students={students}
           loading={studentsLoading}
-          onQuickRecord={(id) => { navigate(`/students/${id}`, { state: { editMode: true } }) }}
+          scheduleInfoMap={scheduleInfoMap}
+          onQuickRecord={(id) => { navigate(`/students/${id}`) }}
           onViewPlans={(id) => { setActiveStudentId(id); setEditPlansOpen(true) }}
           onViewProgress={(id) => { setActiveStudentId(id); setViewProgressOpen(true) }}
         />

@@ -25,6 +25,9 @@ export { lessonPlanDb } from './lessonPlans'
 // 考试成绩操作
 export { examScoreDb } from './examScores'
 
+// 词汇量测试操作
+export { vocabTestDb } from './vocabTests'
+
 // 学习阶段操作
 export { learningPhaseDb } from './phases'
 
@@ -52,8 +55,9 @@ export type {
   StudentWordbankProgress, 
   ClassRecord, 
   LessonPlan, 
-  ExamScore, 
-  LearningPhase, 
+  ExamScore,
+  VocabTest,
+  LearningPhase,
   TrialConversion, 
   Teacher, 
   TeacherAvailability, 

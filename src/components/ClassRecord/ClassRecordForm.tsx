@@ -77,6 +77,59 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [saving, onCancel])
+
+  // 草稿自动保存（仅新建模式）
+  const draftKey = `draft_classrecord_${studentId}`
+  const [draftRestored, setDraftRestored] = useState(false)
+
+  // 挂载时检测草稿
+  useEffect(() => {
+    if (isEditMode) return
+    try {
+      const saved = sessionStorage.getItem(draftKey)
+      if (saved) {
+        const draft = JSON.parse(saved)
+        // 只恢复非空草稿
+        if (draft.tasks?.length > 0 || draft.detailFeedback || draft.highlights || draft.issues) {
+          toast('检测到未保存的草稿', {
+            action: {
+              label: '恢复',
+              onClick: () => {
+                if (draft.classDate) setClassDate(draft.classDate)
+                if (draft.durationHours) setDurationHours(draft.durationHours)
+                if (draft.teacherName) setTeacherName(draft.teacherName)
+                if (draft.attendance) setAttendance(draft.attendance)
+                if (draft.tasks?.length) setTasks(draft.tasks)
+                if (draft.taskCompleted) setTaskCompleted(draft.taskCompleted)
+                if (draft.incompleteReason) setIncompleteReason(draft.incompleteReason)
+                if (draft.performance) setPerformance(draft.performance)
+                if (draft.detailFeedback) setDetailFeedback(draft.detailFeedback)
+                if (draft.highlights) setHighlights(draft.highlights)
+                if (draft.issues) setIssues(draft.issues)
+                setDraftRestored(true)
+              }
+            },
+            duration: 8000
+          })
+        }
+      }
+    } catch {}
+  }, [])
+
+  // 自动保存草稿（防抖 1s）
+  useEffect(() => {
+    if (isEditMode) return
+    const timer = setTimeout(() => {
+      try {
+        sessionStorage.setItem(draftKey, JSON.stringify({
+          classDate, durationHours, teacherName, attendance,
+          tasks, taskCompleted, incompleteReason, performance,
+          detailFeedback, highlights, issues
+        }))
+      } catch {}
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [classDate, durationHours, teacherName, attendance, tasks, taskCompleted, incompleteReason, performance, detailFeedback, highlights, issues])
   
   // 加载助教列表
   useEffect(() => {
@@ -195,6 +248,8 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
         issues: issues || undefined,
         plan_id: selectedPlanId || undefined
       })
+      // 保存成功后清除草稿
+      try { sessionStorage.removeItem(draftKey) } catch {}
     } finally {
       setSaving(false)
     }

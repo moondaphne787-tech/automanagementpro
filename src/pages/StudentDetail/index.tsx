@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Edit, Trash2 } from 'lucide-react'
+import { ArrowLeft, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { StudentForm } from '@/components/Student/StudentForm'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { GrowthPanel } from '@/components/Growth/GrowthPanel'
 import { useAppStore } from '@/store/appStore'
@@ -19,14 +17,12 @@ export function StudentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const currentStudent = useAppStore(s => s.currentStudent)
-  const updateStudent = useAppStore(s => s.updateStudent)
   const deleteStudent = useAppStore(s => s.deleteStudent)
   const selectStudent = useAppStore(s => s.selectStudent)
   const loadWordbanks = useAppStore(s => s.loadWordbanks)
+  const addRecentStudent = useAppStore(s => s.addRecentStudent)
 
-  const location = useLocation()
   const [tab, setTab] = useState<TabType>('info')
-  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -37,15 +33,15 @@ export function StudentDetail() {
         setTab(targetTab as TabType)
         sessionStorage.removeItem('studentDetailTab')
       }
-      // 从档案柜"修改学员信息"跳转过来，自动进入编辑模式
-      const state = location.state as { editMode?: boolean } | null
-      if (state?.editMode) {
-        setEditing(true)
-        // 清除 state 避免刷新后重复触发
-        navigate(`/students/${id}`, { replace: true, state: null })
-      }
     }
   }, [id])
+
+  // 记录最近访问的学员
+  useEffect(() => {
+    if (currentStudent && id) {
+      addRecentStudent(id, currentStudent.name)
+    }
+  }, [currentStudent?.id])
 
   if (!currentStudent) {
     return (
@@ -92,10 +88,6 @@ export function StudentDetail() {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEditing(!editing)}>
-            <Edit className="w-4 h-4 mr-1" />
-            {editing ? '取消' : '编辑'}
-          </Button>
           <Button variant="destructive" size="sm" onClick={handleDelete}>
             <Trash2 className="w-4 h-4 mr-1" />
             删除
@@ -125,21 +117,7 @@ export function StudentDetail() {
 
       {/* 内容区域 */}
       <div className="flex-1 overflow-auto p-6">
-        {editing ? (
-          <Card className="max-w-2xl mx-auto">
-            <CardHeader><CardTitle>编辑学员信息</CardTitle></CardHeader>
-            <CardContent>
-              <StudentForm
-                student={currentStudent}
-                onSubmit={async data => {
-                  await updateStudent(id!, data)
-                  setEditing(false)
-                }}
-                onCancel={() => setEditing(false)}
-              />
-            </CardContent>
-          </Card>
-        ) : tab === 'info' ? (
+        {tab === 'info' ? (
           <InfoTab studentId={id!} />
         ) : tab === 'wordbank' ? (
           <WordbankTab studentId={id!} />

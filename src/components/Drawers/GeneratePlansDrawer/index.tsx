@@ -1,34 +1,241 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/appStore'
-import { settingsDb, progressDb, classRecordDb, lessonPlanDb } from '@/db'
+import { settingsDb, progressDb, classRecordDb, lessonPlanDb, scheduledClassDb } from '@/db'
 import { sendAIRequest } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { StudentSelector } from './StudentSelector'
-import { PlanResultCard, StudentPlanState, GenerationStatus } from './PlanResultCard'
+import { PlanResultCard, StudentPlanState, GenerationStatus, StudentContext } from './PlanResultCard'
 import { GenerationControls } from './GenerationControls'
-import type { Student, TaskBlock as TaskBlockType, AIConfig, Wordbank } from '@/types'
+import type { Student, TaskBlock as TaskBlockType, AIConfig, Wordbank, ClassRecord, StudentWordbankProgress } from '@/types'
+import { TASK_TYPE_LABELS } from '@/types'
+
+/**
+ * 根据上次课堂记录中的词库学习任务，自动填充 AI 生成计划中的词库复习和词库学习 content。
+ * - vocab_review: 如果 content 为空，填入 "检测复习{wordbank_label}{level_from}-{level_to}关"
+ * - vocab_new: 如果 content 为空，填入 "学习{wordbank_label}{next_from}-{next_to}关"
+ */
+function autoFillWordbankContent(
+  tasks: TaskBlockType[],
+  lastRecord: ClassRecord | null,
+  wordbankProgress: StudentWordbankProgress[]
+): TaskBlockType[] {
+  // 第一轮：基于上次课堂记录推算下次学习范围
+  let filled = tasks
+  if (lastRecord) {
+    const lastVocabNew = lastRecord.tasks.find(t => t.type === 'vocab_new')
+    if (lastVocabNew) {
+      const lastLabel = lastVocabNew.wordbank_label
+      const lastFrom = lastVocabNew.level_from
+      const lastTo = lastVocabNew.level_to
+      if (lastLabel && lastFrom && lastTo) {
+        const span = lastTo - lastFrom + 1
+        const progressItem = wordbankProgress.find(p => p.wordbank_label === lastLabel)
+        const totalLevels = progressItem?.total_levels_override || 60
+
+        filled = filled.map(task => {
+          if (task.type === 'vocab_review' && !task.content) {
+            return {
+              ...task,
+              content: `检测复习${lastLabel}第${lastFrom}-${lastTo}关`,
+              wordbank_label: task.wordbank_label || lastLabel,
+              level_from: task.level_from || lastFrom,
+              level_to: task.level_to || lastTo
+            }
+          }
+          if (task.type === 'vocab_new' && !task.content) {
+            const nextFrom = lastTo + 1
+            const nextTo = Math.min(lastTo + span, totalLevels)
+            if (nextFrom <= totalLevels) {
+              return {
+                ...task,
+                content: `学习${lastLabel}第${nextFrom}-${nextTo}关`,
+                wordbank_label: task.wordbank_label || lastLabel,
+                level_from: task.level_from || nextFrom,
+                level_to: task.level_to || nextTo
+              }
+            }
+          }
+          return task
+        })
+      }
+    }
+  }
+
+  // 第二轮：兜底填充 — 对仍然没有 content 的任务，根据自身字段拼接
+  return filled.map(task => {
+    if (task.content) return task
+
+    if ((task.type === 'vocab_new') && task.wordbank_label && task.level_from && task.level_to) {
+      return { ...task, content: `学习${task.wordbank_label}第${task.level_from}-${task.level_to}关` }
+    }
+    if ((task.type === 'vocab_review') && task.wordbank_label && task.level_from && task.level_to) {
+      return { ...task, content: `检测复习${task.wordbank_label}第${task.level_from}-${task.level_to}关` }
+    }
+    if (task.type === 'nine_grid' && task.wordbank_label) {
+      return { ...task, content: `清理${task.wordbank_label}九宫格，共清理30-50词/轮×____轮=____词（助教课上填写）` }
+    }
+
+    return task
+  })
+}
 
 interface GeneratePlansDrawerProps {
   open: boolean
   onClose: () => void
+  fullPage?: boolean
 }
 
-export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps) {
+export function GeneratePlansDrawer({ open, onClose, fullPage }: GeneratePlansDrawerProps) {
   const students = useAppStore(s => s.students)
   const wordbanks = useAppStore(s => s.wordbanks)
   const loadStudents = useAppStore(s => s.loadStudents)
   const loadWordbanks = useAppStore(s => s.loadWordbanks)
   const createLessonPlan = useAppStore(s => s.createLessonPlan)
+  const preselectedIds = useAppStore(s => s.generateDrawerPreselectedIds)
 
   const [selectedStudents, setSelectedStudents] = useState<StudentPlanState[]>([])
   const [extraInstruction, setExtraInstruction] = useState('')
   const [planDate, setPlanDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [generating, setGenerating] = useState(false)
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
+  const [smartFilterLoading, setSmartFilterLoading] = useState(false)
+  const [studentContextMap, setStudentContextMap] = useState<Map<string, StudentContext>>(new Map())
+
+  // 构建课堂记录摘要文本
+  const buildRecordSummary = useCallback((record: ClassRecord): string => {
+    const date = record.class_date.slice(5) // MM-DD
+    const taskSummary = record.tasks.map(t => {
+      const label = TASK_TYPE_LABELS[t.type] || t.type
+      if (t.wordbank_label && t.level_from && t.level_to) {
+        return `${t.wordbank_label}${t.level_from}-${t.level_to}关`
+      }
+      if (t.content) return `${label}·${t.content.slice(0, 15)}`
+      return label
+    }).join(' + ')
+    return `${date}: ${taskSummary}`
+  }, [])
+
+  // 加载所有活跃学员的上下文数据（最近1条课堂记录）
+  const loadStudentContexts = useCallback(async (studentIds: string[]) => {
+    if (studentIds.length === 0) return new Map<string, StudentContext>()
+
+    const recordsMap = await classRecordDb.getAllForStudents(studentIds)
+    const contextMap = new Map<string, StudentContext>()
+
+    for (const sid of studentIds) {
+      const records = recordsMap.get(sid) || []
+      const lastRecord = records[0] || null
+      contextMap.set(sid, {
+        lastRecord,
+        lastRecordSummary: lastRecord ? buildRecordSummary(lastRecord) : null
+      })
+    }
+
+    return contextMap
+  }, [buildRecordSummary])
+
+  // 智能筛选：查找目标日期有排课但无计划的学员
+  const handleSmartFilter = useCallback(async (): Promise<Student[]> => {
+    setSmartFilterLoading(true)
+    try {
+      // 获取目标日期的排课（也检查相邻日期，覆盖周末场景）
+      const targetDate = new Date(planDate)
+      const dayOfWeek = targetDate.getDay()
+
+      // 收集需要检查的日期：当天 + 如果是周六则也查周日，反之亦然
+      const datesToCheck = [planDate]
+      if (dayOfWeek === 6) {
+        // 周六 → 也查周日
+        const sunday = new Date(targetDate)
+        sunday.setDate(sunday.getDate() + 1)
+        datesToCheck.push(sunday.toISOString().split('T')[0])
+      } else if (dayOfWeek === 0) {
+        // 周日 → 也查周六
+        const saturday = new Date(targetDate)
+        saturday.setDate(saturday.getDate() - 1)
+        datesToCheck.push(saturday.toISOString().split('T')[0])
+      }
+
+      // 查询这些日期的排课
+      const scheduledStudentIds = new Set<string>()
+      for (const date of datesToCheck) {
+        const scheduled = await scheduledClassDb.getByDate(date)
+        scheduled
+          .filter(sc => sc.status === 'scheduled')
+          .forEach(sc => scheduledStudentIds.add(sc.student_id))
+      }
+
+      if (scheduledStudentIds.size === 0) {
+        toast.info('目标日期没有排课记录')
+        return []
+      }
+
+      // 查询这些日期已有的计划
+      const existingPlanStudentIds = new Set<string>()
+      for (const date of datesToCheck) {
+        const plans = await lessonPlanDb.getByDate(date)
+        plans.forEach(p => existingPlanStudentIds.add(p.student_id))
+      }
+
+      // 筛选出有排课但无计划的学员
+      const missingPlanIds = [...scheduledStudentIds].filter(id => !existingPlanStudentIds.has(id))
+
+      if (missingPlanIds.length === 0) {
+        toast.success('所有排课学员都已有计划')
+        return []
+      }
+
+      // 匹配学员对象
+      const matched = students.filter(s => missingPlanIds.includes(s.id) && s.status === 'active')
+
+      // 加载这些学员的上下文
+      const contextMap = await loadStudentContexts(matched.map(s => s.id))
+      setStudentContextMap(contextMap)
+
+      toast.success(`找到 ${matched.length} 名有排课但无计划的学员`)
+      return matched
+    } catch (error) {
+      toast.error('智能筛选失败：' + (error as Error).message)
+      return []
+    } finally {
+      setSmartFilterLoading(false)
+    }
+  }, [planDate, students, loadStudentContexts])
+
+  // 选中学员变更时，自动加载上下文数据
+  const handleSelectionChange = useCallback(async (newSelection: StudentPlanState[]) => {
+    // 找出新增的学员（之前没有上下文的）
+    const newStudentIds = newSelection
+      .filter(s => !s.context && !studentContextMap.has(s.student.id))
+      .map(s => s.student.id)
+
+    if (newStudentIds.length > 0) {
+      const newContexts = await loadStudentContexts(newStudentIds)
+      // 合并到已有的 contextMap
+      setStudentContextMap(prev => {
+        const merged = new Map(prev)
+        newContexts.forEach((v, k) => merged.set(k, v))
+        return merged
+      })
+      // 将上下文附加到新选中的学员
+      const enriched = newSelection.map(s => ({
+        ...s,
+        context: s.context || newContexts.get(s.student.id) || studentContextMap.get(s.student.id)
+      }))
+      setSelectedStudents(enriched)
+    } else {
+      // 附加已有的上下文
+      const enriched = newSelection.map(s => ({
+        ...s,
+        context: s.context || studentContextMap.get(s.student.id)
+      }))
+      setSelectedStudents(enriched)
+    }
+  }, [studentContextMap, loadStudentContexts])
 
   // 加载 AI 配置
   useEffect(() => {
@@ -56,6 +263,26 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
       loadWordbanks()
     }
   }, [open])
+
+  // Dashboard 联动：当抽屉打开且有预选学员 ID 时，自动选中对应学员
+  useEffect(() => {
+    if (open && preselectedIds.length > 0 && students.length > 0) {
+      const preselected = students
+        .filter(s => preselectedIds.includes(s.id))
+        .map(student => ({
+          student,
+          status: 'pending' as const,
+          plan: null,
+          error: null,
+          expanded: false,
+          editing: false,
+          extraNote: ''
+        }))
+      if (preselected.length > 0) {
+        setSelectedStudents(preselected)
+      }
+    }
+  }, [open, preselectedIds, students])
 
   // 开始生成
   const startGeneration = async () => {
@@ -100,9 +327,14 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
         const parsed = parseAIResponse(response)
 
         if (parsed) {
+          // 根据上次课堂记录自动填充词库复习和词库学习的 content
+          const lastRecord = recentRecords[0] || null
+          const filledTasks = autoFillWordbankContent(parsed.tasks, lastRecord, progress)
+          const filledPlan = { ...parsed, tasks: filledTasks }
+
           setSelectedStudents(prev => prev.map(s =>
             s.student.id === item.student.id
-              ? { ...s, status: 'success' as GenerationStatus, plan: parsed }
+              ? { ...s, status: 'success' as GenerationStatus, plan: filledPlan, expanded: true }
               : s
           ))
         } else {
@@ -159,9 +391,14 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
       const parsed = parseAIResponse(response)
 
       if (parsed) {
+        // 根据上次课堂记录自动填充词库复习和词库学习的 content
+        const lastRecord = recentRecords[0] || null
+        const filledTasks = autoFillWordbankContent(parsed.tasks, lastRecord, progress)
+        const filledPlan = { ...parsed, tasks: filledTasks }
+
         setSelectedStudents(prev => prev.map(s =>
           s.student.id === studentId
-            ? { ...s, status: 'success' as GenerationStatus, plan: parsed }
+            ? { ...s, status: 'success' as GenerationStatus, plan: filledPlan, expanded: true }
             : s
         ))
       } else {
@@ -267,6 +504,16 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
     }))
   }
 
+  // 重新排序任务（拖拽排序）
+  const reorderTasks = (studentId: string, newTasks: TaskBlockType[]) => {
+    setSelectedStudents(prev => prev.map(s => {
+      if (s.student.id === studentId && s.plan) {
+        return { ...s, plan: { ...s.plan, tasks: newTasks } }
+      }
+      return s
+    }))
+  }
+
   // 更新备注
   const updateNotes = (studentId: string, notes: string) => {
     setSelectedStudents(prev => prev.map(s => {
@@ -306,11 +553,74 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
   const failedCount = selectedStudents.filter(s => s.status === 'failed').length
   const pendingCount = selectedStudents.filter(s => s.status === 'pending').length
 
+  // 内容区域（fullPage 和 drawer 共用）
+  const contentArea = (
+    <div className="flex-1 overflow-auto">
+      <StudentSelector
+        students={students}
+        selectedStudents={selectedStudents}
+        onSelectionChange={handleSelectionChange}
+        onSmartFilter={handleSmartFilter}
+        smartFilterLoading={smartFilterLoading}
+        studentContextMap={studentContextMap}
+      />
+      <GenerationControls
+        planDate={planDate}
+        onPlanDateChange={setPlanDate}
+        extraInstruction={extraInstruction}
+        onExtraInstructionChange={setExtraInstruction}
+        aiConfig={aiConfig}
+        generating={generating}
+        selectedCount={selectedStudents.length}
+        successCount={successCount}
+        onStartGeneration={startGeneration}
+        onSaveAllConfirmed={saveAllConfirmed}
+      />
+      {selectedStudents.length > 0 && (
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium">生成结果</h3>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-green-600">成功: {successCount}</span>
+              <span className="text-red-600">失败: {failedCount}</span>
+              <span className="text-muted-foreground">待处理: {pendingCount}</span>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {selectedStudents.map(item => (
+              <PlanResultCard
+                key={item.student.id}
+                item={item}
+                wordbanks={wordbanks}
+                onToggleExpand={toggleExpand}
+                onToggleEditing={toggleEditing}
+                onRegenerate={regenerateStudent}
+                onSave={saveStudentPlan}
+                onSkip={skipStudent}
+                onUpdateExtraNote={updateStudentExtraNote}
+                onUpdateTask={updateTask}
+                onDeleteTask={deleteTask}
+                onAddTask={addTask}
+                onReorderTasks={reorderTasks}
+                onUpdateNotes={updateNotes}
+                onUpdateReason={updateReason}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  // 全页模式：直接渲染内容，不带遮罩和动画壳
+  if (fullPage) {
+    return open ? contentArea : null
+  }
+
   return (
     <AnimatePresence>
       {open && (
         <>
-          {/* 背景遮罩 */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -318,8 +628,6 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
             className="fixed inset-0 bg-black/50 z-40"
             onClick={handleClose}
           />
-
-          {/* 抽屉面板 */}
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -327,7 +635,6 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             className="fixed right-0 top-0 h-full w-[700px] bg-background border-l shadow-xl z-50 flex flex-col"
           >
-            {/* 头部 */}
             <div className="h-16 border-b flex items-center justify-between px-6">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-primary" />
@@ -337,65 +644,7 @@ export function GeneratePlansDrawer({ open, onClose }: GeneratePlansDrawerProps)
                 <X className="w-5 h-5" />
               </Button>
             </div>
-
-            {/* 内容区域 */}
-            <div className="flex-1 overflow-auto">
-              {/* 学员选择区 */}
-              <StudentSelector
-                students={students}
-                selectedStudents={selectedStudents}
-                onSelectionChange={setSelectedStudents}
-              />
-
-              {/* 全局参数设置 */}
-              <GenerationControls
-                planDate={planDate}
-                onPlanDateChange={setPlanDate}
-                extraInstruction={extraInstruction}
-                onExtraInstructionChange={setExtraInstruction}
-                aiConfig={aiConfig}
-                generating={generating}
-                selectedCount={selectedStudents.length}
-                successCount={successCount}
-                onStartGeneration={startGeneration}
-                onSaveAllConfirmed={saveAllConfirmed}
-              />
-
-              {/* 生成结果列表 */}
-              {selectedStudents.length > 0 && (
-                <div className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium">生成结果</h3>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-green-600">成功: {successCount}</span>
-                      <span className="text-red-600">失败: {failedCount}</span>
-                      <span className="text-muted-foreground">待处理: {pendingCount}</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {selectedStudents.map(item => (
-                      <PlanResultCard
-                        key={item.student.id}
-                        item={item}
-                        wordbanks={wordbanks}
-                        onToggleExpand={toggleExpand}
-                        onToggleEditing={toggleEditing}
-                        onRegenerate={regenerateStudent}
-                        onSave={saveStudentPlan}
-                        onSkip={skipStudent}
-                        onUpdateExtraNote={updateStudentExtraNote}
-                        onUpdateTask={updateTask}
-                        onDeleteTask={deleteTask}
-                        onAddTask={addTask}
-                        onUpdateNotes={updateNotes}
-                        onUpdateReason={updateReason}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            {contentArea}
           </motion.div>
         </>
       )}

@@ -11,12 +11,105 @@
  */
 
 import { useEffect, useMemo, useCallback, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Search, BookOpen, Loader2, Check, CheckSquare } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, BookOpen, Loader2, Check, CheckSquare, CalendarDays, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { useReadingCheckinStore } from '@/store/readingCheckinStore'
 import { cn } from '@/lib/utils'
+import type { DailyCheckinCount } from '@/store/types'
+
+/** 每日打卡人数日历视图 */
+function DailyCheckinCalendar({ year, month, dailyCounts, totalStudents, selectedDate, onDateClick }: {
+  year: number
+  month: number
+  dailyCounts: DailyCheckinCount[]
+  totalStudents: number
+  selectedDate: string
+  onDateClick: (date: string) => void
+}) {
+  // 构建日期→人数映射
+  const countMap = useMemo(() => {
+    const map = new Map<number, number>()
+    dailyCounts.forEach(item => {
+      const day = parseInt(item.date.split('-')[2], 10)
+      map.set(day, item.count)
+    })
+    return map
+  }, [dailyCounts])
+
+  // 该月天数和第一天是星期几
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const firstDayOfWeek = new Date(year, month - 1, 1).getDay() // 0=周日
+
+  const today = new Date()
+  const todayStr = today.toISOString().split('T')[0]
+  const todayDay = today.getFullYear() === year && today.getMonth() + 1 === month ? today.getDate() : -1
+  const selectedDay = (() => {
+    const parts = selectedDate.split('-')
+    if (parseInt(parts[0]) === year && parseInt(parts[1]) === month) return parseInt(parts[2])
+    return -1
+  })()
+
+  const weekLabels = ['日', '一', '二', '三', '四', '五', '六']
+
+  // 构建日历格子
+  const cells: (number | null)[] = []
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  // 最大打卡人数（用于颜色深浅）
+  const maxCount = Math.max(...dailyCounts.map(d => d.count), 1)
+
+  return (
+    <div className="px-4 py-3 border-b bg-muted/20">
+      <div className="grid grid-cols-7 gap-1 max-w-md mx-auto">
+        {/* 星期标题 */}
+        {weekLabels.map(label => (
+          <div key={label} className="text-center text-xs text-muted-foreground font-medium py-1">
+            {label}
+          </div>
+        ))}
+        {/* 日期格子 */}
+        {cells.map((day, idx) => {
+          if (day === null) return <div key={`empty-${idx}`} />
+          const count = countMap.get(day) || 0
+          const isToday = day === todayDay
+          const isSelected = day === selectedDay
+          const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          const isFuture = dateStr > todayStr
+          const intensity = count > 0 ? Math.max(0.15, count / maxCount) : 0
+          return (
+            <div
+              key={day}
+              onClick={() => !isFuture && onDateClick(dateStr)}
+              className={cn(
+                "relative flex flex-col items-center justify-center rounded-md py-1.5 text-xs",
+                !isFuture && "cursor-pointer hover:ring-1 hover:ring-primary/50",
+                isFuture && "opacity-40 cursor-not-allowed",
+                isSelected && "ring-2 ring-primary bg-primary/10",
+                !isSelected && isToday && "ring-1 ring-primary/40",
+                count > 0 && !isSelected ? "text-foreground" : !isSelected ? "text-muted-foreground" : "text-primary font-semibold"
+              )}
+              style={count > 0 && !isSelected ? { backgroundColor: `rgba(34, 197, 94, ${intensity})` } : undefined}
+              title={`${month}月${day}日：${count} 人打卡${isFuture ? '（未来日期）' : '（点击切换）'}`}
+            >
+              <span className="font-medium">{day}</span>
+              {count > 0 && (
+                <span className="text-[10px] leading-none font-semibold">{count}人</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {/* 汇总 */}
+      <div className="text-center text-xs text-muted-foreground mt-2">
+        本月共 {dailyCounts.length} 天有打卡记录，在读学员 {totalStudents} 人
+        <span className="ml-2 text-primary">点击日期可切换补录</span>
+      </div>
+    </div>
+  )
+}
 
 export function ReadingCheckin() {
   const selectedYear = useReadingCheckinStore(s => s.selectedYear)
@@ -29,7 +122,10 @@ export function ReadingCheckin() {
   const searchQuery = useReadingCheckinStore(s => s.searchQuery)
   const showOnlyUnchecked = useReadingCheckinStore(s => s.showOnlyUnchecked)
   const selectedStudentIds = useReadingCheckinStore(s => s.selectedStudentIds)
+  const targetDate = useReadingCheckinStore(s => s.targetDate)
   const setSelectedMonth = useReadingCheckinStore(s => s.setSelectedMonth)
+  const setTargetDate = useReadingCheckinStore(s => s.setTargetDate)
+  const resetTargetDate = useReadingCheckinStore(s => s.resetTargetDate)
   const fetchMonthSummary = useReadingCheckinStore(s => s.fetchMonthSummary)
   const checkYesterday = useReadingCheckinStore(s => s.checkYesterday)
   const uncheckYesterday = useReadingCheckinStore(s => s.uncheckYesterday)
@@ -39,6 +135,9 @@ export function ReadingCheckin() {
   const clearSelection = useReadingCheckinStore(s => s.clearSelection)
   const setSearchQuery = useReadingCheckinStore(s => s.setSearchQuery)
   const toggleShowOnlyUnchecked = useReadingCheckinStore(s => s.toggleShowOnlyUnchecked)
+  const dailyCheckinCounts = useReadingCheckinStore(s => s.dailyCheckinCounts)
+  const showDailyView = useReadingCheckinStore(s => s.showDailyView)
+  const toggleDailyView = useReadingCheckinStore(s => s.toggleDailyView)
 
   const focusedIndexRef = useRef<number>(-1)
   const listRef = useRef<HTMLDivElement>(null)
@@ -47,9 +146,23 @@ export function ReadingCheckin() {
     fetchMonthSummary()
   }, [])
 
-  const currentYear = new Date().getFullYear()
-  const currentMonth = new Date().getMonth() + 1
-  const isCurrentMonth = selectedYear === currentYear && selectedMonth === currentMonth
+  // 是否为昨日（默认模式）
+  const isYesterday = targetDate === yesterdayDate
+  // targetDate 的显示标签
+  const targetDateLabel = useMemo(() => {
+    if (isYesterday) return '昨日'
+    const parts = targetDate.split('-')
+    return `${parseInt(parts[1])}月${parseInt(parts[2])}日`
+  }, [targetDate, isYesterday])
+
+  // 点击日历日期时，同步切换月份
+  const handleDateClick = useCallback((date: string) => {
+    setTargetDate(date)
+    // 同步刷新日历统计
+    if (showDailyView) {
+      useReadingCheckinStore.getState().fetchDailyCheckinCounts()
+    }
+  }, [setTargetDate, showDailyView])
 
   const handlePrevMonth = () => {
     if (selectedMonth === 1) {
@@ -71,13 +184,16 @@ export function ReadingCheckin() {
     let result = [...checkinStudents]
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase()
-      result = result.filter(student => student.name.toLowerCase().includes(query))
+      result = result.filter(student => 
+        student.name.toLowerCase().includes(query) ||
+        (student.studentNo && student.studentNo.toLowerCase().includes(query))
+      )
     }
-    if (showOnlyUnchecked && isCurrentMonth) {
+    if (showOnlyUnchecked) {
       result = result.filter(student => !student.checkedYesterday)
     }
     return result
-  }, [checkinStudents, searchQuery, showOnlyUnchecked, isCurrentMonth])
+  }, [checkinStudents, searchQuery, showOnlyUnchecked])
 
   const uncheckedInFiltered = useMemo(() => {
     return filteredStudents.filter(s => !s.checkedYesterday).length
@@ -115,8 +231,6 @@ export function ReadingCheckin() {
   }
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!isCurrentMonth) return
-
     if (e.key === 'Enter') {
       e.preventDefault()
       if (selectedStudentIds.size > 0) {
@@ -155,19 +269,13 @@ export function ReadingCheckin() {
         }
       }
     }
-  }, [isCurrentMonth, filteredStudents, selectedStudentIds, batchCheckYesterday, checkYesterday, toggleSelectStudent])
+  }, [filteredStudents, selectedStudentIds, batchCheckYesterday, checkYesterday, toggleSelectStudent])
 
   const monthDisplay = `${selectedYear}年${selectedMonth}月`
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return ''
-    const parts = dateStr.split('-')
-    return `${parts[1]}月${parts[2]}日`
-  }
-
   return (
     <div className="h-full flex flex-col" onKeyDown={handleKeyDown} tabIndex={0}>
-      {/* 页面标题 - 紧凑合并 */}
+      {/* 页面标题 */}
       <div className="px-6 py-3 border-b bg-card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -175,10 +283,16 @@ export function ReadingCheckin() {
             <h1 className="text-lg font-semibold">朗读打卡快录</h1>
             <span className="text-sm text-muted-foreground">
               当月已打卡 <span className="font-semibold text-primary">{monthlyCheckedStudents}</span>/{totalStudents} 人
-              {isCurrentMonth && yesterdayDate && (
-                <> · {formatDate(yesterdayDate)}已打卡 <span className="font-semibold text-green-600">{yesterdayCheckedCount}</span> 人</>
+              {targetDate && (
+                <> · {targetDateLabel}已打卡 <span className="font-semibold text-green-600">{yesterdayCheckedCount}</span> 人</>
               )}
             </span>
+            {!isYesterday && (
+              <Button variant="outline" size="sm" onClick={resetTargetDate} className="gap-1 ml-2">
+                <RotateCcw className="w-3 h-3" />
+                返回昨日
+              </Button>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={handlePrevMonth}>
@@ -197,28 +311,47 @@ export function ReadingCheckin() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="搜索学员..."
+            placeholder="搜索学员姓名或学号..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
           />
         </div>
-        {isCurrentMonth && (
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-muted-foreground">只看未打卡</label>
-            <Button
-              variant={showOnlyUnchecked ? "default" : "outline"}
-              size="sm"
-              onClick={toggleShowOnlyUnchecked}
-            >
-              {showOnlyUnchecked ? '已开启' : '未开启'}
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">只看未打卡</label>
+          <Button
+            variant={showOnlyUnchecked ? "default" : "outline"}
+            size="sm"
+            onClick={toggleShowOnlyUnchecked}
+          >
+            {showOnlyUnchecked ? '已开启' : '未开启'}
+          </Button>
+        </div>
+        <Button
+          variant={showDailyView ? "secondary" : "outline"}
+          size="sm"
+          onClick={toggleDailyView}
+          className="gap-1.5 ml-auto"
+        >
+          <CalendarDays className="w-3.5 h-3.5" />
+          每日统计
+        </Button>
       </div>
 
+      {/* 每日打卡人数日历视图 */}
+      {showDailyView && (
+        <DailyCheckinCalendar
+          year={selectedYear}
+          month={selectedMonth}
+          dailyCounts={dailyCheckinCounts}
+          totalStudents={totalStudents}
+          selectedDate={targetDate}
+          onDateClick={handleDateClick}
+        />
+      )}
+
       {/* 批量操作栏 */}
-      {isCurrentMonth && uncheckedInFiltered > 0 && (
+      {uncheckedInFiltered > 0 && (
         <div className="px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button
@@ -279,16 +412,12 @@ export function ReadingCheckin() {
         ) : (
           <div className="border rounded-lg">
             {/* 表头 */}
-            <div className={cn(
-              "grid gap-4 p-3 bg-muted/50 border-b text-sm font-medium text-muted-foreground",
-              isCurrentMonth ? "grid-cols-[2rem_1fr_6rem_10rem]" : "grid-cols-3"
-            )}>
-              {isCurrentMonth && <div />}
+            <div className="grid grid-cols-[2rem_5rem_1fr_6rem_10rem] gap-4 p-3 bg-muted/50 border-b text-sm font-medium text-muted-foreground">
+              <div />
+              <div>学号</div>
               <div>学员姓名</div>
               <div className="text-center">本月天数</div>
-              <div className={cn("text-right", !isCurrentMonth && "text-center")}>
-                {isCurrentMonth ? '昨日操作' : '统计'}
-              </div>
+              <div className="text-right">{targetDateLabel}操作</div>
             </div>
 
             {/* 学员行 */}
@@ -299,34 +428,36 @@ export function ReadingCheckin() {
                   key={student.id}
                   data-row
                   className={cn(
-                    "grid gap-4 p-3 border-b last:border-b-0 items-center",
+                    "grid grid-cols-[2rem_5rem_1fr_6rem_10rem] gap-4 p-3 border-b last:border-b-0 items-center",
                     "transition-all duration-300 ease-in-out",
-                    student.checkedYesterday && isCurrentMonth && "bg-muted/30 opacity-60",
-                    isSelected && "bg-primary/5 border-l-2 border-l-primary",
-                    isCurrentMonth ? "grid-cols-[2rem_1fr_6rem_10rem]" : "grid-cols-3"
+                    student.checkedYesterday && "bg-muted/30 opacity-60",
+                    isSelected && "bg-primary/5 border-l-2 border-l-primary"
                   )}
                   onClick={() => {
-                    if (isCurrentMonth && !student.checkedYesterday) {
+                    if (!student.checkedYesterday) {
                       focusedIndexRef.current = index
                     }
                   }}
                 >
                   {/* 勾选框 */}
-                  {isCurrentMonth && (
-                    <div className="flex items-center justify-center">
-                      {!student.checkedYesterday ? (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelectStudent(student.id)}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-                          aria-label={`选择 ${student.name}`}
-                        />
-                      ) : (
-                        <div className="w-4 h-4" />
-                      )}
-                    </div>
-                  )}
+                  <div className="flex items-center justify-center">
+                    {!student.checkedYesterday ? (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectStudent(student.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                        aria-label={`选择 ${student.name}`}
+                      />
+                    ) : (
+                      <div className="w-4 h-4" />
+                    )}
+                  </div>
+
+                  {/* 学号 */}
+                  <div className="text-sm text-muted-foreground truncate" title={student.studentNo || ''}>
+                    {student.studentNo || '-'}
+                  </div>
 
                   {/* 学员姓名 */}
                   <div className="font-medium">{student.name}</div>
@@ -342,39 +473,33 @@ export function ReadingCheckin() {
                     <span className="text-muted-foreground ml-1">天</span>
                   </div>
 
-                  {/* 昨日操作 */}
-                  <div className={cn("flex items-center justify-end gap-2", !isCurrentMonth && "justify-center")}>
-                    {isCurrentMonth ? (
-                      student.checkedYesterday ? (
-                        <>
-                          <Button variant="outline" size="sm" disabled className="gap-1">
-                            <Check className="w-3 h-3" />
-                            已打卡
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => uncheckYesterday(student.id, student.name)}
-                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                          >
-                            撤
-                          </Button>
-                        </>
-                      ) : (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => checkYesterday(student.id, student.name)}
-                          className="gap-1"
-                        >
+                  {/* 打卡操作 */}
+                  <div className="flex items-center justify-end gap-2">
+                    {student.checkedYesterday ? (
+                      <>
+                        <Button variant="outline" size="sm" disabled className="gap-1">
                           <Check className="w-3 h-3" />
-                          昨日打卡
+                          已打卡
                         </Button>
-                      )
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => uncheckYesterday(student.id, student.name)}
+                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                        >
+                          撤
+                        </Button>
+                      </>
                     ) : (
-                      <span className="text-sm text-muted-foreground">
-                        {student.monthlyCount > 0 ? `${student.monthlyCount} 次` : '无记录'}
-                      </span>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => checkYesterday(student.id, student.name)}
+                        className="gap-1"
+                      >
+                        <Check className="w-3 h-3" />
+                        {targetDateLabel}打卡
+                      </Button>
                     )}
                   </div>
                 </div>

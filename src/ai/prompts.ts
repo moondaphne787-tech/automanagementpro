@@ -24,11 +24,11 @@ export const DEFAULT_SYSTEM_PROMPT = `你是专业青少年英语教学顾问，
 - 触发条件：current_level - last_nine_grid_level 达到以下间隔时安排
   - 小学考纲、小学进阶：满 10 关
   - 初中考纲、初中进阶、高中基础、高中考纲、高中进阶、大学四级：满 20 关
-- content 固定写："共清理30-50词/轮×____轮=____词（助教课上填写）"
+- content 固定写："共清理30-50词/轮×____轮=____词，红色格子25词*____=____词，打印默写"
 
 **课文梳理（textbook）**
-- 三四年级：每节课梳理 2-3 个单元，含练习，如"梳理四下U1-U3，完成练习"
-- 五六年级：每节课梳理 1 个单元，含练习，如"梳理六下U4，完成练习"
+- 三四年级：每节课梳理 2-3 个单元，含练习，如"梳理四下U1-U3Story time&Cartoon，完成练习"
+- 五六年级：每节课梳理 1 个单元，含练习，如"梳理六下U4Story time&Cartoon，完成练习"
 - 七八年级：每节课梳理 1 篇（Reading 或 D2），含练习，如"梳理七下U7 Reading，完成练习"
 - 小初同学：课文梳理完后，梳理新概念语篇，如"梳理新概念Lesson7"
 - 高中同学：梳理3500语篇，如"梳理3500语篇第24篇"
@@ -64,15 +64,16 @@ export const DEFAULT_SYSTEM_PROMPT = `你是专业青少年英语教学顾问，
 必须返回纯 JSON，不含任何 markdown 标记、代码块或额外文字。
 
 各类型字段说明：
-- vocab_new / vocab_review：必须有 wordbank_label（字符串）、level_from（整数）、level_to（整数）
-- nine_grid：必须有 wordbank_label（字符串）、content（字符串）
+- vocab_new / vocab_review：必须有 wordbank_label（字符串）、level_from（整数）、level_to（整数），同时必须有 content（一句话描述，如"学习初中考纲第16-18关"或"检测复习初中考纲第13-15关"）
+- nine_grid：必须有 wordbank_label（字符串）、content（一句话描述，如"清理初中考纲九宫格，共清理30-50词/轮×____轮=____词，红色格子25词*____=____词，打印默写"）
 - textbook / reading / phonics / picture_book / exercise：必须有 content（字符串）
 
 输出结构：
 {
   "tasks": [
-    {"type": "vocab_new", "wordbank_label": "初中考纲", "level_from": 16, "level_to": 18},
-    {"type": "nine_grid", "wordbank_label": "初中考纲", "content": "共清理30-50词/轮×____轮=____词（助教课上填写）"},
+    {"type": "vocab_new", "wordbank_label": "初中考纲", "level_from": 16, "level_to": 18, "content": "学习初中考纲第16-18关"},
+    {"type": "vocab_review", "wordbank_label": "初中考纲", "level_from": 13, "level_to": 15, "content": "检测复习初中考纲第13-15关"},
+    {"type": "nine_grid", "wordbank_label": "初中考纲", "content": "清理初中考纲九宫格，共清理30-50词/轮×____轮=____词，红色格子25词*____=____词，打印默写"},
     {"type": "textbook", "content": "梳理七下U5 Reading，完成练习"},
     {"type": "exercise", "content": "完成自带练习"}
   ],
@@ -253,22 +254,20 @@ export function parseAIResponse(response: string): {
 // 格式化任务为可读文本
 export function formatTask(task: TaskBlock): string {
   const typeName = TASK_TYPE_LABELS[task.type] || task.type
-  
-  if ((task.type === 'vocab_new' || task.type === 'vocab_review') && task.wordbank_label) {
+
+  // 优先使用 content 字段
+  if (task.content) {
+    return `${typeName}：${task.content}`
+  }
+
+  // 兜底：兼容旧数据，从 wordbank_label + levels 拼接
+  if ((task.type === 'vocab_new' || task.type === 'vocab_review' || task.type === 'nine_grid') && task.wordbank_label) {
     if (task.level_from && task.level_to) {
       return `${typeName}：${task.wordbank_label} 第${task.level_from}-${task.level_to}关`
     }
     return `${typeName}：${task.wordbank_label}`
   }
-  
-  if (task.type === 'nine_grid' && task.wordbank_label) {
-    return `${typeName}：${task.wordbank_label}`
-  }
-  
-  if (task.content) {
-    return `${typeName}：${task.content}`
-  }
-  
+
   return typeName
 }
 

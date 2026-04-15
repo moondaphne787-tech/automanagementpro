@@ -1,6 +1,6 @@
 import type { Teacher, TeacherAvailability, StudentSchedulePreference, ScheduledClass, DayOfWeek, Student } from '@/types'
 import type { ScheduledClassWithJoinRow, PreferenceWithStudentRow } from './utils'
-import { generateId, ipcQuery, ipcQueryOne, isAllowedField, TEACHER_AVAILABILITY_UPDATABLE_FIELDS, STUDENT_SCHEDULE_PREFERENCE_UPDATABLE_FIELDS, SCHEDULED_CLASS_UPDATABLE_FIELDS } from './utils'
+import { generateId, ipcQuery, ipcQueryOne, ipcTransaction, isAllowedField, TEACHER_AVAILABILITY_UPDATABLE_FIELDS, STUDENT_SCHEDULE_PREFERENCE_UPDATABLE_FIELDS, SCHEDULED_CLASS_UPDATABLE_FIELDS } from './utils'
 
 // 老师可用时段操作
 export const teacherAvailabilityDb = {
@@ -467,10 +467,10 @@ export const scheduledClassDb = {
   async reschedule(id: string, newDate: string, newStartTime?: string, newEndTime?: string, newTeacherId?: string): Promise<ScheduledClass> {
     const original = await this.getById(id)
     if (!original) throw new Error('Scheduled class not found')
-    
+
     const startTime = newStartTime || original.start_time || undefined
     const endTime = newEndTime || original.end_time || undefined
-    
+
     // 检查新时段是否有学员冲突（排除原课程）
     if (startTime && endTime) {
       const studentConflict = await this.checkStudentConflict(
@@ -484,24 +484,28 @@ export const scheduledClassDb = {
         throw new Error(`学员新时段已有排课：${newDate} ${startTime}-${endTime}`)
       }
     }
-    
-    // 创建新记录（状态为 scheduled，表示新的有效排课）
-    const newClass = await this.create({
-      student_id: original.student_id,
-      teacher_id: newTeacherId || original.teacher_id || undefined,
-      class_date: newDate,
-      start_time: startTime,
-      end_time: endTime,
-      duration_hours: original.duration_hours,
-      status: 'scheduled',
-      rescheduled_from_id: id,
-      notes: `调课自 ${original.class_date}`,
-      skipConflictCheck: true  // 已在上文检查，跳过重复检查
-    })
-    
-    // 更新原记录状态为 rescheduled，表示已被调走
-    await this.update(id, { status: 'rescheduled', cancel_reason: `已调课至 ${newDate} ${startTime || ''}` })
-    
+
+    // 原子操作：在同一事务中创建新排课 + 标记旧排课为已改期
+    const newId = generateId()
+    const now = new Date().toISOString()
+    const teacherId = newTeacherId || original.teacher_id || null
+
+    await ipcTransaction([
+      // 1. 创建新排课记录
+      {
+        sql: `INSERT INTO scheduled_classes (id, student_id, teacher_id, class_date, start_time, end_time, duration_hours, status, rescheduled_from_id, cancel_reason, notes, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, NULL, ?, ?)`,
+        params: [newId, original.student_id, teacherId, newDate, startTime || null, endTime || null, original.duration_hours, id, `调课自 ${original.class_date}`, now]
+      },
+      // 2. 标记原排课为已改期
+      {
+        sql: `UPDATE scheduled_classes SET status = 'rescheduled', cancel_reason = ? WHERE id = ?`,
+        params: [`已调课至 ${newDate} ${startTime || ''}`, id]
+      }
+    ])
+
+    const newClass = await this.getById(newId)
+    if (!newClass) throw new Error('Failed to create rescheduled class')
     return newClass
   },
   
@@ -511,5 +515,51 @@ export const scheduledClassDb = {
       status: 'cancelled',
       cancel_reason: reason || null
     })
+  },
+
+  // 批量获取学员的下次排课日期（从今天起最近的 scheduled 状态课程）
+  async getNextClassForStudents(studentIds: string[]): Promise<Map<string, { class_date: string; start_time: string | null }>> {
+    if (studentIds.length === 0) return new Map()
+    
+    const today = new Date().toISOString().split('T')[0]
+    const placeholders = studentIds.map(() => '?').join(',')
+    
+    const results = await ipcQuery<{ student_id: string; class_date: string; start_time: string | null }[]>(
+      `SELECT student_id, MIN(class_date) as class_date, start_time
+       FROM scheduled_classes
+       WHERE student_id IN (${placeholders}) AND class_date >= ? AND status = 'scheduled'
+       GROUP BY student_id`,
+      [...studentIds, today]
+    )
+    
+    const map = new Map<string, { class_date: string; start_time: string | null }>()
+    for (const row of results) {
+      map.set(row.student_id, { class_date: row.class_date, start_time: row.start_time })
+    }
+    return map
+  },
+
+  // 批量检查学员本周是否有排课
+  async getThisWeekScheduledStudents(studentIds: string[]): Promise<Set<string>> {
+    if (studentIds.length === 0) return new Set()
+    
+    const now = new Date()
+    const day = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1))
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    
+    const mondayStr = monday.toISOString().split('T')[0]
+    const sundayStr = sunday.toISOString().split('T')[0]
+    const placeholders = studentIds.map(() => '?').join(',')
+    
+    const results = await ipcQuery<{ student_id: string }[]>(
+      `SELECT DISTINCT student_id FROM scheduled_classes
+       WHERE student_id IN (${placeholders}) AND class_date >= ? AND class_date <= ? AND status = 'scheduled'`,
+      [...studentIds, mondayStr, sundayStr]
+    )
+    
+    return new Set(results.map(r => r.student_id))
   }
 }

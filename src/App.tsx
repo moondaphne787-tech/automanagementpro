@@ -1,12 +1,7 @@
-import { useState } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AppLayout } from '@/components/Layout/AppLayout'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { ImportRecordsDrawer } from '@/components/Drawers/ImportRecordsDrawer'
-import { GeneratePlansDrawer } from '@/components/Drawers/GeneratePlansDrawer'
-import { PrintPlansDrawer } from '@/components/Drawers/PrintPlansDrawer'
-import { QuickClassRecordDrawer } from '@/components/Drawers/QuickClassRecordDrawer'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { Home } from '@/pages/Home'
 import { StudentNew } from '@/pages/StudentNew'
@@ -20,35 +15,15 @@ import { Schedule } from '@/pages/Schedule'
 import { PhasesPage } from '@/pages/PhasesPage'
 import { PreferenceManage } from '@/pages/PreferenceManage'
 import { ReadingCheckin } from '@/pages/ReadingCheckin'
+import { BatchGenerate } from '@/pages/BatchGenerate'
+import { BatchImport } from '@/pages/BatchImport'
+import { BatchExport } from '@/pages/BatchExport'
 
 function App() {
-  const [importDrawerOpen, setImportDrawerOpen] = useState(false)
-  const [generateDrawerOpen, setGenerateDrawerOpen] = useState(false)
-  const [printDrawerOpen, setPrintDrawerOpen] = useState(false)
-  const [quickRecordDrawerOpen, setQuickRecordDrawerOpen] = useState(false)
-  
-  // 处理快捷操作
-  const handleQuickAction = (action: string) => {
-    switch (action) {
-      case 'import':
-        setImportDrawerOpen(true)
-        break
-      case 'generate':
-        setGenerateDrawerOpen(true)
-        break
-      case 'print':
-        setPrintDrawerOpen(true)
-        break
-      case 'quickRecord':
-        setQuickRecordDrawerOpen(true)
-        break
-    }
-  }
-  
   return (
     <HashRouter>
       <Routes>
-        <Route element={<AppLayout onQuickAction={handleQuickAction} />}>
+        <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/students" element={<Home />} />
           <Route path="/students/new" element={<StudentNew />} />
@@ -62,37 +37,14 @@ function App() {
           <Route path="/phases" element={<PhasesPage />} />
           <Route path="/reading-checkin" element={<ReadingCheckin />} />
           <Route path="/settings" element={<Settings />} />
+          {/* 批量操作全页面 */}
+          <Route path="/batch/generate" element={<BatchGenerate />} />
+          <Route path="/batch/import" element={<BatchImport />} />
+          <Route path="/batch/export" element={<BatchExport />} />
         </Route>
       </Routes>
-      
-      {/* 抽屉组件 */}
-      <ImportRecordsDrawer 
-        open={importDrawerOpen} 
-        onClose={() => setImportDrawerOpen(false)} 
-      />
-      
-      {/* 批量生成课程计划抽屉 */}
-      <GeneratePlansDrawer 
-        open={generateDrawerOpen} 
-        onClose={() => setGenerateDrawerOpen(false)} 
-      />
-      
-      {/* 批量打印课程计划抽屉 */}
-      <PrintPlansDrawer 
-        open={printDrawerOpen} 
-        onClose={() => setPrintDrawerOpen(false)} 
-      />
-      
-      {/* 快速录入今日课堂抽屉 */}
-      <QuickClassRecordDrawer 
-        open={quickRecordDrawerOpen} 
-        onClose={() => setQuickRecordDrawerOpen(false)} 
-      />
-      
-      {/* Toast 通知 */}
+
       <Toaster position="top-center" richColors />
-      
-      {/* 确认对话框 */}
       <ConfirmDialog />
     </HashRouter>
   )

@@ -1,18 +1,20 @@
 // Store 类型定义
-import type { 
-  Student, 
-  StudentWithBilling, 
-  Billing, 
-  Wordbank, 
+import type {
+  Student,
+  StudentWithBilling,
+  Billing,
+  Wordbank,
   StudentWordbankProgress,
   ClassRecord,
   LessonPlan,
   ExamScore,
+  VocabTest,
   LearningPhase,
   FilterOptions,
   SortOptions,
   TaskBlock,
-  DashboardData
+  DashboardData,
+  AIConfig
 } from '@/types'
 
 // ===== 学员 Slice 类型 =====
@@ -26,9 +28,12 @@ export interface StudentSlice {
   currentProgress: StudentWordbankProgress[]
   expiredPlansMap: Map<string, number>
   expiredPlansLoading: boolean
+  scheduleInfoMap: Map<string, { nextClassDate: string | null; hasThisWeekClass: boolean }>
+  scheduleInfoLoading: boolean
   
   loadStudents: () => Promise<void>
   loadExpiredPlansCount: () => Promise<void>
+  loadScheduleInfo: () => Promise<void>
   setFilters: (filters: Partial<FilterOptions>) => void
   setSort: (sort: SortOptions) => void
   createStudent: (student: Omit<Student, 'id' | 'created_at' | 'updated_at'>) => Promise<Student>
@@ -63,6 +68,7 @@ export interface WordbankSlice {
 // ===== 课堂记录 Slice 类型 =====
 export interface ClassRecordSlice {
   classRecords: ClassRecord[]
+  classRecordsLoading: boolean
   loadClassRecords: (studentId: string) => Promise<void>
   createClassRecord: (data: {
     student_id: string
@@ -105,7 +111,15 @@ export interface ClassRecordSlice {
 // ===== 课程计划 Slice 类型 =====
 export interface LessonPlanSlice {
   lessonPlans: LessonPlan[]
+  expiredPlans: LessonPlan[]
+  recentRecords: ClassRecord[]
+  aiConfig: AIConfig | null
+  lessonPlansLoading: boolean
   loadLessonPlans: (studentId: string) => Promise<void>
+  loadExpiredPlans: (studentId: string) => Promise<void>
+  loadRecentRecords: (studentId: string, limit?: number) => Promise<void>
+  loadAIConfig: () => Promise<void>
+  getLastPlanSummary: (studentId: string) => Promise<string | null>
   createLessonPlan: (data: {
     student_id: string
     phase_id?: string
@@ -122,6 +136,7 @@ export interface LessonPlanSlice {
 // ===== 考试成绩 Slice 类型 =====
 export interface ExamScoreSlice {
   examScores: ExamScore[]
+  examScoresLoading: boolean
   loadExamScores: (studentId: string) => Promise<void>
   createExamScore: (data: {
     student_id: string
@@ -136,9 +151,26 @@ export interface ExamScoreSlice {
   deleteExamScore: (id: string) => Promise<void>
 }
 
+// ===== 词汇量测试 Slice 类型 =====
+export interface VocabTestSlice {
+  vocabTests: VocabTest[]
+  vocabTestsLoading: boolean
+  loadVocabTests: (studentId: string) => Promise<void>
+  createVocabTest: (data: {
+    student_id: string
+    test_date: string
+    vocab_count: number
+    test_source?: string
+    notes?: string
+  }) => Promise<VocabTest | undefined>
+  updateVocabTest: (id: string, data: Partial<VocabTest>) => Promise<VocabTest | undefined>
+  deleteVocabTest: (id: string) => Promise<void>
+}
+
 // ===== 学习阶段 Slice 类型 =====
 export interface LearningPhaseSlice {
   learningPhases: LearningPhase[]
+  learningPhasesLoading: boolean
   loadLearningPhases: (studentId: string) => Promise<void>
   createLearningPhase: (data: {
     student_id: string
@@ -170,12 +202,29 @@ export interface SemesterConfigSlice {
   loadSemesterConfig: () => Promise<void>
 }
 
+// ===== Dashboard 配置 =====
+export interface DashboardConfig {
+  left: string[]
+  right: string[]
+  hidden: string[]
+}
+
 // ===== UI Slice 类型 =====
 export interface UISlice {
   sidebarCollapsed: boolean
   theme: 'light' | 'dark'
+  recentStudents: Array<{ id: string; name: string }>
+  dashboardConfig: DashboardConfig
   toggleSidebar: () => void
   setTheme: (theme: 'light' | 'dark') => void
+  addRecentStudent: (id: string, name: string) => void
+  setDashboardConfig: (config: DashboardConfig) => void
+  resetDashboardConfig: () => void
+  // Dashboard→批量生成计划联动
+  generateDrawerOpen: boolean
+  generateDrawerPreselectedIds: string[]
+  openGenerateDrawer: (preselectedIds?: string[]) => void
+  closeGenerateDrawer: () => void
 }
 
 // ===== Dashboard 缓存 Slice 类型 =====
@@ -191,9 +240,16 @@ export interface DashboardSlice {
 // ===== 朗读打卡行数据类型 =====
 export interface CheckinStudent {
   id: string
+  studentNo: string | null
   name: string
   monthlyCount: number
   checkedYesterday: boolean
+}
+
+// ===== 每日打卡统计项 =====
+export interface DailyCheckinCount {
+  date: string
+  count: number
 }
 
 // ===== 朗读打卡 Slice 类型 =====
@@ -203,21 +259,32 @@ export interface ReadingCheckinSlice {
   selectedMonth: number
   checkinStudents: CheckinStudent[]
   totalStudents: number
-  yesterdayCheckedCount: number  // 改为昨日打卡数
-  yesterdayDate: string  // 昨日日期
-  todayDate: string  // 今日日期（用于显示）
+  yesterdayCheckedCount: number
+  yesterdayDate: string
+  todayDate: string
   checkinLoading: boolean
-  
+
+  // 目标日期（点击日历切换，默认为昨日）
+  targetDate: string
+
+  // 每日打卡人数统计
+  dailyCheckinCounts: DailyCheckinCount[]
+  showDailyView: boolean
+
   // 搜索和过滤
   searchQuery: string
   showOnlyUnchecked: boolean
-  
+
   // 批量选择
   selectedStudentIds: Set<string>
-  
+
   // 操作
   setSelectedMonth: (year: number, month: number) => void
+  setTargetDate: (date: string) => void
+  resetTargetDate: () => void
   fetchMonthSummary: () => Promise<void>
+  fetchDailyCheckinCounts: () => Promise<void>
+  toggleDailyView: () => void
   checkYesterday: (studentId: string, studentName: string) => Promise<void>
   uncheckYesterday: (studentId: string, studentName: string) => Promise<void>
   batchCheckYesterday: () => Promise<void>
@@ -228,14 +295,39 @@ export interface ReadingCheckinSlice {
   toggleShowOnlyUnchecked: () => void
 }
 
+// ===== 批量生成 Slice 类型 =====
+export interface GenerationTask {
+  studentId: string
+  studentName: string
+  status: 'pending' | 'generating' | 'success' | 'failed' | 'saved' | 'skipped'
+  plan?: { tasks: TaskBlock[]; notes: string; reason: string }
+  error?: string
+  extraNote?: string
+}
+
+export interface GenerationSlice {
+  generationTasks: GenerationTask[]
+  generationRunning: boolean
+  generationPaused: boolean
+  generationProgress: { done: number; total: number }
+  startGeneration: (tasks: GenerationTask[], extraInstruction?: string) => Promise<void>
+  pauseGeneration: () => void
+  resumeGeneration: () => void
+  cancelGeneration: () => void
+  updateGenerationTask: (studentId: string, updates: Partial<GenerationTask>) => void
+  clearGenerationResults: () => void
+}
+
 // ===== 完整 AppState 类型 =====
 // 注意：ReadingCheckinSlice 已拆分为独立的 useReadingCheckinStore
-export type AppState = StudentSlice & 
-  WordbankSlice & 
-  ClassRecordSlice & 
-  LessonPlanSlice & 
-  ExamScoreSlice & 
-  LearningPhaseSlice & 
+export type AppState = StudentSlice &
+  WordbankSlice &
+  ClassRecordSlice &
+  LessonPlanSlice &
+  ExamScoreSlice &
+  VocabTestSlice &
+  LearningPhaseSlice &
   SemesterConfigSlice &
-  UISlice & 
-  DashboardSlice
+  UISlice &
+  DashboardSlice &
+  GenerationSlice

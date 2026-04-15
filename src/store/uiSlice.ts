@@ -1,53 +1,88 @@
 import type { StateCreator } from 'zustand'
-import type { AppState, UISlice } from './types'
+import type { AppState, UISlice, DashboardConfig } from './types'
+
+const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
+  left: ['todaySchedule', 'weeklyPlan', 'alertStudents'],
+  right: ['todo', 'weeklySummary', 'studentOverview'],
+  hidden: []
+}
 
 // 从 localStorage 读取初始状态
 const getInitialSidebarCollapsed = (): boolean => {
   try {
-    const stored = localStorage.getItem('sidebarCollapsed')
-    return stored === 'true'
-  } catch {
-    return false
-  }
+    return localStorage.getItem('sidebarCollapsed') === 'true'
+  } catch { return false }
 }
 
 const getInitialTheme = (): 'light' | 'dark' => {
   try {
-    const stored = localStorage.getItem('theme') as 'light' | 'dark' | null
-    return stored || 'light'
-  } catch {
-    return 'light'
-  }
+    return (localStorage.getItem('theme') as 'light' | 'dark') || 'light'
+  } catch { return 'light' }
+}
+
+const getInitialRecentStudents = (): Array<{ id: string; name: string }> => {
+  try {
+    const stored = localStorage.getItem('recentStudents')
+    return stored ? JSON.parse(stored) : []
+  } catch { return [] }
+}
+
+const getInitialDashboardConfig = (): DashboardConfig => {
+  try {
+    const stored = localStorage.getItem('dashboardConfig')
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      if (parsed.left && parsed.right) return parsed
+    }
+  } catch {}
+  return DEFAULT_DASHBOARD_CONFIG
 }
 
 export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => ({
-  // 初始状态（从 localStorage 恢复）
   sidebarCollapsed: getInitialSidebarCollapsed(),
   theme: getInitialTheme(),
+  recentStudents: getInitialRecentStudents(),
+  dashboardConfig: getInitialDashboardConfig(),
 
-  // 切换侧边栏
   toggleSidebar: () => {
     set(state => {
       const newCollapsed = !state.sidebarCollapsed
-      // 持久化到 localStorage
-      try {
-        localStorage.setItem('sidebarCollapsed', String(newCollapsed))
-      } catch (e) {
-        console.error('Failed to save sidebar state:', e)
-      }
+      try { localStorage.setItem('sidebarCollapsed', String(newCollapsed)) } catch {}
       return { sidebarCollapsed: newCollapsed }
     })
   },
 
-  // 设置主题
   setTheme: (theme) => {
     set({ theme })
-    // 持久化到 localStorage
-    try {
-      localStorage.setItem('theme', theme)
-    } catch (e) {
-      console.error('Failed to save theme:', e)
-    }
+    try { localStorage.setItem('theme', theme) } catch {}
     document.documentElement.classList.toggle('dark', theme === 'dark')
+  },
+
+  addRecentStudent: (id, name) => {
+    set(state => {
+      const filtered = state.recentStudents.filter(s => s.id !== id)
+      const updated = [{ id, name }, ...filtered].slice(0, 5)
+      try { localStorage.setItem('recentStudents', JSON.stringify(updated)) } catch {}
+      return { recentStudents: updated }
+    })
+  },
+
+  setDashboardConfig: (config) => {
+    set({ dashboardConfig: config })
+    try { localStorage.setItem('dashboardConfig', JSON.stringify(config)) } catch {}
+  },
+
+  resetDashboardConfig: () => {
+    set({ dashboardConfig: DEFAULT_DASHBOARD_CONFIG })
+    try { localStorage.setItem('dashboardConfig', JSON.stringify(DEFAULT_DASHBOARD_CONFIG)) } catch {}
+  },
+
+  generateDrawerOpen: false,
+  generateDrawerPreselectedIds: [],
+  openGenerateDrawer: (preselectedIds) => {
+    set({ generateDrawerOpen: true, generateDrawerPreselectedIds: preselectedIds ?? [] })
+  },
+  closeGenerateDrawer: () => {
+    set({ generateDrawerOpen: false, generateDrawerPreselectedIds: [] })
   }
 })

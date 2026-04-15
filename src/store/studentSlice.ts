@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState, StudentSlice } from './types'
-import { studentDb, billingDb, progressDb, lessonPlanDb, trialConversionDb } from '@/db'
+import { studentDb, billingDb, progressDb, lessonPlanDb, trialConversionDb, scheduledClassDb } from '@/db'
 
 // 防抖定时器，用于 setFilters/setSort 触发的 loadStudents
 let loadStudentsTimer: ReturnType<typeof setTimeout> | null = null
@@ -29,6 +29,8 @@ export const createStudentSlice: StateCreator<AppState, [], [], StudentSlice> = 
   currentProgress: [],
   expiredPlansMap: new Map(),
   expiredPlansLoading: false,
+  scheduleInfoMap: new Map(),
+  scheduleInfoLoading: false,
 
   // 加载学员列表（不含过期计划查询，提高性能）
   // 使用版本号机制：如果在请求期间又触发了新的加载，旧请求的结果会被丢弃
@@ -65,6 +67,36 @@ export const createStudentSlice: StateCreator<AppState, [], [], StudentSlice> = 
     } catch (error) {
       console.error('Failed to load expired plans count:', error)
       set({ expiredPlansLoading: false })
+    }
+  },
+
+  // 加载排课信息（本周是否有课 + 下次课日期）
+  loadScheduleInfo: async () => {
+    set({ scheduleInfoLoading: true })
+    try {
+      const { students } = get()
+      const activeStudentIds = students
+        .filter(s => s.status === 'active')
+        .map(s => s.id)
+      
+      const [nextClassMap, thisWeekSet] = await Promise.all([
+        scheduledClassDb.getNextClassForStudents(activeStudentIds),
+        scheduledClassDb.getThisWeekScheduledStudents(activeStudentIds)
+      ])
+      
+      const scheduleInfoMap = new Map<string, { nextClassDate: string | null; hasThisWeekClass: boolean }>()
+      for (const id of activeStudentIds) {
+        const next = nextClassMap.get(id)
+        scheduleInfoMap.set(id, {
+          nextClassDate: next?.class_date || null,
+          hasThisWeekClass: thisWeekSet.has(id)
+        })
+      }
+      
+      set({ scheduleInfoMap, scheduleInfoLoading: false })
+    } catch (error) {
+      console.error('Failed to load schedule info:', error)
+      set({ scheduleInfoLoading: false })
     }
   },
 

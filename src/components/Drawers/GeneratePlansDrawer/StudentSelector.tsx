@@ -3,30 +3,30 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { Zap, Loader2 } from 'lucide-react'
 import type { Student, GradeType } from '@/types'
 import { GRADE_OPTIONS } from '@/types'
+import type { StudentPlanState, StudentContext } from './PlanResultCard'
 
-interface StudentPlanState {
-  student: Student
-  status: 'pending' | 'generating' | 'success' | 'failed' | 'saved' | 'skipped'
-  plan: {
-    tasks: any[]
-    notes: string
-    reason: string
-  } | null
-  error: string | null
-  expanded: boolean
-  editing: boolean
-  extraNote: string
+/** 智能筛选结果：有排课但无计划的学员 ID 集合 */
+export interface SmartFilterResult {
+  /** 有排课但无计划的学员 ID */
+  scheduledWithoutPlan: Set<string>
+  loading: boolean
 }
 
 interface StudentSelectorProps {
   students: Student[]
   selectedStudents: StudentPlanState[]
-  onSelectionChange: (selected: StudentPlanState[]) => void
+  onSelectionChange: (selected: StudentPlanState[]) => void | Promise<void>
+  /** 智能筛选：自动选中有排课但无计划的学员 */
+  onSmartFilter?: () => Promise<Student[]>
+  smartFilterLoading?: boolean
+  /** 学员上下文数据（备注+上次课堂记录），由父组件提供 */
+  studentContextMap?: Map<string, StudentContext>
 }
 
-export function StudentSelector({ students, selectedStudents, onSelectionChange }: StudentSelectorProps) {
+export function StudentSelector({ students, selectedStudents, onSelectionChange, onSmartFilter, smartFilterLoading, studentContextMap }: StudentSelectorProps) {
   const [filterGrade, setFilterGrade] = useState<string>('all')
   const [searchName, setSearchName] = useState('')
 
@@ -145,7 +145,7 @@ export function StudentSelector({ students, selectedStudents, onSelectionChange 
         </div>
       </div>
 
-      {/* 全选按钮 */}
+      {/* 全选按钮 + 智能筛选 */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <Button
           variant="outline"
@@ -154,6 +154,36 @@ export function StudentSelector({ students, selectedStudents, onSelectionChange 
         >
           {selectedStudents.length === filteredStudents.length ? '取消全选' : '全选'}
         </Button>
+        {onSmartFilter && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const matched = await onSmartFilter()
+              if (matched.length === 0) return
+              const newSelection: StudentPlanState[] = matched.map(student => ({
+                student,
+                status: 'pending',
+                plan: null,
+                error: null,
+                expanded: false,
+                editing: false,
+                extraNote: '',
+                context: studentContextMap?.get(student.id)
+              }))
+              onSelectionChange(newSelection)
+            }}
+            disabled={smartFilterLoading}
+            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+          >
+            {smartFilterLoading ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Zap className="w-3 h-3 mr-1" />
+            )}
+            有排课无计划
+          </Button>
+        )}
         {GRADE_OPTIONS.map(grade => {
           const fullySelected = isGradeFullySelected(grade)
           const partiallySelected = isGradePartiallySelected(grade)

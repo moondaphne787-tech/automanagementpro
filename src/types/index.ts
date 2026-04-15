@@ -197,6 +197,16 @@ export interface ExamScore {
   notes: string | null
 }
 
+// 词汇量测试记录
+export interface VocabTest {
+  id: string
+  student_id: string
+  test_date: string
+  vocab_count: number
+  test_source: string | null
+  notes: string | null
+}
+
 // 学习阶段
 export interface LearningPhase {
   id: string
@@ -324,6 +334,7 @@ export const TEACHER_TYPE_LABELS: Record<TeacherType, string> = {
 // 学员列表项（包含课时信息）
 export type StudentWithBilling = Student & {
   billing: Billing | null | undefined
+  last_class_date?: string | null  // 最近上课日期
 }
 
 // 筛选条件

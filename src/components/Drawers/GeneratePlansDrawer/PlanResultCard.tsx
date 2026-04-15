@@ -2,11 +2,18 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TaskBlock } from '@/components/TaskBlock/TaskBlock'
+import { SortableTaskList } from '@/components/TaskBlock/SortableTaskList'
 import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronUp, RefreshCw, Edit, Save, SkipForward, CheckCheck, Plus, Loader2 } from 'lucide-react'
-import type { Student, TaskBlock as TaskBlockType, Wordbank } from '@/types'
+import type { Student, TaskBlock as TaskBlockType, Wordbank, ClassRecord } from '@/types'
+import { FileText, BookOpen } from 'lucide-react'
 
 export type GenerationStatus = 'pending' | 'generating' | 'success' | 'failed' | 'saved' | 'skipped'
+
+export interface StudentContext {
+  lastRecord: ClassRecord | null
+  lastRecordSummary: string | null
+}
 
 export interface StudentPlanState {
   student: Student
@@ -20,6 +27,7 @@ export interface StudentPlanState {
   expanded: boolean
   editing: boolean
   extraNote: string
+  context?: StudentContext
 }
 
 interface PlanResultCardProps {
@@ -34,6 +42,7 @@ interface PlanResultCardProps {
   onUpdateTask: (studentId: string, taskIndex: number, updatedTask: TaskBlockType) => void
   onDeleteTask: (studentId: string, taskIndex: number) => void
   onAddTask: (studentId: string) => void
+  onReorderTasks: (studentId: string, tasks: TaskBlockType[]) => void
   onUpdateNotes: (studentId: string, notes: string) => void
   onUpdateReason: (studentId: string, reason: string) => void
 }
@@ -50,6 +59,7 @@ export function PlanResultCard({
   onUpdateTask,
   onDeleteTask,
   onAddTask,
+  onReorderTasks,
   onUpdateNotes,
   onUpdateReason
 }: PlanResultCardProps) {
@@ -179,6 +189,24 @@ export function PlanResultCard({
           </div>
         </div>
 
+        {/* 学员上下文信息：备注 + 上次课堂记录 */}
+        {(item.student.notes || item.context?.lastRecordSummary) && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {item.student.notes && (
+              <span className="flex items-center gap-1">
+                <FileText className="w-3 h-3" />
+                {item.student.notes}
+              </span>
+            )}
+            {item.context?.lastRecordSummary && (
+              <span className="flex items-center gap-1">
+                <BookOpen className="w-3 h-3" />
+                {item.context.lastRecordSummary}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* 展开的计划内容 */}
         {item.expanded && item.plan && (
           <div className="mt-4 pt-4 border-t space-y-3">
@@ -197,24 +225,22 @@ export function PlanResultCard({
                 )}
               </div>
               {item.editing ? (
-                <div className="space-y-2">
-                  {item.plan.tasks.map((task, idx) => (
-                    <TaskBlock
-                      key={idx}
-                      task={task}
-                      index={idx}
-                      editable
-                      onChange={(updatedTask) => onUpdateTask(item.student.id, idx, updatedTask)}
-                      onDelete={() => onDeleteTask(item.student.id, idx)}
+                <>
+                  {item.plan.tasks.length > 0 ? (
+                    <SortableTaskList
+                      tasks={item.plan.tasks}
+                      compact
                       wordbanks={wordbanks}
+                      onTasksChange={(newTasks) => onReorderTasks(item.student.id, newTasks)}
+                      onUpdateTask={(idx, updatedTask) => onUpdateTask(item.student.id, idx, updatedTask)}
+                      onDeleteTask={(idx) => onDeleteTask(item.student.id, idx)}
                     />
-                  ))}
-                  {item.plan.tasks.length === 0 && (
+                  ) : (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       暂无任务，点击上方按钮添加
                     </p>
                   )}
-                </div>
+                </>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {item.plan.tasks.map((task, idx) => (

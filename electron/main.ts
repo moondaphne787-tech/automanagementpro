@@ -483,12 +483,34 @@ async function createWindow() {
   })
 }
 
+// SQL 安全校验：只允许常规 DML 操作，禁止 DDL 和多语句
+function validateSQL(sql: string): void {
+  const trimmed = sql.trim()
+  const upper = trimmed.toUpperCase()
+
+  // 只允许 SELECT / INSERT / UPDATE / DELETE / PRAGMA / WITH (CTE)
+  const ALLOWED_PREFIXES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'PRAGMA', 'WITH']
+  const startsWithAllowed = ALLOWED_PREFIXES.some(p => upper.startsWith(p))
+  if (!startsWithAllowed) {
+    throw new Error(`SQL 操作被拒绝：不允许的语句类型。仅允许 ${ALLOWED_PREFIXES.join('/')}`)
+  }
+
+  // 禁止分号分隔的多语句（参数化查询中的值不会被匹配，因为 better-sqlite3 的 prepare 只接受单语句）
+  // 但仍做防御性检查：去掉字符串字面量后检查是否有多个分号
+  const withoutStrings = trimmed.replace(/'[^']*'/g, '').replace(/"[^"]*"/g, '')
+  const semicolonCount = (withoutStrings.match(/;/g) || []).length
+  if (semicolonCount > 1) {
+    throw new Error('SQL 操作被拒绝：不允许多语句执行')
+  }
+}
+
 // IPC 处理程序 - 数据库操作
 ipcMain.handle('db:query', async (_event, sql: string, params: unknown[] = []) => {
   if (!db) throw new Error('Database not initialized')
+  validateSQL(sql)
   try {
     const stmt = db.prepare(sql)
-    if (sql.trim().toUpperCase().startsWith('SELECT')) {
+    if (sql.trim().toUpperCase().startsWith('SELECT') || sql.trim().toUpperCase().startsWith('WITH') || sql.trim().toUpperCase().startsWith('PRAGMA')) {
       return stmt.all(...params)
     } else if (sql.trim().toUpperCase().startsWith('INSERT')) {
       const result = stmt.run(...params)
@@ -505,6 +527,7 @@ ipcMain.handle('db:query', async (_event, sql: string, params: unknown[] = []) =
 
 ipcMain.handle('db:queryOne', async (_event, sql: string, params: unknown[] = []) => {
   if (!db) throw new Error('Database not initialized')
+  validateSQL(sql)
   try {
     const stmt = db.prepare(sql)
     return stmt.get(...params)
@@ -516,6 +539,10 @@ ipcMain.handle('db:queryOne', async (_event, sql: string, params: unknown[] = []
 
 ipcMain.handle('db:transaction', async (_event, statements: Array<{ sql: string; params: unknown[] }>) => {
   if (!db) throw new Error('Database not initialized')
+  // 校验事务中的每条语句
+  for (const { sql } of statements) {
+    validateSQL(sql)
+  }
   try {
     const transaction = db.transaction(() => {
       statements.forEach(({ sql, params }) => {

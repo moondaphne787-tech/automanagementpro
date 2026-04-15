@@ -1,10 +1,10 @@
 /**
  * 朗读打卡独立 Store
- * 
+ *
  * 从 appStore 中拆分出来，避免频繁的打卡状态变更触发其他 slice 的 selector 重新计算。
- * 
- * 注意：统计逻辑使用"昨日"日期，因为有些学生晚上10点后才打卡，
- * 第二天统计前一天的数据更完整。
+ *
+ * 支持点击日历日期切换 targetDate，实现补录功能。
+ * 默认 targetDate 为昨日。
  */
 
 import { create } from 'zustand'
@@ -14,6 +14,12 @@ import { toast } from 'sonner'
 
 // 从 types 中重新导出 CheckinStudent，保持向后兼容
 export type { CheckinStudent } from './types'
+
+function getYesterdayDate(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().split('T')[0]
+}
 
 export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) => ({
   // 初始状态
@@ -25,25 +31,57 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
   yesterdayDate: '',
   todayDate: '',
   checkinLoading: false,
-  
+
+  // 目标日期，默认昨日
+  targetDate: getYesterdayDate(),
+
+  // 每日打卡人数统计
+  dailyCheckinCounts: [],
+  showDailyView: false,
+
   searchQuery: '',
   showOnlyUnchecked: false,
   selectedStudentIds: new Set<string>(),
-  
-  // 设置选中的月份
+
+  // 设置选中的月份（重置 targetDate 为昨日）
   setSelectedMonth: (year, month) => {
-    set({ selectedYear: year, selectedMonth: month })
+    set({ selectedYear: year, selectedMonth: month, targetDate: getYesterdayDate() })
+    get().fetchMonthSummary()
+    if (get().showDailyView) {
+      get().fetchDailyCheckinCounts()
+    }
+  },
+
+  // 设置目标日期（点击日历日期时调用）
+  setTargetDate: (date) => {
+    set({ targetDate: date })
     get().fetchMonthSummary()
   },
-  
+
+  // 重置为昨日
+  resetTargetDate: () => {
+    const yesterday = getYesterdayDate()
+    const y = new Date()
+    y.setDate(y.getDate() - 1)
+    set({
+      targetDate: yesterday,
+      selectedYear: y.getFullYear(),
+      selectedMonth: y.getMonth() + 1
+    })
+    get().fetchMonthSummary()
+    if (get().showDailyView) {
+      get().fetchDailyCheckinCounts()
+    }
+  },
+
   // 获取月度打卡统计
   fetchMonthSummary: async () => {
     set({ checkinLoading: true })
-    
+
     try {
-      const { selectedYear, selectedMonth } = get()
-      const result = await readingCheckinDb.getMonthSummary(selectedYear, selectedMonth)
-      
+      const { selectedYear, selectedMonth, targetDate } = get()
+      const result = await readingCheckinDb.getMonthSummary(selectedYear, selectedMonth, targetDate)
+
       set({
         checkinStudents: result.students,
         totalStudents: result.totalStudents,
@@ -58,23 +96,21 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
       toast.error('加载打卡数据失败')
     }
   },
-  
-  // 昨日打卡（乐观更新）
+
+  // 为目标日期打卡（乐观更新）
   checkYesterday: async (studentId, studentName) => {
-    const { checkinStudents, yesterdayCheckedCount, selectedYear, selectedMonth } = get()
-    
-    const currentYear = new Date().getFullYear()
-    const currentMonth = new Date().getMonth() + 1
-    const isCurrentMonth = selectedYear === currentYear && selectedMonth === currentMonth
-    
-    if (!isCurrentMonth) {
-      toast.error('只能在当前月份进行打卡操作')
+    const { checkinStudents, yesterdayCheckedCount, targetDate } = get()
+
+    // 不允许为未来日期打卡
+    const today = new Date().toISOString().split('T')[0]
+    if (targetDate > today) {
+      toast.error('不能为未来日期打卡')
       return
     }
-    
+
     const oldStudents = [...checkinStudents]
     const oldCount = yesterdayCheckedCount
-    
+
     const updatedStudents = checkinStudents.map(student => {
       if (student.id === studentId) {
         return {
@@ -85,24 +121,25 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
       }
       return student
     })
-    
+
     const sortedStudents = [...updatedStudents].sort((a, b) => {
       if (a.checkedYesterday !== b.checkedYesterday) {
         return a.checkedYesterday ? 1 : -1
       }
       return a.name.localeCompare(b.name, 'zh-CN')
     })
-    
+
     set({
       checkinStudents: sortedStudents,
       yesterdayCheckedCount: oldCount + 1
     })
-    
+
     try {
-      await readingCheckinDb.checkYesterday(studentId)
-      toast.success(`${studentName} 昨日打卡已记录`)
+      await readingCheckinDb.checkForDate(studentId, targetDate)
+      const dateLabel = formatDateLabel(targetDate)
+      toast.success(`${studentName} ${dateLabel}打卡已记录`)
     } catch (error) {
-      console.error('Failed to check yesterday:', error)
+      console.error('Failed to check:', error)
       set({
         checkinStudents: oldStudents,
         yesterdayCheckedCount: oldCount
@@ -110,23 +147,14 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
       toast.error('打卡失败，请重试')
     }
   },
-  
-  // 撤销昨日打卡（乐观更新）
+
+  // 撤销目标日期打卡（乐观更新）
   uncheckYesterday: async (studentId, studentName) => {
-    const { checkinStudents, yesterdayCheckedCount, selectedYear, selectedMonth } = get()
-    
-    const currentYear = new Date().getFullYear()
-    const currentMonth = new Date().getMonth() + 1
-    const isCurrentMonth = selectedYear === currentYear && selectedMonth === currentMonth
-    
-    if (!isCurrentMonth) {
-      toast.error('只能在当前月份撤销打卡')
-      return
-    }
-    
+    const { checkinStudents, yesterdayCheckedCount, targetDate } = get()
+
     const oldStudents = [...checkinStudents]
     const oldCount = yesterdayCheckedCount
-    
+
     const updatedStudents = checkinStudents.map(student => {
       if (student.id === studentId) {
         return {
@@ -137,24 +165,25 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
       }
       return student
     })
-    
+
     const sortedStudents = [...updatedStudents].sort((a, b) => {
       if (a.checkedYesterday !== b.checkedYesterday) {
         return a.checkedYesterday ? 1 : -1
       }
       return a.name.localeCompare(b.name, 'zh-CN')
     })
-    
+
     set({
       checkinStudents: sortedStudents,
       yesterdayCheckedCount: oldCount - 1
     })
-    
+
     try {
-      await readingCheckinDb.uncheckYesterday(studentId)
-      toast.success(`${studentName} 昨日打卡已撤销`)
+      await readingCheckinDb.uncheckForDate(studentId, targetDate)
+      const dateLabel = formatDateLabel(targetDate)
+      toast.success(`${studentName} ${dateLabel}打卡已撤销`)
     } catch (error) {
-      console.error('Failed to uncheck yesterday:', error)
+      console.error('Failed to uncheck:', error)
       set({
         checkinStudents: oldStudents,
         yesterdayCheckedCount: oldCount
@@ -162,12 +191,12 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
       toast.error('撤销失败，请重试')
     }
   },
-  
+
   // 设置搜索查询
   setSearchQuery: (query) => {
     set({ searchQuery: query })
   },
-  
+
   // 切换只看未打卡
   toggleShowOnlyUnchecked: () => {
     set(state => ({ showOnlyUnchecked: !state.showOnlyUnchecked }))
@@ -200,21 +229,17 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
     set({ selectedStudentIds: new Set<string>() })
   },
 
-  // 批量昨日打卡（乐观更新）
+  // 批量为目标日期打卡（乐观更新）
   batchCheckYesterday: async () => {
-    const { checkinStudents, yesterdayCheckedCount, selectedStudentIds, selectedYear, selectedMonth } = get()
+    const { checkinStudents, yesterdayCheckedCount, selectedStudentIds, targetDate } = get()
 
-    const currentYear = new Date().getFullYear()
-    const currentMonth = new Date().getMonth() + 1
-    const isCurrentMonth = selectedYear === currentYear && selectedMonth === currentMonth
-
-    if (!isCurrentMonth) {
-      toast.error('只能在当前月份进行打卡操作')
+    const today = new Date().toISOString().split('T')[0]
+    if (targetDate > today) {
+      toast.error('不能为未来日期打卡')
       return
     }
 
     const ids = Array.from(selectedStudentIds)
-    // 只对未打卡的学员执行
     const uncheckedIds = new Set(
       checkinStudents.filter(s => ids.includes(s.id) && !s.checkedYesterday).map(s => s.id)
     )
@@ -246,15 +271,44 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
     })
 
     try {
-      await readingCheckinDb.batchCheckYesterday(Array.from(uncheckedIds))
-      toast.success(`已为 ${uncheckedIds.size} 名学员记录昨日打卡`)
+      await readingCheckinDb.batchCheckForDate(Array.from(uncheckedIds), targetDate)
+      const dateLabel = formatDateLabel(targetDate)
+      toast.success(`已为 ${uncheckedIds.size} 名学员记录${dateLabel}打卡`)
     } catch (error) {
-      console.error('Failed to batch check yesterday:', error)
+      console.error('Failed to batch check:', error)
       set({
         checkinStudents: oldStudents,
         yesterdayCheckedCount: oldCount
       })
       toast.error('批量打卡失败，请重试')
     }
+  },
+
+  // 获取每日打卡人数统计
+  fetchDailyCheckinCounts: async () => {
+    try {
+      const { selectedYear, selectedMonth } = get()
+      const counts = await readingCheckinDb.getDailyCheckinCounts(selectedYear, selectedMonth)
+      set({ dailyCheckinCounts: counts })
+    } catch (error) {
+      console.error('Failed to fetch daily checkin counts:', error)
+    }
+  },
+
+  // 切换日历视图显示
+  toggleDailyView: () => {
+    const willShow = !get().showDailyView
+    set({ showDailyView: willShow })
+    if (willShow) {
+      get().fetchDailyCheckinCounts()
+    }
   }
 }))
+
+/** 格式化日期标签用于 toast */
+function formatDateLabel(date: string): string {
+  const yesterday = getYesterdayDate()
+  if (date === yesterday) return '昨日'
+  const parts = date.split('-')
+  return `${parseInt(parts[1])}月${parseInt(parts[2])}日`
+}

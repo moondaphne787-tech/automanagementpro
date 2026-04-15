@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Clock, AlertTriangle, CalendarX, UserCog, FilePenLine, BarChart3 } from 'lucide-react'
+import { Clock, AlertTriangle, CalendarX, UserCog, FilePenLine, BarChart3, Calendar, CalendarCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getLevelColor, formatHours, isHoursWarning } from '@/lib/utils'
 import type { StudentWithBilling, LEVEL_LABELS, STATUS_LABELS } from '@/types'
@@ -9,15 +9,36 @@ import { LEVEL_LABELS as levelLabels, STATUS_LABELS as statusLabels } from '@/ty
 interface FileFolderProps {
   student: StudentWithBilling
   expiredPlansCount?: number
+  scheduleInfo?: { nextClassDate: string | null; hasThisWeekClass: boolean }
   onQuickRecord?: (studentId: string) => void
   onViewPlans?: (studentId: string) => void
   onViewProgress?: (studentId: string) => void
 }
 
-export function FileFolder({ student, expiredPlansCount = 0, onQuickRecord, onViewPlans, onViewProgress }: FileFolderProps) {
+/** 格式化日期为简短显示：M/D */
+function formatShortDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr + 'T00:00:00')
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+/** 计算距今天数 */
+function daysAgo(dateStr: string): number {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const d = new Date(dateStr + 'T00:00:00')
+  return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+export function FileFolder({ student, expiredPlansCount = 0, scheduleInfo, onQuickRecord, onViewPlans, onViewProgress }: FileFolderProps) {
   const navigate = useNavigate()
   const isWarning = isHoursWarning(student.billing)
   const hasExpiredPlans = expiredPlansCount > 0
+  
+  const lastClassDate = student.last_class_date
+  const lastClassDaysAgo = lastClassDate ? daysAgo(lastClassDate) : null
+  // 超过14天没上课视为"很久没上课"
+  const isLongAbsent = lastClassDaysAgo !== null && lastClassDaysAgo > 14
   
   return (
     <motion.div
@@ -83,6 +104,12 @@ export function FileFolder({ student, expiredPlansCount = 0, onQuickRecord, onVi
           {/* 程度色点 */}
           <div className={cn("w-2.5 h-2.5 rounded-full", getLevelColor(student.level))} />
           <span className="font-medium text-sm truncate">{student.name}</span>
+          {/* 本周有课小图标 */}
+          {scheduleInfo?.hasThisWeekClass && (
+            <span title="本周有排课" className="ml-auto flex-shrink-0">
+              <CalendarCheck className="w-3.5 h-3.5 text-green-500" />
+            </span>
+          )}
         </div>
       </div>
       
@@ -112,6 +139,42 @@ export function FileFolder({ student, expiredPlansCount = 0, onQuickRecord, onVi
             {student.billing ? formatHours(student.billing.remaining_hours) : '0'}h
           </span>
         </div>
+        
+        {/* 最近上课日期 */}
+        <div className="flex justify-between items-center">
+          <span className="flex items-center gap-1">
+            <Calendar className="w-3 h-3" />
+            最近上课
+          </span>
+          <span className={cn(
+            "font-medium",
+            isLongAbsent && "text-orange-500"
+          )}>
+            {lastClassDate ? (
+              <>
+                {formatShortDate(lastClassDate)}
+                {isLongAbsent && (
+                  <span className="ml-1 text-[10px] text-orange-500">({lastClassDaysAgo}天前)</span>
+                )}
+              </>
+            ) : (
+              <span className="text-muted-foreground">暂无</span>
+            )}
+          </span>
+        </div>
+        
+        {/* 下次课日期 */}
+        {scheduleInfo?.nextClassDate && (
+          <div className="flex justify-between items-center">
+            <span className="flex items-center gap-1">
+              <CalendarCheck className="w-3 h-3" />
+              下次课
+            </span>
+            <span className="font-medium text-green-600 dark:text-green-400">
+              {formatShortDate(scheduleInfo.nextClassDate)}
+            </span>
+          </div>
+        )}
       </div>
       
       {/* 状态标签 */}

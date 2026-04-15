@@ -3,12 +3,78 @@ import { Edit, Trash2, Clock, Calendar, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { InlineField } from '@/components/ui/inline-field'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
 import { studentSchedulePreferenceDb } from '@/db'
 import { formatDateCN, formatHours, isHoursWarning, cn } from '@/lib/utils'
-import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS, DAY_LABELS } from '@/types'
+import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS, DAY_LABELS, GRADE_OPTIONS } from '@/types'
 import type { StudentSchedulePreference, DayOfWeek } from '@/types'
+
+/** 偏好时段表单（添加/编辑共用） */
+function PreferenceForm({ form, onChange, onSubmit, onCancel, submitLabel, title }: {
+  form: { day_of_week: DayOfWeek; preferred_start: string; preferred_end: string; notes: string }
+  onChange: (form: { day_of_week: DayOfWeek; preferred_start: string; preferred_end: string; notes: string }) => void
+  onSubmit: () => void
+  onCancel: () => void
+  submitLabel: string
+  title?: string
+}) {
+  return (
+    <div className="border rounded-lg p-3 bg-blue-50/30 space-y-2">
+      {title && <div className="text-xs font-medium text-muted-foreground">{title}</div>}
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className="text-xs text-muted-foreground">星期</label>
+          <select
+            value={form.day_of_week}
+            onChange={(e) => onChange({ ...form, day_of_week: e.target.value as DayOfWeek })}
+            className="w-full h-8 px-2 rounded border text-sm"
+          >
+            <option value="monday">周一</option>
+            <option value="tuesday">周二</option>
+            <option value="wednesday">周三</option>
+            <option value="thursday">周四</option>
+            <option value="friday">周五</option>
+            <option value="saturday">周六</option>
+            <option value="sunday">周日</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground">开始</label>
+          <Input
+            type="time"
+            value={form.preferred_start}
+            onChange={(e) => onChange({ ...form, preferred_start: e.target.value })}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground">结束</label>
+          <Input
+            type="time"
+            value={form.preferred_end}
+            onChange={(e) => onChange({ ...form, preferred_end: e.target.value })}
+            className="h-8 text-sm"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground">备注</label>
+        <Input
+          value={form.notes}
+          onChange={(e) => onChange({ ...form, notes: e.target.value })}
+          placeholder="可选"
+          className="h-8 text-sm"
+        />
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={onSubmit}>{submitLabel}</Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>取消</Button>
+      </div>
+    </div>
+  )
+}
 
 interface InfoTabProps {
   studentId: string
@@ -19,6 +85,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
   const currentBilling = useAppStore(s => s.currentBilling)
   const updateBilling = useAppStore(s => s.updateBilling)
   const updateStudent = useAppStore(s => s.updateStudent)
+  const selectStudent = useAppStore(s => s.selectStudent)
 
   const [billingForm, setBillingForm] = useState({
     total_hours: '',
@@ -60,6 +127,13 @@ export function InfoTab({ studentId }: InfoTabProps) {
   const loadSchedulePreferences = async () => {
     const prefs = await studentSchedulePreferenceDb.getByStudentId(studentId)
     setSchedulePreferences(prefs)
+  }
+
+  // 内联编辑保存：更新学员字段后刷新 store
+  const handleFieldSave = async (field: string, value: string | number | boolean | null) => {
+    await updateStudent(studentId, { [field]: value })
+    // 重新加载当前学员数据以确保 UI 同步
+    await selectStudent(studentId)
   }
 
   const handleAddHours = async () => {
@@ -139,54 +213,82 @@ export function InfoTab({ studentId }: InfoTabProps) {
 
   if (!currentStudent) return null
 
+  // select 选项
+  const typeOptions = Object.entries(STUDENT_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))
+  const statusOptions = Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))
+  const gradeOptions = GRADE_OPTIONS.map(g => ({ value: g, label: g }))
+  const levelOptions = Object.entries(LEVEL_LABELS).map(([v, l]) => ({ value: v, label: l }))
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* 基本信息 */}
+      {/* 基本信息 — 内联编辑 */}
       <Card>
         <CardHeader>
           <CardTitle>基本信息</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">学员类型：</span>
-              <span>{STUDENT_TYPE_LABELS[currentStudent.student_type]}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">状态：</span>
-              <span>{STATUS_LABELS[currentStudent.status]}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">年级：</span>
-              <span>{currentStudent.grade || '-'}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">程度：</span>
-              <span>{LEVEL_LABELS[currentStudent.level]}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">学校：</span>
-              <span>{currentStudent.school || '-'}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">入学日期：</span>
-              <span>{formatDateCN(currentStudent.enroll_date)}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">入学成绩：</span>
-              <span>{currentStudent.initial_score || '-'}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">入学词汇量：</span>
-              <span>{currentStudent.initial_vocab || '-'}</span>
-            </div>
-          </div>
-          {currentStudent.notes && (
-            <div className="pt-3 border-t">
-              <span className="text-muted-foreground text-sm">备注：</span>
-              <p className="text-sm mt-1">{currentStudent.notes}</p>
-            </div>
-          )}
+        <CardContent className="space-y-2">
+          <InlineField
+            label="学员类型"
+            value={currentStudent.student_type}
+            displayValue={STUDENT_TYPE_LABELS[currentStudent.student_type]}
+            type="select"
+            options={typeOptions}
+            onSave={(v) => handleFieldSave('student_type', v)}
+          />
+          <InlineField
+            label="状态"
+            value={currentStudent.status}
+            displayValue={STATUS_LABELS[currentStudent.status]}
+            type="select"
+            options={statusOptions}
+            onSave={(v) => handleFieldSave('status', v)}
+          />
+          <InlineField
+            label="年级"
+            value={currentStudent.grade}
+            type="select"
+            options={[{ value: '', label: '-' }, ...gradeOptions]}
+            onSave={(v) => handleFieldSave('grade', v)}
+          />
+          <InlineField
+            label="程度"
+            value={currentStudent.level}
+            displayValue={LEVEL_LABELS[currentStudent.level]}
+            type="select"
+            options={levelOptions}
+            onSave={(v) => handleFieldSave('level', v)}
+          />
+          <InlineField
+            label="学校"
+            value={currentStudent.school}
+            type="text"
+            onSave={(v) => handleFieldSave('school', v)}
+          />
+          <InlineField
+            label="入学日期"
+            value={currentStudent.enroll_date}
+            displayValue={formatDateCN(currentStudent.enroll_date)}
+            type="date"
+            onSave={(v) => handleFieldSave('enroll_date', v)}
+          />
+          <InlineField
+            label="入学成绩"
+            value={currentStudent.initial_score}
+            type="number"
+            onSave={(v) => handleFieldSave('initial_score', v)}
+          />
+          <InlineField
+            label="入学词汇量"
+            value={currentStudent.initial_vocab}
+            type="number"
+            onSave={(v) => handleFieldSave('initial_vocab', v)}
+          />
+          <InlineField
+            label="备注"
+            value={currentStudent.notes}
+            type="text"
+            onSave={(v) => handleFieldSave('notes', v)}
+          />
         </CardContent>
       </Card>
 
@@ -223,7 +325,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
                   <div className="text-xs text-muted-foreground">剩余课时</div>
                 </div>
               </div>
-              
+
               <div className="flex items-end gap-3">
                 <div className="flex-1">
                   <label className="text-sm text-muted-foreground">增加课时</label>
@@ -248,7 +350,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
                     onChange={(e) => setBillingForm({ ...billingForm, warning_threshold: e.target.value })}
                   />
                 </div>
-                <Button 
+                <Button
                   variant="outline"
                   onClick={() => updateBilling(studentId, { warning_threshold: parseFloat(billingForm.warning_threshold) })}
                 >
@@ -276,67 +378,19 @@ export function InfoTab({ studentId }: InfoTabProps) {
           ) : (
             <div className="space-y-1">
               {schedulePreferences.map((pref) => {
-                // 如果正在编辑这个偏好，显示内联编辑表单
                 if (editingPreference?.id === pref.id) {
                   return (
-                    <div key={pref.id} className="border rounded-lg p-3 bg-blue-50/30 space-y-2">
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-xs text-muted-foreground">星期</label>
-                          <select
-                            value={preferenceForm.day_of_week}
-                            onChange={(e) => setPreferenceForm({ ...preferenceForm, day_of_week: e.target.value as DayOfWeek })}
-                            className="w-full h-8 px-2 rounded border text-sm"
-                          >
-                            <option value="monday">周一</option>
-                            <option value="tuesday">周二</option>
-                            <option value="wednesday">周三</option>
-                            <option value="thursday">周四</option>
-                            <option value="friday">周五</option>
-                            <option value="saturday">周六</option>
-                            <option value="sunday">周日</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground">开始</label>
-                          <Input
-                            type="time"
-                            value={preferenceForm.preferred_start}
-                            onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_start: e.target.value })}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground">结束</label>
-                          <Input
-                            type="time"
-                            value={preferenceForm.preferred_end}
-                            onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_end: e.target.value })}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted-foreground">备注</label>
-                        <Input
-                          value={preferenceForm.notes}
-                          onChange={(e) => setPreferenceForm({ ...preferenceForm, notes: e.target.value })}
-                          placeholder="可选"
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={handleUpdatePreference}>保存</Button>
-                        <Button variant="outline" size="sm" onClick={() => {
-                          setEditingPreference(null)
-                          resetPreferenceForm()
-                        }}>取消</Button>
-                      </div>
-                    </div>
+                    <PreferenceForm
+                      key={pref.id}
+                      form={preferenceForm}
+                      onChange={setPreferenceForm}
+                      onSubmit={handleUpdatePreference}
+                      onCancel={() => { setEditingPreference(null); resetPreferenceForm() }}
+                      submitLabel="保存"
+                    />
                   )
                 }
-                
-                // 正常显示偏好项
+
                 return (
                   <div key={pref.id} className="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 transition-colors">
                     <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded min-w-[40px] text-center">
@@ -349,15 +403,15 @@ export function InfoTab({ studentId }: InfoTabProps) {
                       <span className="text-xs text-muted-foreground truncate flex-1">({pref.notes})</span>
                     )}
                     <div className="ml-auto opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
-                      <button 
+                      <button
                         onClick={() => openEditPreference(pref)}
                         className="p-1 hover:bg-muted rounded"
                         title="编辑"
                       >
                         <Edit className="w-3 h-3" />
                       </button>
-                      <button 
-                        onClick={() => handleDeletePreference(pref.id)} 
+                      <button
+                        onClick={() => handleDeletePreference(pref.id)}
                         className="p-1 hover:bg-muted rounded text-destructive"
                         title="删除"
                       >
@@ -369,63 +423,17 @@ export function InfoTab({ studentId }: InfoTabProps) {
               })}
             </div>
           )}
-          
-          {/* 添加新偏好 - 底部折叠表单 */}
+
           {showPreferenceForm ? (
-            <div className="border rounded-lg p-3 bg-blue-50/30 space-y-2 mt-2">
-              <div className="text-xs font-medium text-muted-foreground">添加新偏好时段</div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-xs text-muted-foreground">星期</label>
-                  <select
-                    value={preferenceForm.day_of_week}
-                    onChange={(e) => setPreferenceForm({ ...preferenceForm, day_of_week: e.target.value as DayOfWeek })}
-                    className="w-full h-8 px-2 rounded border text-sm"
-                  >
-                    <option value="monday">周一</option>
-                    <option value="tuesday">周二</option>
-                    <option value="wednesday">周三</option>
-                    <option value="thursday">周四</option>
-                    <option value="friday">周五</option>
-                    <option value="saturday">周六</option>
-                    <option value="sunday">周日</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">开始</label>
-                  <Input
-                    type="time"
-                    value={preferenceForm.preferred_start}
-                    onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_start: e.target.value })}
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">结束</label>
-                  <Input
-                    type="time"
-                    value={preferenceForm.preferred_end}
-                    onChange={(e) => setPreferenceForm({ ...preferenceForm, preferred_end: e.target.value })}
-                    className="h-8 text-sm"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">备注</label>
-                <Input
-                  value={preferenceForm.notes}
-                  onChange={(e) => setPreferenceForm({ ...preferenceForm, notes: e.target.value })}
-                  placeholder="可选"
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleCreatePreference}>添加</Button>
-                <Button variant="outline" size="sm" onClick={() => {
-                  setShowPreferenceForm(false)
-                  resetPreferenceForm()
-                }}>取消</Button>
-              </div>
+            <div className="mt-2">
+              <PreferenceForm
+                form={preferenceForm}
+                onChange={setPreferenceForm}
+                onSubmit={handleCreatePreference}
+                onCancel={() => { setShowPreferenceForm(false); resetPreferenceForm() }}
+                submitLabel="添加"
+                title="添加新偏好时段"
+              />
             </div>
           ) : (
             <button
@@ -439,24 +447,31 @@ export function InfoTab({ studentId }: InfoTabProps) {
         </CardContent>
       </Card>
 
-      {/* 语音进度 */}
+      {/* 语音进度 — 内联编辑 */}
       <Card>
         <CardHeader>
           <CardTitle>语音训练进度</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">自然拼读进度</span>
-            <span>{currentStudent.phonics_progress || '未开始'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">自然拼读状态</span>
-            <span>{currentStudent.phonics_completed ? '已完成' : '进行中'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">国际音标状态</span>
-            <span>{currentStudent.ipa_completed ? '已完成' : '未开始'}</span>
-          </div>
+        <CardContent className="space-y-2">
+          <InlineField
+            label="自然拼读进度"
+            value={currentStudent.phonics_progress}
+            placeholder="未开始"
+            type="text"
+            onSave={(v) => handleFieldSave('phonics_progress', v)}
+          />
+          <InlineField
+            label="自然拼读状态"
+            value={currentStudent.phonics_completed}
+            type="checkbox"
+            onSave={(v) => handleFieldSave('phonics_completed', v)}
+          />
+          <InlineField
+            label="国际音标状态"
+            value={currentStudent.ipa_completed}
+            type="checkbox"
+            onSave={(v) => handleFieldSave('ipa_completed', v)}
+          />
         </CardContent>
       </Card>
 
@@ -476,7 +491,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
                 className="h-8"
               />
             </div>
-            <Button 
+            <Button
               size="sm"
               onClick={handleUpdateReadingProgress}
               disabled={readingProgress === (currentStudent.reading_progress || '')}

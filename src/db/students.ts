@@ -10,7 +10,7 @@ export const studentDb = {
     
     await ipcQuery(
       `INSERT INTO students (id, student_no, name, school, grade, account, enroll_date, student_type, status, level, initial_score, initial_vocab, phonics_progress, phonics_completed, ipa_completed, reading_progress, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, data.student_no, data.name, data.school, data.grade, data.account, data.enroll_date, data.student_type, data.status, data.level, data.initial_score, data.initial_vocab, data.phonics_progress, data.phonics_completed ? 1 : 0, data.ipa_completed ? 1 : 0, data.reading_progress, data.notes, now, now]
     )
     
@@ -34,7 +34,8 @@ export const studentDb = {
   async getAllWithBilling(filters: FilterOptions, sort: SortOptions): Promise<(Student & { billing: Billing | null })[]> {
     // remaining_hours 是 billing 表的生成列，会自动计算 total_hours - used_hours
     let sql = `
-      SELECT s.*, b.id as billing_id, b.total_hours, b.used_hours, b.remaining_hours, b.warning_threshold, b.last_payment_date
+      SELECT s.*, b.id as billing_id, b.total_hours, b.used_hours, b.remaining_hours, b.warning_threshold, b.last_payment_date,
+        (SELECT MAX(cr.class_date) FROM class_records cr WHERE cr.student_id = s.id) as last_class_date
       FROM students s
       LEFT JOIN billing b ON s.id = b.student_id
       WHERE 1=1
@@ -58,8 +59,8 @@ export const studentDb = {
       params.push(filters.grade)
     }
     if (filters.search) {
-      sql += ` AND s.name LIKE ?`
-      params.push(`%${filters.search}%`)
+      sql += ` AND (s.name LIKE ? OR s.student_no LIKE ?)`
+      params.push(`%${filters.search}%`, `%${filters.search}%`)
     }
     
     // 按周几筛选有课学员：同时查询偏好表和已排课记录
@@ -67,7 +68,6 @@ export const studentDb = {
     if (filters.day_of_week !== 'all') {
       // SQLite 使用 strftime('%w', class_date) 计算星期几
       // %w: 0=周日, 1=周一, 2=周二, 3=周三, 4=周四, 5=周五, 6=周六
-      // day_of_week 字符串格式: monday, tuesday, ... 需要转换为数字
       const dayOfWeekMap: Record<string, number> = {
         'sunday': 0,
         'monday': 1,
@@ -78,11 +78,12 @@ export const studentDb = {
         'saturday': 6
       }
       const dayNum = dayOfWeekMap[filters.day_of_week]
+      const today = new Date().toISOString().split('T')[0]
       sql += ` AND (
         EXISTS (SELECT 1 FROM student_schedule_preferences ssp WHERE ssp.student_id = s.id AND ssp.day_of_week = ?)
-        OR EXISTS (SELECT 1 FROM scheduled_classes sc WHERE sc.student_id = s.id AND sc.status = 'scheduled' AND strftime('%w', sc.class_date) = ?)
+        OR EXISTS (SELECT 1 FROM scheduled_classes sc WHERE sc.student_id = s.id AND sc.status = 'scheduled' AND sc.class_date >= ? AND strftime('%w', sc.class_date) = ?)
       )`
-      params.push(filters.day_of_week, String(dayNum))
+      params.push(filters.day_of_week, today, String(dayNum))
     }
     
     // 排序
@@ -110,7 +111,8 @@ export const studentDb = {
         notes: null,
         created_at: row.created_at,
         updated_at: row.updated_at
-      } : null
+      } : null,
+      last_class_date: row.last_class_date || null
     }))
   },
   

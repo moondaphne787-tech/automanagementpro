@@ -160,6 +160,7 @@ export interface StudentWithBillingRow extends StudentRow {
   remaining_hours: number | null
   warning_threshold: number | null
   last_payment_date: string | null
+  last_class_date: string | null  // 子查询获取的最近上课日期
 }
 
 /** trial students JOIN 查询的原始行 */
@@ -202,6 +203,7 @@ export interface ConversionWithStudentRow extends TrialConversionRow {
 /** reading_checkins 聚合查询的原始行 */
 export interface ReadingCheckinAggRow {
   id: string
+  student_no: string | null
   name: string
   monthly_count: number
   checked_yesterday: number  // SQLite 0/1
@@ -237,6 +239,10 @@ export const BILLING_UPDATABLE_FIELDS = new Set([
 export const EXAM_SCORE_UPDATABLE_FIELDS = new Set([
   'student_id', 'exam_date', 'exam_name', 'exam_type',
   'score', 'full_score', 'notes'
+])
+
+export const VOCAB_TEST_UPDATABLE_FIELDS = new Set([
+  'student_id', 'test_date', 'vocab_count', 'test_source', 'notes'
 ])
 
 export const LEARNING_PHASE_UPDATABLE_FIELDS = new Set([

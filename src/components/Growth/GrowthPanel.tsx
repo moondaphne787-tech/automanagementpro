@@ -12,8 +12,10 @@ import { WordbankProgressSummary } from './WordbankProgressSummary'
 import { TaskStats } from './TaskStats'
 import { PerformanceStats } from './PerformanceStats'
 import { ExamScoreForm } from './ExamScoreForm'
+import { VocabTestForm } from './VocabTestForm'
+import { VocabChart } from './VocabChart'
 import { AutoLearningPhasesPanel, AutoPhase } from './AutoLearningPhasesPanel'
-import type { ExamScore, PhaseType } from '@/types'
+import type { ExamScore, VocabTest, PhaseType } from '@/types'
 import { ExamType } from '@/types'
 
 // 学期配置接口
@@ -35,12 +37,21 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
   const createExamScore = useAppStore(s => s.createExamScore)
   const updateExamScore = useAppStore(s => s.updateExamScore)
   const deleteExamScore = useAppStore(s => s.deleteExamScore)
+  const vocabTests = useAppStore(s => s.vocabTests)
+  const loadVocabTests = useAppStore(s => s.loadVocabTests)
+  const createVocabTest = useAppStore(s => s.createVocabTest)
+  const updateVocabTest = useAppStore(s => s.updateVocabTest)
+  const deleteVocabTest = useAppStore(s => s.deleteVocabTest)
   const currentProgress = useAppStore(s => s.currentProgress)
   const classRecords = useAppStore(s => s.classRecords)
+  const loadClassRecords = useAppStore(s => s.loadClassRecords)
+  const loadSemesterConfig = useAppStore(s => s.loadSemesterConfig)
 
   const [showExamForm, setShowExamForm] = useState(false)
   const [editingExam, setEditingExam] = useState<ExamScore | null>(null)
-  const [activeSection, setActiveSection] = useState<'overview' | 'exams' | 'phases'>('overview')
+  const [showVocabForm, setShowVocabForm] = useState(false)
+  const [editingVocab, setEditingVocab] = useState<VocabTest | null>(null)
+  const [activeSection, setActiveSection] = useState<'overview' | 'exams' | 'vocab' | 'phases'>('overview')
 
   // 完成率趋势数据
   const [completionRateData, setCompletionRateData] = useState<{ date: string; total: number; completed: number; rate: number }[]>([])
@@ -49,7 +60,10 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
   const semesterConfig = useAppStore(state => state.semesterConfig)
 
   useEffect(() => {
+    loadClassRecords(studentId)
     loadExamScores(studentId)
+    loadVocabTests(studentId)
+    loadSemesterConfig()
     loadCompletionRateData(studentId)
   }, [studentId])
 
@@ -143,11 +157,23 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
     setEditingExam(null)
   }
 
+  const handleSaveVocab = async (data: any) => {
+    if (editingVocab) {
+      await updateVocabTest(editingVocab.id, data)
+    } else {
+      await createVocabTest(data)
+    }
+    setShowVocabForm(false)
+    setEditingVocab(null)
+  }
+
   // 计算统计数据
   const totalClasses = classRecords.length
   const totalHours = classRecords.reduce((sum, r) => sum + r.duration_hours, 0)
   const latestScore = examScores[0]
   const previousScore = examScores[1]
+  const latestVocab = vocabTests[0]
+  const previousVocab = vocabTests[1]
 
   return (
     <div className="space-y-6">
@@ -164,6 +190,12 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
           onClick={() => setActiveSection('exams')}
         >
           考试成绩
+        </Button>
+        <Button
+          variant={activeSection === 'vocab' ? 'default' : 'ghost'}
+          onClick={() => setActiveSection('vocab')}
+        >
+          词汇量
         </Button>
         <Button
           variant={activeSection === 'phases' ? 'default' : 'ghost'}
@@ -214,6 +246,32 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
                         </span>
                       ) : (
                         <span className="text-muted-foreground">成绩持平</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {latestVocab && (
+                <div className="mt-3 p-3 bg-muted/50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">最近词汇量</span>
+                    <span className="font-semibold">{latestVocab.vocab_count} 词</span>
+                  </div>
+                  {previousVocab && (
+                    <div className="flex items-center gap-1 text-xs mt-1">
+                      {latestVocab.vocab_count > previousVocab.vocab_count ? (
+                        <span className="text-green-600">
+                          <TrendingUp className="w-3 h-3 inline mr-1" />
+                          较上次增长 {latestVocab.vocab_count - previousVocab.vocab_count} 词
+                        </span>
+                      ) : latestVocab.vocab_count < previousVocab.vocab_count ? (
+                        <span className="text-red-600">
+                          <TrendingDown className="w-3 h-3 inline mr-1" />
+                          较上次减少 {previousVocab.vocab_count - latestVocab.vocab_count} 词
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">词汇量持平</span>
                       )}
                     </div>
                   )}
@@ -376,6 +434,97 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
                   </Card>
                 )
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeSection === 'vocab' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="font-semibold">词汇量测试记录</h3>
+            <Button onClick={() => { setShowVocabForm(true); setEditingVocab(null) }}>
+              <Plus className="w-4 h-4 mr-1" />
+              添加记录
+            </Button>
+          </div>
+
+          {showVocabForm && (
+            <VocabTestForm
+              studentId={studentId}
+              onSave={handleSaveVocab}
+              onCancel={() => { setShowVocabForm(false); setEditingVocab(null) }}
+              initialData={editingVocab || undefined}
+            />
+          )}
+
+          {/* 词汇量增长趋势图 */}
+          {vocabTests.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">词汇量增长趋势</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <VocabChart tests={vocabTests} />
+              </CardContent>
+            </Card>
+          )}
+
+          {vocabTests.length === 0 ? (
+            <div className="text-center text-muted-foreground py-12">
+              暂无词汇量测试记录
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {vocabTests.map((test) => (
+                <Card key={test.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-semibold">{test.vocab_count} 词</span>
+                          <span className="text-xs text-muted-foreground">{test.test_date}</span>
+                          {test.test_source && (
+                            <span className="text-xs px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600">
+                              {test.test_source}
+                            </span>
+                          )}
+                        </div>
+                        {test.notes && (
+                          <p className="text-sm text-muted-foreground">{test.notes}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setEditingVocab(test); setShowVocabForm(true) }}
+                        >
+                          编辑
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={async () => {
+                            const confirmed = await confirmDialog({
+                              title: '删除词汇量记录',
+                              message: '确定删除此词汇量测试记录？',
+                              confirmText: '删除',
+                              variant: 'danger'
+                            })
+                            if (confirmed) {
+                              await deleteVocabTest(test.id)
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
         </div>

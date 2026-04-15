@@ -4,22 +4,20 @@ import { TASK_TYPE_LABELS } from '@/types'
 // 格式化任务为文本
 function formatTaskText(task: TaskBlock): string {
   const typeName = TASK_TYPE_LABELS[task.type] || task.type
-  
-  if ((task.type === 'vocab_new' || task.type === 'vocab_review') && task.wordbank_label) {
+
+  // 优先使用 content 字段（AI 生成和手动编辑都会填充此字段）
+  if (task.content) {
+    return `${typeName}：${task.content}`
+  }
+
+  // 兜底：兼容旧数据，从 wordbank_label + levels 拼接
+  if ((task.type === 'vocab_new' || task.type === 'vocab_review' || task.type === 'nine_grid') && task.wordbank_label) {
     if (task.level_from && task.level_to) {
       return `${typeName}：${task.wordbank_label} 第${task.level_from}-${task.level_to}关`
     }
     return `${typeName}：${task.wordbank_label}`
   }
-  
-  if (task.type === 'nine_grid' && task.wordbank_label) {
-    return `${typeName}：${task.wordbank_label}`
-  }
-  
-  if (task.content) {
-    return `${typeName}：${task.content}`
-  }
-  
+
   return typeName
 }
 
