@@ -1,16 +1,13 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, Search, ArrowUpDown, AlertTriangle, Upload, Users, SlidersHorizontal } from 'lucide-react'
+import { Plus, Search, ArrowUpDown, AlertTriangle, Upload, Users, SlidersHorizontal, ExternalLink } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { FileCabinet } from '@/components/FileCabinet/FileCabinet'
-import { EditPlansPanel, ViewProgressPanel } from '@/components/FileCabinet/StudentQuickPanels'
 import { SemesterReminder, CurrentSemesterBadge } from '@/components/Reminder/SemesterReminder'
 import { ImportStudentsDrawer } from '@/components/Drawers/ImportStudentsDrawer'
-import { BatchPrefDialog } from '@/components/Preferences/BatchPrefDialog'
-import { useBatchPrefDialog } from '@/hooks/useBatchPrefDialog'
+
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/lib/utils'
 import { GRADE_OPTIONS, LEVEL_LABELS, STATUS_LABELS } from '@/types'
@@ -78,14 +75,6 @@ export function Home() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(sort.direction)
   const [importDrawerOpen, setImportDrawerOpen] = useState(false)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  
-  // 快捷面板状态
-  const [editPlansOpen, setEditPlansOpen] = useState(false)
-  const [viewProgressOpen, setViewProgressOpen] = useState(false)
-  const [activeStudentId, setActiveStudentId] = useState<string | null>(null)
-  
-  // 批量设置时段偏好（共享 hook）
-  const batchPrefDialog = useBatchPrefDialog(loadStudents)
   
   // 追踪是否已加载过期计划，确保只加载一次
   const expiredPlansLoadedRef = useRef(false)
@@ -173,11 +162,7 @@ export function Home() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => batchPrefDialog.setOpen(true)}>
-            <Users className="w-4 h-4 mr-1" />
-            批量设置时段偏好
-          </Button>
-          <Button variant="outline" onClick={() => setImportDrawerOpen(true)}>
+<Button variant="outline" onClick={() => setImportDrawerOpen(true)}>
             <Upload className="w-4 h-4 mr-1" />
             批量导入
           </Button>
@@ -283,48 +268,85 @@ export function Home() {
         )}
       </div>
 
-      {/* 档案柜主体 */}
+      {/* 学员列表 - 表格视图 */}
       <div className="flex-1 overflow-auto p-6">
-        <FileCabinet
-          students={students}
-          loading={studentsLoading}
-          scheduleInfoMap={scheduleInfoMap}
-          onQuickRecord={(id) => { navigate(`/students/${id}`) }}
-          onViewPlans={(id) => { setActiveStudentId(id); setEditPlansOpen(true) }}
-          onViewProgress={(id) => { setActiveStudentId(id); setViewProgressOpen(true) }}
-        />
+        {studentsLoading ? (
+          <div className="flex items-center justify-center h-full text-muted-foreground">加载中...</div>
+        ) : students.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <Users className="w-12 h-12 mb-3 opacity-30" />
+            <p className="text-sm">暂无学员，点击右上角「新增学员」开始添加</p>
+          </div>
+        ) : (
+          <div className="border rounded-lg">
+            <div className="grid grid-cols-[1fr_5rem_5rem_5rem_6rem_6rem_7rem] gap-4 py-2.5 px-4 bg-muted/50 border-b text-sm font-medium text-muted-foreground">
+              <div>姓名</div>
+              <div>学号</div>
+              <div>年级</div>
+              <div>程度</div>
+              <div>状态</div>
+              <div className="text-right">剩余课时</div>
+              <div className="text-right">操作</div>
+            </div>
+            {students.map(student => {
+              const isWarning = student.status === 'active' && student.billing &&
+                student.billing.remaining_hours <= student.billing.warning_threshold
+              return (
+                <div
+                  key={student.id}
+                  className="grid grid-cols-[1fr_5rem_5rem_5rem_6rem_6rem_7rem] gap-4 py-2.5 px-4 border-b last:border-b-0 items-center hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/students/${student.id}`)}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm truncate">{student.name}</span>
+                    {student.student_type === 'trial' && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">体验</span>
+                    )}
+                    {isWarning && (
+                      <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
+                    )}
+                  </div>
+                  <div className="text-sm text-muted-foreground">{student.student_no || '-'}</div>
+                  <div className="text-sm text-muted-foreground">{student.grade || '-'}</div>
+                  <div className="text-sm">{LEVEL_LABELS[student.level]}</div>
+                  <div className="text-sm">
+                    <span className={cn(
+                      'px-2 py-0.5 text-xs rounded-full',
+                      student.status === 'active' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
+                      student.status === 'paused' ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                      'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                    )}>
+                      {STATUS_LABELS[student.status]}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    {student.billing ? (
+                      <span className={cn(
+                        'text-sm font-medium',
+                        isWarning ? 'text-red-600' : ''
+                      )}>
+                        {student.billing.remaining_hours}h
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">-</span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/students/${student.id}`); }}
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
-      
-      {/* 学员导入抽屉 */}
-      <ImportStudentsDrawer 
-        open={importDrawerOpen} 
-        onClose={() => setImportDrawerOpen(false)} 
-      />
-      
-      {/* 批量设置时段偏好对话框 */}
-      <BatchPrefDialog
-        open={batchPrefDialog.open}
-        onOpenChange={batchPrefDialog.setOpen}
-        students={students}
-        batchSelectedStudents={batchPrefDialog.selectedStudents}
-        setBatchSelectedStudents={batchPrefDialog.setSelectedStudents}
-        batchPrefForm={batchPrefDialog.form}
-        setBatchPrefForm={batchPrefDialog.setForm}
-        batchSaving={batchPrefDialog.saving}
-        onSave={batchPrefDialog.onSave}
-      />
-      
-      {/* 快捷面板 */}
-      <EditPlansPanel
-        open={editPlansOpen}
-        onOpenChange={setEditPlansOpen}
-        studentId={activeStudentId}
-      />
-      <ViewProgressPanel
-        open={viewProgressOpen}
-        onOpenChange={setViewProgressOpen}
-        studentId={activeStudentId}
-      />
     </div>
   )
 }

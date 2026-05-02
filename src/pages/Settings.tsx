@@ -16,13 +16,12 @@ import { PlanTemplateManager } from '@/components/Settings/PlanTemplateManager'
 import { SchedulePeriodManager } from '@/components/Settings/SchedulePeriodManager'
 import { cn } from '@/lib/utils'
 
-type SettingsTab = 'ai' | 'wordbank' | 'semester' | 'task_defaults' | 'plan_templates' | 'schedule_periods'
+type SettingsTab = 'ai' | 'wordbank' | 'semester' | 'templates' | 'schedule_periods'
 
 
 const TABS: Array<{ key: SettingsTab; label: string; icon: React.ReactNode }> = [
   { key: 'wordbank', label: '词库管理', icon: <BookOpen className="w-4 h-4" /> },
-  { key: 'task_defaults', label: '任务模板', icon: <Save className="w-4 h-4" /> },
-  { key: 'plan_templates', label: '课程模板', icon: <BookOpen className="w-4 h-4" /> },
+  { key: 'templates', label: '模板管理', icon: <Save className="w-4 h-4" /> },
   { key: 'ai', label: 'AI 配置', icon: <Settings2 className="w-4 h-4" /> },
   { key: 'semester', label: '学期设置', icon: <Calendar className="w-4 h-4" /> },
   { key: 'schedule_periods', label: '排课时段', icon: <Calendar className="w-4 h-4" /> },
@@ -422,9 +421,9 @@ export function Settings() {
           </div>
         )}
 
-        {/* 任务模板 Tab */}
-        {activeTab === 'task_defaults' && (
-          <div className="max-w-2xl">
+        {/* 模板管理 Tab（合并任务模板 + 课程模板） */}
+        {activeTab === 'templates' && (
+          <div className="max-w-3xl space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>任务默认文本模板</CardTitle>
@@ -448,12 +447,7 @@ export function Settings() {
                 </Button>
               </CardContent>
             </Card>
-          </div>
-        )}
 
-        {/* 课程模板 Tab */}
-        {activeTab === 'plan_templates' && (
-          <div className="max-w-3xl">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><BookOpen className="w-4 h-4" />课程设计模板</CardTitle>

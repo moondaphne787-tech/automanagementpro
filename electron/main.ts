@@ -365,22 +365,6 @@ function createTables() {
     )
   `)
 
-  // 待办事项表
-  // 注：student_name 字段已移除，通过 JOIN 查询从 students 表获取最新姓名
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS todos (
-      id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
-      student_id TEXT,
-      due_date TEXT,
-      completed INTEGER DEFAULT 0,
-      completed_at TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      sort_order INTEGER DEFAULT 0,
-      FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL
-    )
-  `)
-
   // 朗读打卡表
   db.exec(`
     CREATE TABLE IF NOT EXISTS reading_checkins (

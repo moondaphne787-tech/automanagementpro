@@ -1,5 +1,5 @@
 // 数据库工具函数
-import type { TaskBlock, ClassRecord, LessonPlan, Student, Teacher, TrialConversion, Todo, TeacherType, DayOfWeek, StudentType, StudentStatus, LevelType } from '@/types'
+import type { TaskBlock, ClassRecord, LessonPlan, Student, Teacher, TrialConversion, TeacherType, DayOfWeek, StudentType, StudentStatus, LevelType } from '@/types'
 
 // ===== 数据库行类型定义 =====
 // SQLite 返回的原始行类型，布尔值为 0/1，JSON 字段为字符串
@@ -95,19 +95,6 @@ export interface TrialConversionRow {
   commission_note: string | null
   notes: string | null
   created_at: string
-}
-
-/** todos 表 JOIN students 的原始行 */
-export interface TodoRow {
-  id: string
-  content: string
-  student_id: string | null
-  student_name: string | null
-  due_date: string | null
-  completed: number  // SQLite 0/1
-  completed_at: string | null
-  created_at: string
-  sort_order: number
 }
 
 /** scheduled_classes JOIN students/teachers 的原始行 */
@@ -380,20 +367,6 @@ export function mapTrialConversion(row: TrialConversionRow): TrialConversion {
   }
 }
 
-/**
- * 统一的 Todo 行映射函数
- * 将数据库原始行转换为 Todo 类型（布尔值转换）
- */
-export function mapTodo(row: TodoRow): Todo {
-  return {
-    ...row,
-    completed: !!row.completed,
-    student_id: row.student_id ?? undefined,
-    student_name: row.student_name ?? undefined,
-    due_date: row.due_date ?? undefined,
-    completed_at: row.completed_at ?? undefined,
-  }
-}
 
 // 初始化数据库 - 在 Electron 中由主进程处理
 export async function initDatabase(): Promise<void> {

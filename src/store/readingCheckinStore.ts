@@ -37,7 +37,6 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
 
   // 每日打卡人数统计
   dailyCheckinCounts: [],
-  prevDailyCheckinCounts: [],
   showDailyView: false,
 
   searchQuery: '',
@@ -315,11 +314,7 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
     try {
       const { selectedYear, selectedMonth } = get()
       const counts = await readingCheckinDb.getDailyCheckinCounts(selectedYear, selectedMonth)
-      // 获取上月对比数据
-      const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1
-      const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear
-      const prevCounts = await readingCheckinDb.getDailyCheckinCounts(prevYear, prevMonth)
-      set({ dailyCheckinCounts: counts, prevDailyCheckinCounts: prevCounts })
+      set({ dailyCheckinCounts: counts })
     } catch (error) {
       console.error('Failed to fetch daily checkin counts:', error)
     }

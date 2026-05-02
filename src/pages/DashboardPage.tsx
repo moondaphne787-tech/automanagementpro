@@ -10,7 +10,6 @@ import { Calendar, FileQuestion, BatteryLow, UserPlus, RefreshCw, Rocket, Users,
 import { toast } from 'sonner'
 import { useDashboard } from '../hooks/useDashboard'
 import { StatCard } from '../components/Dashboard/StatCard'
-import { TodoPanel } from '../components/Dashboard/TodoPanel'
 import { TodaySchedulePanel } from '../components/Dashboard/TodaySchedulePanel'
 import { WeeklyPlanStatus } from '../components/Dashboard/WeeklyPlanStatus'
 import { AlertStudents } from '../components/Dashboard/AlertStudents'
@@ -29,7 +28,6 @@ const PANEL_REGISTRY: Record<string, { label: string }> = {
   todaySchedule: { label: '今日排课' },
   weeklyPlan: { label: '本周计划状态' },
   alertStudents: { label: '需关注学员' },
-  todo: { label: '待办清单' },
   weeklySummary: { label: '本周课堂总结' },
   studentOverview: { label: '学员总览' },
 }
@@ -114,8 +112,6 @@ export function DashboardPage() {
         return <WeeklyPlanStatus items={data?.problemPlanStudents ?? []} loading={loading} />
       case 'alertStudents':
         return <AlertStudents students={data?.alertStudents ?? []} loading={loading} />
-      case 'todo':
-        return <TodoPanel todos={data?.todos ?? []} loading={loading} onRefresh={refresh} />
       case 'weeklySummary':
         return <WeeklyClassSummary summary={data?.weeklySummary ?? null} loading={loading} />
       case 'studentOverview':
@@ -162,8 +158,7 @@ export function DashboardPage() {
     data.stats.missingPlanCount === 0 &&
     data.stats.lowHoursCount === 0 &&
     data.stats.trialStudentCount === 0 &&
-    (data.todaySchedules?.length ?? 0) === 0 &&
-    (data.todos?.length ?? 0) === 0
+    (data.todaySchedules?.length ?? 0) === 0
 
   if (error) {
     return (

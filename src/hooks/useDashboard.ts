@@ -6,7 +6,6 @@ import { classRecordDb } from '../db/classRecords'
 import { scheduledClassDb } from '../db/schedule'
 import { billingDb } from '../db/billing'
 import { trialConversionDb } from '../db/trialConversions'
-import { todoDb } from '../db/todos'
 import { getWeekRange, getTodayStr } from '../lib/dateUtils'
 import {
   formatDateRange,
@@ -102,7 +101,6 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
       const [
         allStudents,
         allBillings,
-        allTodos,
         weekPlans,
         weekRecords,
         todaySchedules,
@@ -114,7 +112,6 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
       ] = await Promise.all([
         studentDb.getAll(),
         billingDb.getAll(),
-        todoDb.getActive(),
         lessonPlanDb.getByDateRange(week.start, week.end),
         classRecordDb.getByDateRange(week.start, week.end),
         scheduledClassDb.getByDate(today),
@@ -202,7 +199,6 @@ export function useDashboard(cacheConfig: Partial<CacheConfig> = {}) {
         weeklySummary,
         alertStudents,
         studentOverview,
-        todos: allTodos,
       }
       
       // 更新缓存到 store

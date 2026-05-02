@@ -445,20 +445,6 @@ export const DAY_LABELS: Record<DayOfWeek, string> = {
   sunday: '周日'
 }
 
-// ===== Todo 类型 =====
-
-export interface Todo {
-  id: string
-  content: string
-  student_id?: string
-  student_name?: string
-  due_date?: string
-  completed: boolean
-  completed_at?: string
-  created_at: string
-  sort_order: number
-}
-
 // ===== Dashboard 类型 =====
 
 export interface DashboardStats {
@@ -525,7 +511,6 @@ export interface DashboardData {
   weeklySummary: WeeklySummary
   alertStudents: AlertStudentItem[]
   studentOverview: StudentOverviewData
-  todos: Todo[]
 }
 
 // ===== 学习规划类型 =====

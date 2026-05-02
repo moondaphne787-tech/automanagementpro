@@ -155,8 +155,6 @@ export const studentDb = {
       { sql: `DELETE FROM learning_phases WHERE student_id = ?`, params: [id] },
       { sql: `DELETE FROM reading_checkins WHERE student_id = ?`, params: [id] },
       { sql: `DELETE FROM trial_conversions WHERE student_id = ?`, params: [id] },
-      // todos 的 student_id 置空而非删除，保留待办事项本身
-      { sql: `UPDATE todos SET student_id = NULL WHERE student_id = ?`, params: [id] },
       // 最后删除学员主记录
       { sql: `DELETE FROM students WHERE id = ?`, params: [id] },
     ])

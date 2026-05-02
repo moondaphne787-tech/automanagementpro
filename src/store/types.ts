@@ -270,7 +270,6 @@ export interface ReadingCheckinSlice {
 
   // 每日打卡人数统计
   dailyCheckinCounts: DailyCheckinCount[]
-  prevDailyCheckinCounts: DailyCheckinCount[]
   showDailyView: boolean
 
   // 搜索和过滤
