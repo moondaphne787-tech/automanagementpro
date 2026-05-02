@@ -7,81 +7,12 @@ import { useAppStore } from '@/store/appStore'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb, scheduledClassDb } from '@/db'
 import { sendAIRequest } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
+import { autoFillWordbankContent } from '@/ai/autoFillWordbankContent'
 import { StudentSelector } from './StudentSelector'
 import { PlanResultCard, StudentPlanState, GenerationStatus, StudentContext } from './PlanResultCard'
 import { GenerationControls } from './GenerationControls'
 import type { Student, TaskBlock as TaskBlockType, AIConfig, Wordbank, ClassRecord, StudentWordbankProgress } from '@/types'
 import { TASK_TYPE_LABELS } from '@/types'
-
-/**
- * 根据上次课堂记录中的词库学习任务，自动填充 AI 生成计划中的词库复习和词库学习 content。
- * - vocab_review: 如果 content 为空，填入 "检测复习{wordbank_label}{level_from}-{level_to}关"
- * - vocab_new: 如果 content 为空，填入 "学习{wordbank_label}{next_from}-{next_to}关"
- */
-function autoFillWordbankContent(
-  tasks: TaskBlockType[],
-  lastRecord: ClassRecord | null,
-  wordbankProgress: StudentWordbankProgress[]
-): TaskBlockType[] {
-  // 第一轮：基于上次课堂记录推算下次学习范围
-  let filled = tasks
-  if (lastRecord) {
-    const lastVocabNew = lastRecord.tasks.find(t => t.type === 'vocab_new')
-    if (lastVocabNew) {
-      const lastLabel = lastVocabNew.wordbank_label
-      const lastFrom = lastVocabNew.level_from
-      const lastTo = lastVocabNew.level_to
-      if (lastLabel && lastFrom && lastTo) {
-        const span = lastTo - lastFrom + 1
-        const progressItem = wordbankProgress.find(p => p.wordbank_label === lastLabel)
-        const totalLevels = progressItem?.total_levels_override || 60
-
-        filled = filled.map(task => {
-          if (task.type === 'vocab_review' && !task.content) {
-            return {
-              ...task,
-              content: `检测复习${lastLabel}第${lastFrom}-${lastTo}关`,
-              wordbank_label: task.wordbank_label || lastLabel,
-              level_from: task.level_from || lastFrom,
-              level_to: task.level_to || lastTo
-            }
-          }
-          if (task.type === 'vocab_new' && !task.content) {
-            const nextFrom = lastTo + 1
-            const nextTo = Math.min(lastTo + span, totalLevels)
-            if (nextFrom <= totalLevels) {
-              return {
-                ...task,
-                content: `学习${lastLabel}第${nextFrom}-${nextTo}关`,
-                wordbank_label: task.wordbank_label || lastLabel,
-                level_from: task.level_from || nextFrom,
-                level_to: task.level_to || nextTo
-              }
-            }
-          }
-          return task
-        })
-      }
-    }
-  }
-
-  // 第二轮：兜底填充 — 对仍然没有 content 的任务，根据自身字段拼接
-  return filled.map(task => {
-    if (task.content) return task
-
-    if ((task.type === 'vocab_new') && task.wordbank_label && task.level_from && task.level_to) {
-      return { ...task, content: `学习${task.wordbank_label}第${task.level_from}-${task.level_to}关` }
-    }
-    if ((task.type === 'vocab_review') && task.wordbank_label && task.level_from && task.level_to) {
-      return { ...task, content: `检测复习${task.wordbank_label}第${task.level_from}-${task.level_to}关` }
-    }
-    if (task.type === 'nine_grid' && task.wordbank_label) {
-      return { ...task, content: `清理${task.wordbank_label}九宫格，共清理30-50词/轮×____轮=____词（助教课上填写）` }
-    }
-
-    return task
-  })
-}
 
 interface GeneratePlansDrawerProps {
   open: boolean

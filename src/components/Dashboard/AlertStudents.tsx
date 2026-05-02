@@ -11,12 +11,12 @@ const alertTypeConfig = {
 }
 
 // 每种预警类型对应的快捷操作
-const alertActionConfig: Record<string, { icon: React.ReactNode; label: string; getPath: (studentId: string) => string }> = {
-  low_hours:      { icon: <DollarSign className="w-3 h-3" />, label: '续费', getPath: (id) => `/students/${id}?tab=info` },
-  no_record:      { icon: <FileText className="w-3 h-3" />, label: '补录', getPath: (id) => `/students/${id}?tab=records` },
-  expired_plans:  { icon: <ClipboardList className="w-3 h-3" />, label: '更新计划', getPath: (id) => `/students/${id}?tab=plans` },
-  trial_followup: { icon: <UserCheck className="w-3 h-3" />, label: '跟进', getPath: (id) => `/students/${id}?tab=info` },
-  absent:         { icon: <CalendarClock className="w-3 h-3" />, label: '查看排课', getPath: (id) => `/students/${id}?tab=records` },
+const alertActionConfig: Record<string, { icon: React.ReactNode; label: string; tab: string }> = {
+  low_hours:      { icon: <DollarSign className="w-3 h-3" />, label: '续费', tab: 'info' },
+  no_record:      { icon: <FileText className="w-3 h-3" />, label: '补录', tab: 'records' },
+  expired_plans:  { icon: <ClipboardList className="w-3 h-3" />, label: '更新计划', tab: 'plans' },
+  trial_followup: { icon: <UserCheck className="w-3 h-3" />, label: '跟进', tab: 'info' },
+  absent:         { icon: <CalendarClock className="w-3 h-3" />, label: '查看排课', tab: 'records' },
 }
 
 interface AlertStudentsProps {
@@ -100,7 +100,8 @@ export function AlertStudents({ students, loading }: AlertStudentsProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          navigate(action.getPath(s.studentId))
+                          sessionStorage.setItem('studentDetailTab', action.tab)
+                          navigate(`/students/${s.studentId}`)
                         }}
                         className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
                         title={action.label}

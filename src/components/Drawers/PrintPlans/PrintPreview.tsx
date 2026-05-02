@@ -77,7 +77,7 @@ export function PrintPreview({ selectedStudents, layout, plansPerStudent }: Prin
                         let taskContent = ''
                         if (task.content) {
                           taskContent = task.content
-                        } else if (['vocab_new', 'vocab_review', 'nine_grid'].includes(task.type) && task.wordbank_label) {
+                        } else if (['vocab_new', 'vocab_review'].includes(task.type) && task.wordbank_label) {
                           taskContent = task.wordbank_label
                           if (task.level_from && task.level_to) taskContent += ` 第${task.level_from}-${task.level_to}关`
                         }

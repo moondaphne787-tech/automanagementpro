@@ -28,14 +28,12 @@ export function WordbankManager() {
   const [editForm, setEditForm] = useState<{
     name: string
     total_levels: number
-    nine_grid_interval: number
     category: WordbankCategory
     sort_order: number
     notes: string
   }>({
     name: '',
     total_levels: 60,
-    nine_grid_interval: 10,
     category: 'primary_exam',
     sort_order: 1,
     notes: ''
@@ -46,7 +44,6 @@ export function WordbankManager() {
   const [newWordbank, setNewWordbank] = useState({
     name: '',
     total_levels: 60,
-    nine_grid_interval: 10,
     category: 'primary_exam' as WordbankCategory,
     notes: ''
   })
@@ -61,7 +58,6 @@ export function WordbankManager() {
     setEditForm({
       name: wb.name,
       total_levels: wb.total_levels,
-      nine_grid_interval: wb.nine_grid_interval,
       category: wb.category,
       sort_order: wb.sort_order,
       notes: wb.notes || ''
@@ -79,15 +75,9 @@ export function WordbankManager() {
       toast.error('总关数必须大于0')
       return
     }
-    if (editForm.nine_grid_interval < 1) {
-      toast.error('九宫格间隔必须大于0')
-      return
-    }
-    
     await updateWordbank(editingId, {
       name: editForm.name.trim(),
       total_levels: editForm.total_levels,
-      nine_grid_interval: editForm.nine_grid_interval,
       category: editForm.category,
       sort_order: editForm.sort_order,
       notes: editForm.notes || null
@@ -131,14 +121,9 @@ export function WordbankManager() {
       toast.error('请输入有效的关数')
       return
     }
-    if (isNaN(newWordbank.nine_grid_interval) || newWordbank.nine_grid_interval < 1) {
-      toast.error('请输入有效的九宫格间隔')
-      return
-    }
     await createWordbank({
       name: newWordbank.name.trim(),
       total_levels: newWordbank.total_levels,
-      nine_grid_interval: newWordbank.nine_grid_interval,
       category: newWordbank.category,
       sort_order: wordbanks.length + 1,
       notes: newWordbank.notes || null
@@ -147,7 +132,6 @@ export function WordbankManager() {
     setNewWordbank({
       name: '',
       total_levels: 60,
-      nine_grid_interval: 10,
       category: 'primary_exam',
       notes: ''
     })
@@ -160,8 +144,7 @@ export function WordbankManager() {
         <div className="grid grid-cols-12 gap-2 text-xs text-muted-foreground font-medium px-3 py-2 bg-muted/30 rounded sticky top-0 z-10">
           <div className="col-span-3">词库名称</div>
           <div className="col-span-2 text-center">总关数</div>
-          <div className="col-span-2 text-center">九宫格间隔</div>
-          <div className="col-span-2 text-center">分类</div>
+          <div className="col-span-4 text-center">分类</div>
           <div className="col-span-1 text-center">排序</div>
           <div className="col-span-2 text-center">操作</div>
         </div>
@@ -195,16 +178,7 @@ export function WordbankManager() {
                       className="h-8 text-center"
                     />
                   </div>
-                  <div className="col-span-2">
-                    <Input
-                      type="number"
-                      min="1"
-                      value={editForm.nine_grid_interval}
-                      onChange={(e) => setEditForm({ ...editForm, nine_grid_interval: parseInt(e.target.value) || 1 })}
-                      className="h-8 text-center"
-                    />
-                  </div>
-                  <div className="col-span-2">
+                  <div className="col-span-4">
                     <select
                       value={editForm.category}
                       onChange={(e) => setEditForm({ ...editForm, category: e.target.value as WordbankCategory })}
@@ -248,8 +222,7 @@ export function WordbankManager() {
                     )}
                   </div>
                   <div className="col-span-2 text-center">{wb.total_levels}</div>
-                  <div className="col-span-2 text-center">{wb.nine_grid_interval}关</div>
-                  <div className="col-span-2 text-center">
+                  <div className="col-span-4 text-center">
                     <span className="text-xs px-2 py-0.5 rounded bg-muted">
                       {WORDBANK_CATEGORY_OPTIONS.find(o => o.value === wb.category)?.label || wb.category}
                     </span>
@@ -305,28 +278,15 @@ export function WordbankManager() {
                   autoFocus
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">总关数 <span className="text-destructive">*</span></label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={newWordbank.total_levels}
-                    onChange={(e) => setNewWordbank({ ...newWordbank, total_levels: parseInt(e.target.value) || 0 })}
-                    placeholder="如: 60"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">九宫格间隔 <span className="text-destructive">*</span></label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={newWordbank.nine_grid_interval}
-                    onChange={(e) => setNewWordbank({ ...newWordbank, nine_grid_interval: parseInt(e.target.value) || 0 })}
-                    placeholder="如: 10"
-                  />
-                  <p className="text-xs text-muted-foreground">每隔几关进行一次九宫格清理</p>
-                </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">总关数 <span className="text-destructive">*</span></label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={newWordbank.total_levels}
+                  onChange={(e) => setNewWordbank({ ...newWordbank, total_levels: parseInt(e.target.value) || 0 })}
+                  placeholder="如: 60"
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">分类</label>

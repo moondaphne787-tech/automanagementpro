@@ -224,6 +224,16 @@ export async function batchCheckForDate(studentIds: string[], date: string): Pro
 }
 
 // 导出为 db 对象
+/**
+ * 获取某学员的所有打卡记录（按日期排序）
+ */
+export async function getByStudentId(studentId: string): Promise<{ id: string; checked_date: string }[]> {
+  return ipcQuery(
+    `SELECT id, checked_date FROM reading_checkins WHERE student_id = ? ORDER BY checked_date DESC`,
+    [studentId]
+  )
+}
+
 export const readingCheckinDb = {
   getMonthSummary,
   checkYesterday,
@@ -232,5 +242,6 @@ export const readingCheckinDb = {
   checkForDate,
   uncheckForDate,
   batchCheckForDate,
-  getDailyCheckinCounts
+  getDailyCheckinCounts,
+  getByStudentId,
 }

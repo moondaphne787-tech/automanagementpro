@@ -158,29 +158,31 @@ export const studentSchedulePreferenceDb = {
   },
   
   // 批量创建时段偏好（跳过已存在的相同偏好）
-  // 用于批量设置学生时段偏好，会检查 day_of_week, preferred_start, preferred_end 是否完全匹配
+  // 用于批量设置学生时段偏好，会检查 day_of_week, preferred_start, preferred_end, semester 是否完全匹配
   async batchCreateIfNotExists(preferences: Array<{
     student_id: string
     day_of_week: DayOfWeek
     preferred_start?: string
     preferred_end?: string
+    semester?: string
     notes?: string
   }>): Promise<{ success: number; skipped: number; failed: number }> {
     let success = 0
     let skipped = 0
     let failed = 0
-    
+
     for (const pref of preferences) {
       try {
-        // 检查是否已存在相同的偏好
+        // 检查是否已存在相同的偏好（含 semester）
         const existing = await this.getByStudentId(pref.student_id)
         const hasSame = existing.some(
           p =>
             p.day_of_week === pref.day_of_week &&
             p.preferred_start === pref.preferred_start &&
-            p.preferred_end === pref.preferred_end
+            p.preferred_end === pref.preferred_end &&
+            p.semester === (pref.semester ?? null)
         )
-        
+
         if (hasSame) {
           skipped++
         } else {
@@ -192,7 +194,7 @@ export const studentSchedulePreferenceDb = {
         failed++
       }
     }
-    
+
     return { success, skipped, failed }
   },
   

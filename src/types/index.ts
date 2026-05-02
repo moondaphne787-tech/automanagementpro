@@ -68,8 +68,7 @@ export type ScheduleDateType = 'regular_weekend' | 'friday_evening' | 'holiday' 
 export type TaskType = 
   | 'phonics' 
   | 'vocab_new' 
-  | 'vocab_review' 
-  | 'nine_grid' 
+  | 'vocab_review'
   | 'textbook' 
   | 'reading' 
   | 'picture_book' 
@@ -94,6 +93,7 @@ export interface Student {
   phonics_completed: boolean
   ipa_completed: boolean
   reading_progress: string | null  // 阅读训练进度，格式如 "初中B级,12"
+  learning_target: string | null   // 学习目标，如"中考冲刺"、"KET备考"
   notes: string | null
   created_at: string
   updated_at: string
@@ -118,7 +118,6 @@ export interface Wordbank {
   id: string
   name: string
   total_levels: number
-  nine_grid_interval: number
   category: WordbankCategory
   sort_order: number
   notes: string | null
@@ -132,7 +131,6 @@ export interface StudentWordbankProgress {
   wordbank_label: string
   current_level: number
   total_levels_override: number | null
-  last_nine_grid_level: number
   status: ProgressStatus
   started_date: string | null
   completed_date: string | null
@@ -182,6 +180,7 @@ export interface LessonPlan {
   notes: string | null
   ai_reason: string | null
   generated_by_ai: boolean
+  plan_status_json: string | null
   created_at: string
 }
 
@@ -428,7 +427,6 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   phonics: '语音训练',
   vocab_new: '词库学习',
   vocab_review: '词库复习',
-  nine_grid: '九宫格清理',
   textbook: '课文梳理',
   reading: '阅读训练',
   picture_book: '绘本阅读',
@@ -530,6 +528,59 @@ export interface DashboardData {
   todos: Todo[]
 }
 
+// ===== 学习规划类型 =====
+
+export interface StudentPlan {
+  id: number
+  studentId: string
+  summary: string
+  phonicsPlan: string
+  textbookPlan: string
+  readingPlan: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Milestone {
+  id: number
+  studentId: string
+  label: string
+  targetWordbank: string | null
+  targetLevel: number | null
+  targetDate: string | null
+  note: string | null
+  isCompleted: boolean
+  completedDate: string | null
+  sortOrder: number
+}
+
+export interface PlanStatus {
+  status: '按计划' | '略超前' | '略落后' | '明显落后'
+  current_vs_plan: string
+  suggestion: string
+}
+
+export interface PromptData {
+  student_profile: {
+    name: string; grade: string; type: string; join_date: string; target: string
+  }
+  student_plan: {
+    summary: string
+    milestones: Array<{
+      label: string; target_wordbank: string | null; target_level: number | null
+      target_date: string | null; note: string | null; is_completed: boolean
+    }>
+    phonics_plan: string; textbook_plan: string; reading_plan: string
+  }
+  current_status: {
+    vocab_current_bank: string; vocab_current_level: number
+    last_lesson_vocab_range: { level_from: number; level_to: number } | null
+    phonics_stage: string; phonics_page: number
+    textbook_current: string; reading_progress: string
+  }
+  recent_lessons: Array<{ date: string; tasks_done: unknown[]; teacher_note: string }>
+}
+
 // Electron API 类型声明
 export interface ElectronAPI {
   // 基础数据库操作
@@ -538,7 +589,7 @@ export interface ElectronAPI {
   dbTransaction: (statements: Array<{ sql: string; params: unknown[] }>) => Promise<{ success: boolean }>
   dbGetPath: () => Promise<string>
   dbBackup: (backupPath: string) => Promise<{ success: boolean }>
-  
+
   // 迁移和备份相关
   dbGetVersion: () => Promise<{ version: number; latestVersion: number }>
   dbGetMigrationHistory: () => Promise<Array<{ version: number; applied_at: string; description?: string }>>
@@ -563,22 +614,32 @@ export interface ElectronAPI {
   dbRestoreFromBackup: (backupPath: string) => Promise<{ success: boolean; message: string }>
   dbGetBackupDir: () => Promise<string>
   dbOpenBackupDir: () => Promise<{ success: boolean }>
-  
+
   // WAL Checkpoint 相关
   dbGetWalInfo: () => Promise<{ exists: boolean; size: number; path: string }>
   dbCheckpoint: (mode?: 'PASSIVE' | 'RESTART' | 'TRUNCATE' | 'FULL') => Promise<{ success: boolean; walSize: number; checkpointedCount: number; message: string }>
-  
+
   // 对话框
-  showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => 
+  showSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) =>
     Promise<{ canceled: boolean; filePath?: string }>
-  
+
   // 文件写入
   writeFile: (filePath: string, base64Data: string) => Promise<{ success: boolean }>
-  
+
   // 其他
   printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
   platform: string
   isElectron: boolean
+
+  // 学习规划
+  planGet: (studentId: string) => Promise<StudentPlan | null>
+  planSave: (data: { studentId: string; summary: string; phonicsPlan: string; textbookPlan: string; readingPlan: string }) => Promise<{ success: boolean; id: number }>
+  milestoneList: (studentId: string) => Promise<Milestone[]>
+  milestoneAdd: (data: { studentId: string; label: string; targetWordbank?: string; targetLevel?: number; targetDate?: string; note?: string }) => Promise<{ success: boolean; id: number }>
+  milestoneUpdate: (data: { id: number; label?: string; targetWordbank?: string; targetLevel?: number; targetDate?: string; note?: string; isCompleted?: boolean; completedDate?: string; sortOrder?: number }) => Promise<{ success: boolean }>
+  milestoneDelete: (id: number) => Promise<{ success: boolean }>
+  milestoneReorder: (orderedIds: number[]) => Promise<{ success: boolean }>
+  buildPromptData: (studentId: string) => Promise<PromptData>
 }
 
 declare global {

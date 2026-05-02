@@ -22,6 +22,7 @@ export interface StudentRow {
   phonics_completed: number  // SQLite 0/1
   ipa_completed: number      // SQLite 0/1
   reading_progress: string | null
+  learning_target: string | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -59,6 +60,7 @@ export interface LessonPlanRow {
   notes: string | null
   ai_reason: string | null
   generated_by_ai: number  // SQLite 0/1
+  plan_status_json: string | null
   created_at: string
 }
 
@@ -216,7 +218,7 @@ export const STUDENT_UPDATABLE_FIELDS = new Set([
   'student_no', 'name', 'school', 'grade', 'account', 'enroll_date',
   'student_type', 'status', 'level', 'initial_score', 'initial_vocab',
   'phonics_progress', 'phonics_completed', 'ipa_completed', 'reading_progress',
-  'notes', 'updated_at'
+  'notes', 'updated_at', 'learning_target'
 ])
 
 export const CLASS_RECORD_UPDATABLE_FIELDS = new Set([
@@ -228,7 +230,7 @@ export const CLASS_RECORD_UPDATABLE_FIELDS = new Set([
 
 export const LESSON_PLAN_UPDATABLE_FIELDS = new Set([
   'student_id', 'phase_id', 'plan_date', 'tasks', 'notes',
-  'ai_reason', 'generated_by_ai'
+  'ai_reason', 'generated_by_ai', 'plan_status_json'
 ])
 
 export const BILLING_UPDATABLE_FIELDS = new Set([
@@ -277,7 +279,7 @@ export const SCHEDULED_CLASS_UPDATABLE_FIELDS = new Set([
 ])
 
 export const WORDBANK_UPDATABLE_FIELDS = new Set([
-  'name', 'total_levels', 'nine_grid_interval', 'category', 'sort_order', 'notes'
+  'name', 'total_levels', 'category', 'sort_order', 'notes'
 ])
 
 export const TODO_UPDATABLE_FIELDS = new Set([
@@ -337,6 +339,7 @@ export function mapLessonPlan(row: LessonPlanRow): LessonPlan {
     ...row,
     tasks: parseTasks(row.tasks),
     generated_by_ai: !!row.generated_by_ai,
+    plan_status_json: row.plan_status_json ?? null,
   }
 }
 

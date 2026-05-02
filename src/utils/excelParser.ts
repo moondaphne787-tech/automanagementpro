@@ -23,7 +23,6 @@ const COLUMN_MAPPING: Record<string, string> = {
   '今日词库主要学习内容': 'wordbank_content', // 词库学习内容单独映射，与普通学习内容区分
   '词库': 'wordbank',
   '已学到词库的第几关': 'level',
-  '清理九宫格多少个词': 'nine_grid_count',
   '是否完成学习任务': 'task_completed',
   '未完成学习任务原因': 'incomplete_reason',
   '学情反馈': 'detail_feedback',
@@ -58,7 +57,6 @@ export interface ParsedExcelRow {
   notes?: string
   wordbank?: string
   level?: string
-  nine_grid_count?: number
   rawRow: Record<string, any>
 }
 
@@ -236,12 +234,10 @@ export function parseExcelFile(file: File): Promise<ParseResult> {
             let grade = ''
             let wordbank = ''
             let level = ''
-            let nine_grid_count = 0
-            
             for (const [excelCol, systemField] of Object.entries(COLUMN_MAPPING)) {
               const value = row[excelCol]
               if (value === undefined || value === '') continue
-              
+
               switch (systemField) {
                 case 'duration_hours':
                   duration_hours = parseDuration(value)
@@ -292,7 +288,6 @@ export function parseExcelFile(file: File): Promise<ParseResult> {
               notes,
               wordbank,
               level,
-              nine_grid_count,
               rawRow: row
             })
             

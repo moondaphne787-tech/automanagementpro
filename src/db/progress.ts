@@ -16,7 +16,6 @@ export const progressDb = {
     wordbank_id: string
     current_level: number
     total_levels_override?: number
-    last_nine_grid_level?: number
     status?: 'active' | 'completed' | 'paused'
     notes?: string
   }): Promise<void> {
@@ -26,18 +25,18 @@ export const progressDb = {
       `SELECT * FROM student_wordbank_progress WHERE student_id = ? AND wordbank_id = ?`,
       [data.student_id, data.wordbank_id]
     )
-    
+
     if (existing) {
       await ipcQuery(
-        `UPDATE student_wordbank_progress SET current_level = ?, total_levels_override = ?, last_nine_grid_level = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?`,
-        [data.current_level, data.total_levels_override || null, data.last_nine_grid_level || existing.last_nine_grid_level, data.status || 'active', data.notes || null, new Date().toISOString(), existing.id]
+        `UPDATE student_wordbank_progress SET current_level = ?, total_levels_override = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?`,
+        [data.current_level, data.total_levels_override || null, data.status || 'active', data.notes || null, new Date().toISOString(), existing.id]
       )
     } else {
       const id = generateId()
       const now = new Date().toISOString()
       await ipcQuery(
-        `INSERT INTO student_wordbank_progress (id, student_id, wordbank_id, wordbank_label, current_level, total_levels_override, last_nine_grid_level, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, data.student_id, data.wordbank_id, wordbank?.name || '未知词库', data.current_level, data.total_levels_override || null, data.last_nine_grid_level || 0, data.status || 'active', data.notes || null, now, now]
+        `INSERT INTO student_wordbank_progress (id, student_id, wordbank_id, wordbank_label, current_level, total_levels_override, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, data.student_id, data.wordbank_id, wordbank?.name || '未知词库', data.current_level, data.total_levels_override || null, data.status || 'active', data.notes || null, now, now]
       )
     }
   },
@@ -53,7 +52,6 @@ export const progressDb = {
       student_id: string
       wordbank_id: string
       current_level: number
-      last_nine_grid_level?: number
     }>,
     wordbanks: Wordbank[],
     existingProgressMap: Map<string, StudentWordbankProgress[]>
@@ -62,17 +60,14 @@ export const progressDb = {
 
     const wordbankMap = new Map(wordbanks.map(w => [w.id, w]))
     const now = new Date().toISOString()
-    
+
     // 按 (student_id, wordbank_id) 去重，只保留最新的进度
     const uniqueUpdates = new Map<string, typeof updates[0]>()
     for (const update of updates) {
       const key = `${update.student_id}|${update.wordbank_id}`
       const existing = uniqueUpdates.get(key)
-      // 保留 current_level 更大的，或者有 last_nine_grid_level 的
       if (!existing || update.current_level > existing.current_level) {
         uniqueUpdates.set(key, update)
-      } else if (update.last_nine_grid_level && !existing.last_nine_grid_level) {
-        uniqueUpdates.set(key, { ...existing, last_nine_grid_level: update.last_nine_grid_level })
       }
     }
 
@@ -86,12 +81,11 @@ export const progressDb = {
 
       if (existing) {
         // 只有新关数大于当前关数才更新
-        if (update.current_level > existing.current_level || update.last_nine_grid_level) {
+        if (update.current_level > existing.current_level) {
           statements.push({
-            sql: `UPDATE student_wordbank_progress SET current_level = ?, last_nine_grid_level = ?, updated_at = ? WHERE id = ?`,
+            sql: `UPDATE student_wordbank_progress SET current_level = ?, updated_at = ? WHERE id = ?`,
             params: [
               Math.max(update.current_level, existing.current_level),
-              update.last_nine_grid_level || existing.last_nine_grid_level,
               now,
               existing.id
             ]
@@ -101,8 +95,8 @@ export const progressDb = {
         // 插入新记录
         const id = generateId()
         statements.push({
-          sql: `INSERT INTO student_wordbank_progress (id, student_id, wordbank_id, wordbank_label, current_level, total_levels_override, last_nine_grid_level, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          params: [id, update.student_id, update.wordbank_id, wordbank?.name || '未知词库', update.current_level, null, update.last_nine_grid_level || 0, 'active', null, now, now]
+          sql: `INSERT INTO student_wordbank_progress (id, student_id, wordbank_id, wordbank_label, current_level, total_levels_override, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          params: [id, update.student_id, update.wordbank_id, wordbank?.name || '未知词库', update.current_level, null, 'active', null, now, now]
         })
       }
     }

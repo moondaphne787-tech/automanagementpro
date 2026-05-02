@@ -10,13 +10,16 @@
  * - 动画过渡：打卡后学员移到列表底部时使用 CSS transition
  */
 
-import { useEffect, useMemo, useCallback, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Search, BookOpen, Loader2, Check, CheckSquare, CalendarDays, RotateCcw } from 'lucide-react'
+import { useEffect, useMemo, useCallback, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, Search, BookOpen, Loader2, Check, CheckSquare, CalendarDays, RotateCcw, Download, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { useReadingCheckinStore } from '@/store/readingCheckinStore'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import { exportReadingCheckinReport } from '@/utils/readingCheckinExport'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import type { DailyCheckinCount } from '@/store/types'
 
 /** 每日打卡人数日历视图 */
@@ -111,6 +114,140 @@ function DailyCheckinCalendar({ year, month, dailyCounts, totalStudents, selecte
   )
 }
 
+/** 每日打卡人数趋势图 */
+function DailyCheckinTrend({
+  currentCounts,
+  prevCounts,
+  currentYear,
+  currentMonth,
+}: {
+  currentCounts: DailyCheckinCount[]
+  prevCounts: DailyCheckinCount[]
+  currentYear: number
+  currentMonth: number
+}) {
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate()
+
+  // 构建日期→数量映射
+  const currentMap = useMemo(() => {
+    const map = new Map<number, number>()
+    currentCounts.forEach(d => {
+      const day = parseInt(d.date.split('-')[2], 10)
+      map.set(day, d.count)
+    })
+    return map
+  }, [currentCounts])
+
+  const prevMap = useMemo(() => {
+    const map = new Map<number, number>()
+    prevCounts.forEach(d => {
+      const day = parseInt(d.date.split('-')[2], 10)
+      map.set(day, d.count)
+    })
+    return map
+  }, [prevCounts])
+
+  // 合并为 recharts 数据格式
+  const chartData = useMemo(() => {
+    const data: { day: number; current: number | null; previous: number | null }[] = []
+    for (let d = 1; d <= daysInMonth; d++) {
+      data.push({
+        day: d,
+        current: currentMap.get(d) ?? null,
+        previous: prevMap.get(d) ?? null,
+      })
+    }
+    return data
+  }, [daysInMonth, currentMap, prevMap])
+
+  // 计算平均值和变化
+  const currentAvg = useMemo(() => {
+    const vals = currentCounts.map(d => d.count)
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+  }, [currentCounts])
+
+  const prevAvg = useMemo(() => {
+    const vals = prevCounts.map(d => d.count)
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+  }, [prevCounts])
+
+  const changePct = prevAvg > 0 ? ((currentAvg - prevAvg) / prevAvg * 100) : 0
+
+  return (
+    <div className="px-4 py-3 border-b bg-card">
+      <div className="flex items-center gap-2 mb-3">
+        <TrendingUp className="w-4 h-4 text-primary" />
+        <span className="text-sm font-medium">打卡趋势对比</span>
+      </div>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <XAxis
+            dataKey="day"
+            tick={{ fontSize: 12 }}
+            stroke="hsl(var(--muted-foreground))"
+            label={{ value: '日期', position: 'insideBottom', offset: -5, style: { fontSize: 12, fill: 'hsl(var(--muted-foreground))' } }}
+          />
+          <YAxis
+            allowDecimals={false}
+            tick={{ fontSize: 12 }}
+            stroke="hsl(var(--muted-foreground))"
+            width={30}
+          />
+          <Tooltip
+            contentStyle={{
+              fontSize: 12,
+              borderRadius: 8,
+              border: '1px solid hsl(var(--border))',
+              background: 'hsl(var(--card))',
+            }}
+            formatter={(value: number, name: string) => {
+              const label = name === 'current' ? '当月' : '上月'
+              return [`${value} 人`, label]
+            }}
+            labelFormatter={(day: number) => `${currentMonth}月${day}日`}
+          />
+          <Legend
+            formatter={(value: string) => (value === 'current' ? '当月' : '上月')}
+          />
+          <Line
+            type="monotone"
+            dataKey="current"
+            stroke="hsl(221.2 83.2% 53.3%)"
+            strokeWidth={2}
+            dot={{ r: 3 }}
+            activeDot={{ r: 5 }}
+            connectNulls={false}
+            name="current"
+          />
+          <Line
+            type="monotone"
+            dataKey="previous"
+            stroke="hsl(215.4 16.3% 46.9%)"
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            dot={{ r: 2 }}
+            connectNulls={false}
+            name="previous"
+          />
+        </LineChart>
+      </ResponsiveContainer>
+      <div className="text-xs text-muted-foreground text-center mt-2">
+        本月日均 <span className="font-semibold text-foreground">{currentAvg.toFixed(1)}</span> 人
+        &nbsp;·&nbsp; 上月日均 <span className="font-semibold text-foreground">{prevAvg.toFixed(1)}</span> 人
+        &nbsp;·&nbsp;
+        <span className={cn(
+          'font-semibold',
+          changePct > 0 ? 'text-green-600' : changePct < 0 ? 'text-red-600' : ''
+        )}>
+          {changePct > 0 ? '↑' : changePct < 0 ? '↓' : ''}
+          {Math.abs(changePct).toFixed(1)}%
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function ReadingCheckin() {
   const selectedYear = useReadingCheckinStore(s => s.selectedYear)
   const selectedMonth = useReadingCheckinStore(s => s.selectedMonth)
@@ -136,6 +273,7 @@ export function ReadingCheckin() {
   const setSearchQuery = useReadingCheckinStore(s => s.setSearchQuery)
   const toggleShowOnlyUnchecked = useReadingCheckinStore(s => s.toggleShowOnlyUnchecked)
   const dailyCheckinCounts = useReadingCheckinStore(s => s.dailyCheckinCounts)
+  const prevDailyCheckinCounts = useReadingCheckinStore(s => s.prevDailyCheckinCounts)
   const showDailyView = useReadingCheckinStore(s => s.showDailyView)
   const toggleDailyView = useReadingCheckinStore(s => s.toggleDailyView)
 
@@ -215,6 +353,19 @@ export function ReadingCheckin() {
       selectAllUnchecked(filteredStudents.map(s => s.id))
     }
   }, [allUncheckedSelected, clearSelection, selectAllUnchecked, filteredStudents])
+
+  const [exporting, setExporting] = useState(false)
+  const handleExport = useCallback(async () => {
+    setExporting(true)
+    try {
+      await exportReadingCheckinReport(selectedYear, selectedMonth, checkinStudents)
+      toast.success('导出成功')
+    } catch {
+      toast.error('导出失败')
+    } finally {
+      setExporting(false)
+    }
+  }, [selectedYear, selectedMonth, checkinStudents])
 
   const scrollToFocused = () => {
     const rows = listRef.current?.querySelectorAll('[data-row]')
@@ -307,7 +458,7 @@ export function ReadingCheckin() {
       </div>
 
       {/* 搜索和过滤 */}
-      <div className="p-4 border-b flex items-center gap-4">
+      <div className="p-4 border-b flex items-center gap-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -331,23 +482,41 @@ export function ReadingCheckin() {
           variant={showDailyView ? "secondary" : "outline"}
           size="sm"
           onClick={toggleDailyView}
-          className="gap-1.5 ml-auto"
+          className="gap-1.5"
         >
           <CalendarDays className="w-3.5 h-3.5" />
           每日统计
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={exporting}
+          className="gap-1.5"
+        >
+          <Download className="w-3.5 h-3.5" />
+          {exporting ? '导出中...' : '导出报表'}
         </Button>
       </div>
 
       {/* 每日打卡人数日历视图 */}
       {showDailyView && (
-        <DailyCheckinCalendar
-          year={selectedYear}
-          month={selectedMonth}
-          dailyCounts={dailyCheckinCounts}
-          totalStudents={totalStudents}
-          selectedDate={targetDate}
-          onDateClick={handleDateClick}
-        />
+        <>
+          <DailyCheckinCalendar
+            year={selectedYear}
+            month={selectedMonth}
+            dailyCounts={dailyCheckinCounts}
+            totalStudents={totalStudents}
+            selectedDate={targetDate}
+            onDateClick={handleDateClick}
+          />
+          <DailyCheckinTrend
+            currentCounts={dailyCheckinCounts}
+            prevCounts={prevDailyCheckinCounts}
+            currentYear={selectedYear}
+            currentMonth={selectedMonth}
+          />
+        </>
       )}
 
       {/* 批量操作栏 */}
@@ -412,11 +581,12 @@ export function ReadingCheckin() {
         ) : (
           <div className="border rounded-lg">
             {/* 表头 */}
-            <div className="grid grid-cols-[2rem_5rem_1fr_6rem_10rem] gap-4 p-3 bg-muted/50 border-b text-sm font-medium text-muted-foreground">
+            <div className="grid grid-cols-[2rem_5rem_1fr_4.5rem_3.5rem_10rem] gap-4 p-3 bg-muted/50 border-b text-sm font-medium text-muted-foreground">
               <div />
               <div>学号</div>
               <div>学员姓名</div>
               <div className="text-center">本月天数</div>
+              <div className="text-center">全勤</div>
               <div className="text-right">{targetDateLabel}操作</div>
             </div>
 
@@ -428,7 +598,7 @@ export function ReadingCheckin() {
                   key={student.id}
                   data-row
                   className={cn(
-                    "grid grid-cols-[2rem_5rem_1fr_6rem_10rem] gap-4 p-3 border-b last:border-b-0 items-center",
+                    "grid grid-cols-[2rem_5rem_1fr_4.5rem_3.5rem_10rem] gap-4 p-3 border-b last:border-b-0 items-center",
                     "transition-all duration-300 ease-in-out",
                     student.checkedYesterday && "bg-muted/30 opacity-60",
                     isSelected && "bg-primary/5 border-l-2 border-l-primary"
@@ -471,6 +641,15 @@ export function ReadingCheckin() {
                       {student.monthlyCount}
                     </span>
                     <span className="text-muted-foreground ml-1">天</span>
+                  </div>
+
+                  {/* 全勤 */}
+                  <div className="text-center">
+                    {student.fullAttendance ? (
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-700 font-bold text-xs">✓</span>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
                   </div>
 
                   {/* 打卡操作 */}

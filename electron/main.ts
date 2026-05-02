@@ -153,7 +153,6 @@ function createTables() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       total_levels INTEGER DEFAULT 60,
-      nine_grid_interval INTEGER DEFAULT 10,
       category TEXT DEFAULT 'primary_exam',
       sort_order INTEGER DEFAULT 0,
       notes TEXT
@@ -169,7 +168,6 @@ function createTables() {
       wordbank_label TEXT,
       current_level INTEGER DEFAULT 0,
       total_levels_override INTEGER,
-      last_nine_grid_level INTEGER DEFAULT 0,
       status TEXT DEFAULT 'active',
       started_date TEXT,
       completed_date TEXT,
@@ -346,6 +344,18 @@ function createTables() {
     )
   `)
 
+  // 排课时段配置表（用于区分平时/假期等不同时段的学员偏好）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schedule_periods (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // 系统设置表
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
@@ -382,26 +392,93 @@ function createTables() {
     )
   `)
 
+  // 任务类型预设模板
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS task_presets (
+      id TEXT PRIMARY KEY,
+      task_type TEXT NOT NULL,
+      label TEXT NOT NULL,
+      content TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // 课程设计模板库
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS plan_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT,
+      tasks TEXT NOT NULL,
+      notes TEXT,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // 插入默认课程模板
+  const planTemplatesCount = db.prepare('SELECT COUNT(*) as count FROM plan_templates').get() as { count: number }
+  if (planTemplatesCount.count === 0) {
+    const insertTemplate = db.prepare(`
+      INSERT INTO plan_templates (id, name, category, tasks, notes, sort_order)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    const defaultTemplates: [string, string, string, string, number][] = [
+      ['通用模板：词汇复习+新词+课文', 'general',
+        JSON.stringify([
+          { type: 'vocab_review', content: '复习上节课词库内容' },
+          { type: 'vocab_new', content: '新词学习 5 个' },
+          { type: 'textbook', content: '课文梳理与朗读' },
+        ]),
+        '常规课程：复习→新授→课文', 1],
+      ['通用模板：阅读+练习', 'general',
+        JSON.stringify([
+          { type: 'vocab_review', content: '词库复习前2关' },
+          { type: 'reading', content: '阅读训练 1 篇' },
+          { type: 'exercise', content: '配套练习册' },
+        ]),
+        '阅读专项课程', 2],
+      ['拼读模板：语音+词汇+绘本', 'phonics',
+        JSON.stringify([
+          { type: 'phonics', content: '自然拼读规则学习' },
+          { type: 'vocab_review', content: '拼读相关词汇复习' },
+          { type: 'picture_book', content: '绘本阅读 1 本' },
+        ]),
+        '拼读入门课程', 1],
+      ['拼读模板：强化练习', 'phonics',
+        JSON.stringify([
+          { type: 'phonics', content: '拼读规则复习与强化' },
+          { type: 'exercise', content: '拼读专项练习' },
+          { type: 'picture_book', content: '拼读绘本自主阅读' },
+        ]),
+        '拼读强化课程', 2],
+    ]
+    defaultTemplates.forEach(([name, category, tasks, notes, order]) => {
+      insertTemplate.run(uuidv4(), name, category, tasks, notes, order)
+    })
+  }
+
   // 插入默认词库配置
   const wordbanksCount = db.prepare('SELECT COUNT(*) as count FROM wordbanks').get() as { count: number }
   if (wordbanksCount.count === 0) {
     const insertWordbank = db.prepare(`
-      INSERT INTO wordbanks (id, name, total_levels, nine_grid_interval, category, sort_order) 
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO wordbanks (id, name, total_levels, category, sort_order) 
+      VALUES (?, ?, ?, ?, ?)
     `)
     
     const defaultWordbanks = [
-      ['小学考纲', 60, 10, 'primary_exam', 1],
-      ['小学进阶', 40, 10, 'primary_advanced', 2],
-      ['初中考纲', 60, 20, 'junior_exam', 3],
-      ['初中进阶', 40, 20, 'junior_advanced', 4],
-      ['高中考纲', 60, 20, 'senior_exam', 5],
-      ['高中进阶', 40, 20, 'senior_advanced', 6],
-      ['大学四级', 40, 20, 'college_cet4', 7],
+      ['小学考纲', 60, 'primary_exam', 1],
+      ['小学进阶', 40, 'primary_advanced', 2],
+      ['初中考纲', 60, 'junior_exam', 3],
+      ['初中进阶', 40, 'junior_advanced', 4],
+      ['高中考纲', 60, 'senior_exam', 5],
+      ['高中进阶', 40, 'senior_advanced', 6],
+      ['大学四级', 40, 'college_cet4', 7],
     ]
     
-    defaultWordbanks.forEach(([name, total, interval, category, order]) => {
-      insertWordbank.run(uuidv4(), name, total, interval, category, order)
+    defaultWordbanks.forEach(([name, total, category, order]) => {
+      insertWordbank.run(uuidv4(), name, total, category, order)
     })
   }
 
@@ -762,6 +839,213 @@ ipcMain.handle('print-lesson-plans', async (_event, htmlContent: string) => {
   } catch (error) {
     console.error('Print error:', error)
     return { success: false, error: (error as Error).message }
+  }
+})
+
+// ===== 学习规划 IPC 处理程序 =====
+
+// plan:get — 获取学员大纲
+ipcMain.handle('plan:get', (_event, studentId: string) => {
+  if (!db) throw new Error('Database not initialized')
+  const row = db.prepare(`SELECT * FROM student_plans WHERE student_id = ?`).get(studentId) as {
+    id: number; student_id: string; summary: string | null; phonics_plan: string | null;
+    textbook_plan: string | null; reading_plan: string | null; created_at: string; updated_at: string
+  } | undefined
+  if (!row) return null
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    summary: row.summary || '',
+    phonicsPlan: row.phonics_plan || '',
+    textbookPlan: row.textbook_plan || '',
+    readingPlan: row.reading_plan || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+})
+
+// plan:save — 新增或更新学员大纲（upsert）
+ipcMain.handle('plan:save', (_event, data: {
+  studentId: string; summary: string; phonicsPlan: string; textbookPlan: string; readingPlan: string
+}) => {
+  if (!db) throw new Error('Database not initialized')
+  const now = new Date().toLocaleString('sv').replace(' ', 'T')
+  const existing = db.prepare(`SELECT id FROM student_plans WHERE student_id = ?`).get(data.studentId) as { id: number } | undefined
+  if (existing) {
+    db.prepare(`UPDATE student_plans SET summary=?, phonics_plan=?, textbook_plan=?, reading_plan=?, updated_at=? WHERE student_id=?`)
+      .run(data.summary, data.phonicsPlan, data.textbookPlan, data.readingPlan, now, data.studentId)
+    return { success: true, id: existing.id }
+  } else {
+    const result = db.prepare(`INSERT INTO student_plans (student_id, summary, phonics_plan, textbook_plan, reading_plan, created_at, updated_at) VALUES (?,?,?,?,?,?,?)`)
+      .run(data.studentId, data.summary, data.phonicsPlan, data.textbookPlan, data.readingPlan, now, now)
+    return { success: true, id: result.lastInsertRowid }
+  }
+})
+
+// milestone:list — 获取学员所有里程碑
+ipcMain.handle('milestone:list', (_event, studentId: string) => {
+  if (!db) throw new Error('Database not initialized')
+  const rows = db.prepare(`SELECT * FROM student_milestones WHERE student_id = ? ORDER BY sort_order ASC`).all(studentId) as Array<{
+    id: number; student_id: string; label: string; target_wordbank: string | null;
+    target_level: number | null; target_date: string | null; note: string | null;
+    is_completed: number; completed_date: string | null; sort_order: number
+  }>
+  return rows.map(r => ({
+    id: r.id,
+    studentId: r.student_id,
+    label: r.label,
+    targetWordbank: r.target_wordbank,
+    targetLevel: r.target_level,
+    targetDate: r.target_date,
+    note: r.note,
+    isCompleted: !!r.is_completed,
+    completedDate: r.completed_date,
+    sortOrder: r.sort_order,
+  }))
+})
+
+// milestone:add — 新增里程碑
+ipcMain.handle('milestone:add', (_event, data: {
+  studentId: string; label: string; targetWordbank?: string; targetLevel?: number;
+  targetDate?: string; note?: string
+}) => {
+  if (!db) throw new Error('Database not initialized')
+  const maxRow = db.prepare(`SELECT MAX(sort_order) as m FROM student_milestones WHERE student_id = ?`).get(data.studentId) as { m: number | null }
+  const sortOrder = (maxRow.m ?? -1) + 1
+  const now = new Date().toLocaleString('sv').replace(' ', 'T')
+  const result = db.prepare(`INSERT INTO student_milestones (student_id, label, target_wordbank, target_level, target_date, note, sort_order, created_at) VALUES (?,?,?,?,?,?,?,?)`)
+    .run(data.studentId, data.label, data.targetWordbank ?? null, data.targetLevel ?? null, data.targetDate ?? null, data.note ?? null, sortOrder, now)
+  return { success: true, id: result.lastInsertRowid }
+})
+
+// milestone:update — 更新里程碑
+ipcMain.handle('milestone:update', (_event, data: {
+  id: number; label?: string; targetWordbank?: string; targetLevel?: number;
+  targetDate?: string; note?: string; isCompleted?: boolean; completedDate?: string; sortOrder?: number
+}) => {
+  if (!db) throw new Error('Database not initialized')
+  const fields: string[] = []
+  const values: unknown[] = []
+  if (data.label !== undefined) { fields.push('label=?'); values.push(data.label) }
+  if (data.targetWordbank !== undefined) { fields.push('target_wordbank=?'); values.push(data.targetWordbank) }
+  if (data.targetLevel !== undefined) { fields.push('target_level=?'); values.push(data.targetLevel) }
+  if (data.targetDate !== undefined) { fields.push('target_date=?'); values.push(data.targetDate) }
+  if (data.note !== undefined) { fields.push('note=?'); values.push(data.note) }
+  if (data.isCompleted !== undefined) { fields.push('is_completed=?'); values.push(data.isCompleted ? 1 : 0) }
+  if (data.completedDate !== undefined) { fields.push('completed_date=?'); values.push(data.completedDate) }
+  if (data.sortOrder !== undefined) { fields.push('sort_order=?'); values.push(data.sortOrder) }
+  if (fields.length > 0) {
+    values.push(data.id)
+    db.prepare(`UPDATE student_milestones SET ${fields.join(',')} WHERE id=?`).run(...values)
+  }
+  return { success: true }
+})
+
+// milestone:delete — 删除里程碑
+ipcMain.handle('milestone:delete', (_event, id: number) => {
+  if (!db) throw new Error('Database not initialized')
+  db.prepare(`DELETE FROM student_milestones WHERE id=?`).run(id)
+  return { success: true }
+})
+
+// milestone:reorder — 批量更新排序
+ipcMain.handle('milestone:reorder', (_event, orderedIds: number[]) => {
+  if (!db) throw new Error('Database not initialized')
+  const reorder = db.transaction(() => {
+    orderedIds.forEach((id, idx) => {
+      db!.prepare(`UPDATE student_milestones SET sort_order=? WHERE id=?`).run(idx, id)
+    })
+  })
+  reorder()
+  return { success: true }
+})
+
+// plan:buildPromptData — 聚合学员所有数据供 AI 使用
+ipcMain.handle('plan:buildPromptData', (_event, studentId: string) => {
+  if (!db) throw new Error('Database not initialized')
+
+  // 1. 学员基本信息
+  const student = db.prepare(`SELECT * FROM students WHERE id=?`).get(studentId) as {
+    name: string; grade: string | null; level: string | null; enroll_date: string | null;
+    learning_target: string | null; phonics_progress: string | null; phonics_completed: number;
+    ipa_completed: number; reading_progress: string | null
+  } | undefined
+  if (!student) throw new Error('Student not found')
+
+  // 2. 大纲
+  const plan = db.prepare(`SELECT * FROM student_plans WHERE student_id=?`).get(studentId) as {
+    summary: string | null; phonics_plan: string | null; textbook_plan: string | null; reading_plan: string | null
+  } | undefined
+
+  // 3. 里程碑
+  const milestones = (db.prepare(`SELECT * FROM student_milestones WHERE student_id=? ORDER BY sort_order`).all(studentId) as Array<{
+    label: string; target_wordbank: string | null; target_level: number | null;
+    target_date: string | null; note: string | null; is_completed: number
+  }>).map(m => ({
+    label: m.label,
+    target_wordbank: m.target_wordbank,
+    target_level: m.target_level,
+    target_date: m.target_date,
+    note: m.note,
+    is_completed: !!m.is_completed,
+  }))
+
+  // 4. 当前词库进度（取 active 状态中 current_level 最高的一条）
+  const activeProgress = db.prepare(`
+    SELECT swp.*, w.name as wordbank_name, w.total_levels
+    FROM student_wordbank_progress swp
+    LEFT JOIN wordbanks w ON swp.wordbank_id = w.id
+    WHERE swp.student_id = ? AND swp.status = 'active'
+    ORDER BY swp.current_level DESC
+    LIMIT 1
+  `).get(studentId) as {
+    wordbank_label: string; current_level: number; 
+    wordbank_name: string | null
+  } | undefined
+
+  // 5. 最近 3 条课堂记录
+  const recentRecords = (db.prepare(`
+    SELECT class_date, tasks, issues FROM class_records
+    WHERE student_id = ? ORDER BY class_date DESC LIMIT 3
+  `).all(studentId) as Array<{ class_date: string; tasks: string | null; issues: string | null }>)
+    .map(r => {
+      let tasksDone: unknown[] = []
+      try { tasksDone = r.tasks ? JSON.parse(r.tasks) : [] } catch { tasksDone = [] }
+      return { date: r.class_date, tasks_done: tasksDone, teacher_note: r.issues || '' }
+    })
+
+  // 6. 语音阶段描述
+  let phonicsStage = '未开始'
+  if (student.phonics_completed) phonicsStage = '已完成'
+  else if (student.ipa_completed) phonicsStage = '国际音标'
+  else if (student.phonics_progress) phonicsStage = student.phonics_progress
+
+  return {
+    student_profile: {
+      name: student.name,
+      grade: student.grade || '',
+      type: student.level === 'weak' ? '学苗' : student.level === 'advanced' ? '学霸' : '中等',
+      join_date: student.enroll_date || '',
+      target: student.learning_target || '',
+    },
+    student_plan: {
+      summary: plan?.summary || '',
+      milestones,
+      phonics_plan: plan?.phonics_plan || '',
+      textbook_plan: plan?.textbook_plan || '',
+      reading_plan: plan?.reading_plan || '',
+    },
+    current_status: {
+      vocab_current_bank: activeProgress?.wordbank_label || activeProgress?.wordbank_name || '',
+      vocab_current_level: activeProgress?.current_level || 0,
+      
+      last_lesson_vocab_range: null,
+      phonics_stage: phonicsStage,
+      phonics_page: 0,
+      textbook_current: '',
+      reading_progress: student.reading_progress || '',
+    },
+    recent_lessons: recentRecords,
   }
 })
 

@@ -71,8 +71,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fs:writeFile', filePath, base64Data),
 
   // 打印课程计划
-  printLessonPlans: (htmlContent: string) => 
+  printLessonPlans: (htmlContent: string) =>
     ipcRenderer.invoke('print-lesson-plans', htmlContent),
+
+  // ===== 学习规划相关 API =====
+  planGet: (studentId: string) =>
+    ipcRenderer.invoke('plan:get', studentId),
+  planSave: (data: object) =>
+    ipcRenderer.invoke('plan:save', data),
+  milestoneList: (studentId: string) =>
+    ipcRenderer.invoke('milestone:list', studentId),
+  milestoneAdd: (data: object) =>
+    ipcRenderer.invoke('milestone:add', data),
+  milestoneUpdate: (data: object) =>
+    ipcRenderer.invoke('milestone:update', data),
+  milestoneDelete: (id: number) =>
+    ipcRenderer.invoke('milestone:delete', id),
+  milestoneReorder: (orderedIds: number[]) =>
+    ipcRenderer.invoke('milestone:reorder', orderedIds),
+  buildPromptData: (studentId: string) =>
+    ipcRenderer.invoke('plan:buildPromptData', studentId),
 
   // 平台信息
   platform: process.platform,

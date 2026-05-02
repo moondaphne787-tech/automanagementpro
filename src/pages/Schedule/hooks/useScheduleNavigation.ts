@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
+import type { ScheduleDateConfig } from '../types'
 import {
   getWeekendWithFridayConfigs,
   getWeekDateConfigs
-} from '@/ai/schedulePrompts'
+} from '../types'
 import type { SchedulePreset } from '../types'
-import { useAddDateDialog } from './useAddDateDialog'
+import { useAddDateDialog } from './useScheduleDialogs'
 
 export function useScheduleNavigation() {
   const [currentDate, setCurrentDate] = useState(new Date())

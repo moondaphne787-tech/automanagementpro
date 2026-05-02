@@ -146,7 +146,7 @@ export function PrintPlansDrawer({ open, onClose, fullPage }: PrintPlansDrawerPr
       const typeLabel = TASK_TYPE_LABELS[task.type] || task.type
       let content = ''
       if (task.content) content = task.content
-      else if (['vocab_new', 'vocab_review', 'nine_grid'].includes(task.type) && task.wordbank_label) {
+      else if (['vocab_new', 'vocab_review'].includes(task.type) && task.wordbank_label) {
         content = task.wordbank_label
         if (task.level_from && task.level_to) content += ` 第${task.level_from}-${task.level_to}关`
       }

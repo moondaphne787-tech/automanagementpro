@@ -5,48 +5,7 @@ import { progressDb, classRecordDb, lessonPlanDb, settingsDb } from '@/db'
 import { sendAIRequest } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import type { TaskBlock, StudentWordbankProgress, ClassRecord, Wordbank } from '@/types'
-
-// 自动填充词库 content（从 GeneratePlansDrawer 提取的逻辑）
-function autoFillWordbankContent(
-  tasks: TaskBlock[],
-  lastRecord: ClassRecord | null,
-  wordbankProgress: StudentWordbankProgress[]
-): TaskBlock[] {
-  let filled = tasks
-  if (lastRecord) {
-    const lastVocabNew = lastRecord.tasks.find(t => t.type === 'vocab_new')
-    if (lastVocabNew) {
-      const lastLabel = lastVocabNew.wordbank_label
-      const lastFrom = lastVocabNew.level_from
-      const lastTo = lastVocabNew.level_to
-      if (lastLabel && lastFrom && lastTo) {
-        const span = lastTo - lastFrom + 1
-        const progressItem = wordbankProgress.find(p => p.wordbank_label === lastLabel)
-        const totalLevels = progressItem?.total_levels_override || 60
-        filled = filled.map(task => {
-          if (task.type === 'vocab_review' && !task.content) {
-            return { ...task, content: `检测复习${lastLabel}第${lastFrom}-${lastTo}关`, wordbank_label: task.wordbank_label || lastLabel, level_from: task.level_from || lastFrom, level_to: task.level_to || lastTo }
-          }
-          if (task.type === 'vocab_new' && !task.content) {
-            const nextFrom = lastTo + 1
-            const nextTo = Math.min(lastTo + span, totalLevels)
-            if (nextFrom <= totalLevels) {
-              return { ...task, content: `学习${lastLabel}第${nextFrom}-${nextTo}关`, wordbank_label: task.wordbank_label || lastLabel, level_from: task.level_from || nextFrom, level_to: task.level_to || nextTo }
-            }
-          }
-          return task
-        })
-      }
-    }
-  }
-  return filled.map(task => {
-    if (task.content) return task
-    if (task.type === 'vocab_new' && task.wordbank_label && task.level_from && task.level_to) return { ...task, content: `学习${task.wordbank_label}第${task.level_from}-${task.level_to}关` }
-    if (task.type === 'vocab_review' && task.wordbank_label && task.level_from && task.level_to) return { ...task, content: `检测复习${task.wordbank_label}第${task.level_from}-${task.level_to}关` }
-    if (task.type === 'nine_grid' && task.wordbank_label) return { ...task, content: `清理${task.wordbank_label}九宫格，共清理30-50词/轮×____轮=____词（助教课上填写）` }
-    return task
-  })
-}
+import { autoFillWordbankContent } from '@/ai/autoFillWordbankContent'
 
 // 暂停控制标志（模块级别，不在 store 中以避免闭包问题）
 let pauseFlag = false

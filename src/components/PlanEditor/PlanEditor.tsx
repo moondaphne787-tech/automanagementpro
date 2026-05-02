@@ -104,7 +104,7 @@ export function PlanEditor({
         <FileText className={cn("mx-auto mb-3 opacity-50", compact ? "w-10 h-10" : "w-12 h-12")} />
         <p>暂无课程计划</p>
         <p className="text-xs mt-1">
-          {compact ? '点击上方「新建计划」开始' : '点击「AI 生成计划」创建新计划'}
+          {compact ? '点击上方「新建计划」开始' : '点击「新增课程设计」或「AI 生成计划」创建新计划'}
         </p>
       </div>
     )
@@ -209,9 +209,6 @@ export function PlanEditor({
                       <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                       <span className="font-medium">{plan.plan_date || '未设定日期'}</span>
                     </div>
-                    {plan.generated_by_ai && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600">AI 生成</span>
-                    )}
                     <span className="text-xs text-muted-foreground ml-auto">点击编辑</span>
                   </div>
 

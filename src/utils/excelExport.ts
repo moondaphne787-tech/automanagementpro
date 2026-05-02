@@ -266,7 +266,6 @@ async function exportProgress(workbook: XLSX.WorkBook): Promise<void> {
     '词库名称': p.wordbank_label,
     '当前关卡': p.current_level,
     '自定义总关卡': p.total_levels_override || '',
-    '上次九宫格关卡': p.last_nine_grid_level,
     '状态': p.status === 'active' ? '进行中' : p.status === 'completed' ? '已完成' : '暂停',
     '开始日期': p.started_date || '',
     '完成日期': p.completed_date || '',
@@ -288,7 +287,6 @@ async function exportWordbanks(workbook: XLSX.WorkBook): Promise<void> {
   const data = wordbanks.map(w => ({
     '词库名称': w.name,
     '总关卡数': w.total_levels,
-    '九宫格间隔': w.nine_grid_interval,
     '分类': getCategoryLabel(w.category),
     '排序': w.sort_order,
     '备注': w.notes || ''

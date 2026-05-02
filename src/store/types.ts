@@ -48,7 +48,6 @@ export interface StudentSlice {
     wordbank_id: string
     current_level: number
     total_levels_override?: number
-    last_nine_grid_level?: number
     status?: 'active' | 'completed' | 'paused'
     notes?: string
   }) => Promise<void>
@@ -244,6 +243,8 @@ export interface CheckinStudent {
   name: string
   monthlyCount: number
   checkedYesterday: boolean
+  fullAttendance: boolean
+  daysInMonth: number
 }
 
 // ===== 每日打卡统计项 =====
@@ -269,6 +270,7 @@ export interface ReadingCheckinSlice {
 
   // 每日打卡人数统计
   dailyCheckinCounts: DailyCheckinCount[]
+  prevDailyCheckinCounts: DailyCheckinCount[]
   showDailyView: boolean
 
   // 搜索和过滤

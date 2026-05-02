@@ -158,16 +158,16 @@ export function TodaySchedulePanel({ schedules, loading, onQuickRecord }: TodayS
                         : <AlertCircle className="w-2.5 h-2.5 text-orange-400 flex-shrink-0" />
                       }
                       {!s.hasClassRecord && onQuickRecord && (
-                        <button
+                        <span
                           onClick={(e) => {
                             e.stopPropagation()
                             onQuickRecord(s)
                           }}
-                          className="flex-shrink-0"
+                          className="flex-shrink-0 cursor-pointer"
                           title="快速录入"
                         >
                           <PenLine className="w-2.5 h-2.5 text-primary" />
-                        </button>
+                        </span>
                       )}
                     </button>
                   </div>
@@ -209,16 +209,16 @@ export function TodaySchedulePanel({ schedules, loading, onQuickRecord }: TodayS
                   {s.hasClassRecord
                     ? <FileText className="w-3 h-3 text-blue-500" />
                     : onQuickRecord ? (
-                      <button
+                      <span
                         onClick={(e) => {
                           e.stopPropagation()
                           onQuickRecord(s)
                         }}
-                        className="p-0.5 rounded hover:bg-primary/10 transition-colors"
+                        className="p-0.5 rounded hover:bg-primary/10 transition-colors cursor-pointer"
                         title="快速录入课堂记录"
                       >
                         <PenLine className="w-3 h-3 text-primary" />
-                      </button>
+                      </span>
                     ) : (
                       <FileText className="w-3 h-3 text-muted-foreground/40" />
                     )

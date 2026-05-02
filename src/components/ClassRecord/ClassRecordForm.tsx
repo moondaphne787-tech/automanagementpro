@@ -216,9 +216,6 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
       if (['vocab_new', 'vocab_review'].includes(t.type)) {
         return t.wordbank_label && t.level_from && t.level_to
       }
-      if (t.type === 'nine_grid') {
-        return !!t.wordbank_label  // 九宫格只需要词库名
-      }
       return !!t.content
     })
     

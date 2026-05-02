@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
-import { studentDb, teacherDb, scheduledClassDb, studentSchedulePreferenceDb, teacherAvailabilityDb } from '@/db'
+import { studentDb, teacherDb, scheduledClassDb, studentSchedulePreferenceDb, teacherAvailabilityDb, schedulePeriodDb } from '@/db'
 import { getGradesFromSuitableGrades } from '@/types'
 import { formatDateISO, getDayOfWeek, timeToMinutes, minutesToTime } from '@/lib/utils'
 import type { 
@@ -66,7 +66,8 @@ export interface UseManualScheduleReturn {
   studentRows: StudentRow[]
   timeRange: TimeRange
   teacherCards: TeacherCardData[]
-  
+  activePeriodName: string | null
+
   // 方法
   setSelectedDate: (date: string) => void
   goToPrevDay: () => void
@@ -102,6 +103,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [staticDataLoaded, setStaticDataLoaded] = useState(false)
+  const [activePeriodName, setActivePeriodName] = useState<string | null>(null)
   
   // 本地排课状态（未保存）
   const [localSchedules, setLocalSchedules] = useState<Map<string, string>>(new Map())
@@ -150,13 +152,17 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     }
   }
   
-  // 加载指定日期的排课数据 - 随日期切换刷新
+  // 加载指定日期的排课数据和时段信息 - 随日期切换刷新
   const loadSchedulesForDate = useCallback(async (date: string) => {
     try {
       // 加载当天已排课程
       const classes = await scheduledClassDb.getByDate(date)
       setScheduledClasses(classes)
       setLocalSchedules(new Map()) // 重置本地排课
+
+      // 获取当天所属的排课时段（用于过滤学员偏好）
+      const period = await schedulePeriodDb.getByDate(date)
+      setActivePeriodName(period?.name ?? null)
     } catch (error) {
       console.error('Failed to load schedules:', error)
     }
@@ -181,9 +187,17 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     
     students.forEach(student => {
       const slots: StudentSlot[] = []
-      
-      // 查找当天对应的偏好时段
-      const todayPrefs = student.preferences.filter(p => p.day_of_week === dayOfWeek)
+
+      // 查找当天对应时段和星期的偏好
+      const todayPrefs = student.preferences.filter(p => {
+        if (p.day_of_week !== dayOfWeek) return false
+        // 时段匹配：activePeriodName 为 null 时只取平时偏好（semester IS NULL）
+        // 有值时只取匹配时段的偏好
+        if (activePeriodName === null) {
+          return p.semester === null || p.semester === undefined || p.semester === ''
+        }
+        return p.semester === activePeriodName
+      })
       
       if (todayPrefs.length > 0) {
         todayPrefs.forEach(pref => {
@@ -201,7 +215,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
           )
           
           // 检查本地排课
-          const slotId = `${student.id}-${start}`
+          const slotId = pref.id
           const localTeacherId = localSchedules.get(slotId)
           
           let teacher: TeacherWithColor | undefined
@@ -247,7 +261,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
           }
           
           slots.push({
-            id: `${student.id}-${start}`,
+            id: existingClass.id,
             student,
             preferredStart: start,
             preferredEnd: end,
@@ -270,8 +284,8 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     return Array.from(rowsMap.values()).sort((a, b) => 
       a.student.name.localeCompare(b.student.name, 'zh-CN')
     )
-  }, [students, scheduledClasses, localSchedules, teachers, selectedDate])
-  
+  }, [students, scheduledClasses, localSchedules, teachers, selectedDate, activePeriodName])
+
   // 计算时间范围
   const timeRange = useMemo(() => {
     const allSlots = studentRows.flatMap(row => row.slots)
@@ -606,7 +620,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
         // 刷新排课数据
         await loadSchedulesForDate(date)
       } else {
-        // 长期偏好：写入偏好表
+        // 长期偏好：写入偏好表（自动关联当前时段）
         const dayOfWeek = getDayOfWeek(date)
 
         await studentSchedulePreferenceDb.create({
@@ -614,6 +628,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
           day_of_week: dayOfWeek,
           preferred_start: startTime,
           preferred_end: endTime,
+          semester: activePeriodName ?? undefined,
         })
 
         // 只刷新受影响学员的偏好，不重新加载全部静态数据
@@ -625,7 +640,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
         await loadSchedulesForDate(date)
       }
     },
-    [loadSchedulesForDate]
+    [loadSchedulesForDate, activePeriodName]
   )
   
   return {
@@ -646,6 +661,7 @@ export function useManualSchedule(options: UseManualScheduleOptions = {}): UseMa
     goToPrevDay,
     goToNextDay,
     goToToday,
+    activePeriodName,
     handleAssign,
     handleRemove,
     handleClearDay,

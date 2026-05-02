@@ -14,8 +14,8 @@ export const wordbankDb = {
   async create(data: Omit<Wordbank, 'id'>): Promise<Wordbank> {
     const id = generateId()
     await ipcQuery(
-      `INSERT INTO wordbanks (id, name, total_levels, nine_grid_interval, category, sort_order, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, data.name, data.total_levels, data.nine_grid_interval, data.category, data.sort_order, data.notes ?? null]
+      `INSERT INTO wordbanks (id, name, total_levels, category, sort_order, notes) VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, data.name, data.total_levels, data.category, data.sort_order, data.notes ?? null]
     )
     const result = await ipcQueryOne<Wordbank>(`SELECT * FROM wordbanks WHERE id = ?`, [id])
     return result!
@@ -35,8 +35,8 @@ export const wordbankDb = {
     if (existing) {
       // 已存在，更新记录
       await ipcQuery(
-        `UPDATE wordbanks SET total_levels = ?, nine_grid_interval = ?, category = ?, sort_order = ?, notes = ? WHERE id = ?`,
-        [data.total_levels, data.nine_grid_interval, data.category, data.sort_order, data.notes || null, existing.id]
+        `UPDATE wordbanks SET total_levels = ?, category = ?, sort_order = ?, notes = ? WHERE id = ?`,
+        [data.total_levels, data.category, data.sort_order, data.notes || null, existing.id]
       )
       const result = await ipcQueryOne<Wordbank>(`SELECT * FROM wordbanks WHERE id = ?`, [existing.id])
       return result!

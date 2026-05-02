@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
-import { Trash2, Calendar, Sparkles, Printer, Loader2, CalendarX, RefreshCw, Copy, PanelRightClose, PanelRightOpen, ChevronDown, ChevronUp, StickyNote, BookOpen, BarChart3 } from 'lucide-react'
+import { Trash2, Calendar, Sparkles, Printer, Loader2, CalendarX, RefreshCw, Copy, PanelRightClose, PanelRightOpen, ChevronDown, ChevronUp, StickyNote, BookOpen, Plus, Library } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PromptDialog } from '@/components/ui/dialog'
 import { PlanEditor } from '@/components/PlanEditor/PlanEditor'
+import { TemplatePickerDialog } from '@/components/PlanEditor/TemplatePickerDialog'
 import { useAppStore } from '@/store/appStore'
 import { sendAIRequestStream } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
@@ -43,6 +44,9 @@ export function PlansTab({ studentId }: PlansTabProps) {
   const [streamContent, setStreamContent] = useState('')
   const [extraInstruction, setExtraInstruction] = useState('')
   const [showPlanGenerator, setShowPlanGenerator] = useState(false)
+  const [planStatus, setPlanStatus] = useState<import('@/types').PlanStatus | null>(null)
+
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
   // 参考面板状态
   const [showRefPanel, setShowRefPanel] = useState(true)
@@ -79,42 +83,65 @@ export function PlansTab({ studentId }: PlansTabProps) {
 
   const handleGeneratePlan = async () => {
     if (!aiConfig || !currentStudent) return
-    
+
     setGeneratingPlan(true)
     setStreamContent('')
-    
+
     try {
+      // 尝试获取完整的大纲数据（含里程碑），注入到 AI 输入
+      let promptData = undefined
+      try {
+        if (window.electronAPI?.buildPromptData) {
+          promptData = await window.electronAPI.buildPromptData(studentId)
+        }
+      } catch { /* 无大纲数据时降级到旧格式 */ }
+
       const lastPlanSummary = await getLastPlanSummary(studentId)
-      
+
       const userInput = buildUserInput({
         student: currentStudent,
         wordbankProgress: currentProgress,
         wordbanks,
         recentRecords,
         lastPlanSummary,
-        extraInstruction
+        extraInstruction,
+        promptData,
       })
-      
+
       const systemPrompt = await getSystemPrompt()
-      
+
       let fullContent = ''
       for await (const chunk of sendAIRequestStream(aiConfig, systemPrompt, userInput)) {
         fullContent += chunk
         setStreamContent(fullContent)
       }
-      
+
       const parsed = parseAIResponse(fullContent)
-      
+
       if (parsed) {
-        await createLessonPlan({
+        const today = new Date().toISOString().split('T')[0]
+        const newPlan = await createLessonPlan({
           student_id: studentId,
-          plan_date: new Date().toISOString().split('T')[0],
+          plan_date: today,
           tasks: parsed.tasks,
           notes: parsed.notes,
           ai_reason: parsed.reason,
           generated_by_ai: true
         })
-        
+
+        // 将 plan_status 写入刚创建的 lesson_plans 记录（不再创建空 class_records）
+        if (parsed.planStatus && newPlan && window.electronAPI?.dbQuery) {
+          try {
+            await window.electronAPI.dbQuery(
+              `UPDATE lesson_plans SET plan_status_json = ? WHERE id = ?`,
+              [JSON.stringify(parsed.planStatus), newPlan.id]
+            )
+          } catch (e) {
+            console.warn('[PlansTab] 写入 plan_status 失败:', e)
+          }
+        }
+
+        setPlanStatus(parsed.planStatus)
         setShowPlanGenerator(false)
         setStreamContent('')
         setExtraInstruction('')
@@ -125,7 +152,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
     } catch (error) {
       toast.error('生成失败：' + (error as Error).message)
     }
-    
+
     setGeneratingPlan(false)
   }
 
@@ -145,6 +172,39 @@ export function PlansTab({ studentId }: PlansTabProps) {
           </p>
         ) : (
           <p className="text-xs text-muted-foreground italic">暂无备注</p>
+        )}
+      </div>
+
+      {/* 词库进度 */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-2">
+          <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+          <span className="text-xs font-medium text-muted-foreground">词库进度</span>
+        </div>
+        {currentProgress.length > 0 ? (
+          <div className="space-y-2">
+            {currentProgress.map(p => {
+              const wb = wordbanks.find(w => w.id === p.wordbank_id)
+              const total = p.total_levels_override ?? wb?.total_levels ?? 0
+              const pct = total > 0 ? Math.round((p.current_level / total) * 100) : 0
+              return (
+                <div key={p.id}>
+                  <div className="flex justify-between text-xs mb-0.5">
+                    <span className="text-muted-foreground">{p.wordbank_label}</span>
+                    <span>{p.current_level}/{total}</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5">
+                    <div
+                      className="bg-primary rounded-full h-1.5 transition-all"
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">暂无词库进度</p>
         )}
       </div>
 
@@ -183,43 +243,6 @@ export function PlansTab({ studentId }: PlansTabProps) {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground italic">暂无课堂记录</p>
-        )}
-      </div>
-
-      {/* 词库进度 */}
-      <div>
-        <div className="flex items-center gap-1.5 mb-2">
-          <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
-          <span className="text-xs font-medium text-muted-foreground">词库进度</span>
-        </div>
-        {currentProgress.length > 0 ? (
-          <div className="space-y-1.5">
-            {currentProgress.map(p => {
-              const wb = wordbanks.find(w => w.id === p.wordbank_id)
-              const total = p.total_levels_override || wb?.total_levels || 0
-              const pct = total > 0 ? Math.round((p.current_level / total) * 100) : 0
-              return (
-                <div key={p.id} className="text-sm">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-xs">{p.wordbank_label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      第 {p.current_level} 关{total > 0 ? ` / ${total}` : ''}
-                    </span>
-                  </div>
-                  {total > 0 && (
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all"
-                        style={{ width: `${Math.min(pct, 100)}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground italic">暂无词库进度</p>
         )}
       </div>
     </div>
@@ -273,12 +296,26 @@ export function PlansTab({ studentId }: PlansTabProps) {
                 </div>
                 {currentProgress.length > 0 && (
                   <div className="mt-3 pt-3 border-t">
-                    <div className="text-xs text-muted-foreground mb-1">词库进度:</div>
-                    {currentProgress.map(p => (
-                      <div key={p.id} className="text-sm">
-                        {p.wordbank_label}: 第 {p.current_level} 关
-                      </div>
-                    ))}
+                    <div className="text-xs text-muted-foreground mb-2">词库进度:</div>
+                    {currentProgress.map(p => {
+                      const wb = wordbanks.find(w => w.id === p.wordbank_id)
+                      const total = p.total_levels_override ?? wb?.total_levels ?? 0
+                      const pct = total > 0 ? Math.round((p.current_level / total) * 100) : 0
+                      return (
+                        <div key={p.id} className="mb-2 last:mb-0">
+                          <div className="flex justify-between text-sm mb-0.5">
+                            <span>{p.wordbank_label}</span>
+                            <span className="text-xs text-muted-foreground">第 {p.current_level}/{total} 关 ({pct}%)</span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-2">
+                            <div
+                              className="bg-primary rounded-full h-2 transition-all"
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -298,6 +335,26 @@ export function PlansTab({ studentId }: PlansTabProps) {
                 <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-4">
                   <div className="text-sm font-medium text-blue-700 mb-2">AI 正在生成...</div>
                   <pre className="text-sm whitespace-pre-wrap font-mono">{streamContent}</pre>
+                </div>
+              )}
+
+              {/* 进度评估结果 */}
+              {planStatus && !generatingPlan && (
+                <div className="border rounded-lg p-4 space-y-2">
+                  <div className="text-sm font-medium flex items-center gap-2">
+                    📊 进度评估
+                    <span className={cn(
+                      'px-2 py-0.5 rounded text-xs font-medium',
+                      planStatus.status === '按计划' && 'bg-green-100 text-green-700',
+                      planStatus.status === '略超前' && 'bg-blue-100 text-blue-700',
+                      planStatus.status === '略落后' && 'bg-yellow-100 text-yellow-700',
+                      planStatus.status === '明显落后' && 'bg-red-100 text-red-700',
+                    )}>
+                      {planStatus.status}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{planStatus.current_vs_plan}</p>
+                  <p className="text-sm">{planStatus.suggestion}</p>
                 </div>
               )}
               
@@ -338,7 +395,25 @@ export function PlansTab({ studentId }: PlansTabProps) {
         ) : (
           <>
             {/* 新建按钮 */}
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3 flex-wrap">
+              <Button variant="default" onClick={async () => {
+                const today = new Date().toISOString().split('T')[0]
+                await createLessonPlan({
+                  student_id: studentId,
+                  plan_date: today,
+                  tasks: [],
+                  notes: '',
+                  generated_by_ai: false
+                })
+                toast.success('空白课程设计已创建，点击卡片开始编辑')
+              }}>
+                <Plus className="w-4 h-4 mr-1" />
+                新增课程设计
+              </Button>
+              <Button variant="outline" onClick={() => setShowTemplatePicker(true)}>
+                <Library className="w-4 h-4 mr-1" />
+                从模板创建
+              </Button>
               <Button variant="outline" onClick={() => setShowPlanGenerator(true)}>
                 <Sparkles className="w-4 h-4 mr-1" />
                 AI 生成计划
@@ -541,6 +616,23 @@ export function PlansTab({ studentId }: PlansTabProps) {
         onCancel={() =>
           setPromptState({ open: false, title: '', defaultValue: '', onConfirm: null })
         }
+      />
+
+      <TemplatePickerDialog
+        open={showTemplatePicker}
+        onOpenChange={setShowTemplatePicker}
+        onSelect={async (template) => {
+          setShowTemplatePicker(false)
+          const today = new Date().toISOString().split('T')[0]
+          await createLessonPlan({
+            student_id: studentId,
+            plan_date: today,
+            tasks: template.tasks,
+            notes: template.notes,
+            generated_by_ai: false
+          })
+          toast.success(`已从「${template.name}」模板创建课程设计`)
+        }}
       />
     </>
   )

@@ -11,7 +11,7 @@ function formatTaskText(task: TaskBlock): string {
   }
 
   // 兜底：兼容旧数据，从 wordbank_label + levels 拼接
-  if ((task.type === 'vocab_new' || task.type === 'vocab_review' || task.type === 'nine_grid') && task.wordbank_label) {
+  if ((task.type === 'vocab_new' || task.type === 'vocab_review' ) && task.wordbank_label) {
     if (task.level_from && task.level_to) {
       return `${typeName}：${task.wordbank_label} 第${task.level_from}-${task.level_to}关`
     }

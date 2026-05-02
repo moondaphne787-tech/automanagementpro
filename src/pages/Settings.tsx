@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Save, TestTube, Calendar, RefreshCw, Sparkles, Database, BookOpen, Settings2 } from 'lucide-react'
+import { Save, TestTube, Calendar, RefreshCw, Sparkles, BookOpen, Settings2, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
@@ -8,29 +8,30 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { DateInput } from '@/components/ui/date-input'
 import { useAppStore } from '@/store/appStore'
 import { settingsDb, studentDb, learningPhaseDb, classRecordDb } from '@/db'
-import { testAIConnection } from '@/ai/client'
 import type { AIConfig, PhaseType } from '@/types'
 import { DatabaseManagementCard } from '@/components/Settings/DatabaseManagementCard'
 import { SystemPromptEditor } from '@/components/Settings/SystemPromptEditor'
 import { WordbankManager } from '@/components/Settings/WordbankManager'
+import { PlanTemplateManager } from '@/components/Settings/PlanTemplateManager'
+import { SchedulePeriodManager } from '@/components/Settings/SchedulePeriodManager'
 import { cn } from '@/lib/utils'
 
-type SettingsTab = 'ai' | 'wordbank' | 'semester' | 'prompt' | 'task_defaults' | 'database'
+type SettingsTab = 'ai' | 'wordbank' | 'semester' | 'task_defaults' | 'plan_templates' | 'schedule_periods'
+
 
 const TABS: Array<{ key: SettingsTab; label: string; icon: React.ReactNode }> = [
-  { key: 'ai', label: 'AI 配置', icon: <Settings2 className="w-4 h-4" /> },
   { key: 'wordbank', label: '词库管理', icon: <BookOpen className="w-4 h-4" /> },
   { key: 'task_defaults', label: '任务模板', icon: <Save className="w-4 h-4" /> },
+  { key: 'plan_templates', label: '课程模板', icon: <BookOpen className="w-4 h-4" /> },
+  { key: 'ai', label: 'AI 配置', icon: <Settings2 className="w-4 h-4" /> },
   { key: 'semester', label: '学期设置', icon: <Calendar className="w-4 h-4" /> },
-  { key: 'prompt', label: '系统提示词', icon: <Sparkles className="w-4 h-4" /> },
-  { key: 'database', label: '数据库', icon: <Database className="w-4 h-4" /> },
+  { key: 'schedule_periods', label: '排课时段', icon: <Calendar className="w-4 h-4" /> },
 ]
 
 const TASK_TYPES_FOR_DEFAULTS = [
   { key: 'phonics', label: '语音训练' },
   { key: 'vocab_new', label: '词库学习（新词）' },
   { key: 'vocab_review', label: '词库复习' },
-  { key: 'nine_grid', label: '九宫格清理' },
   { key: 'textbook', label: '课文梳理' },
   { key: 'reading', label: '阅读训练' },
   { key: 'picture_book', label: '绘本阅读' },
@@ -39,9 +40,9 @@ const TASK_TYPES_FOR_DEFAULTS = [
 ]
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('ai')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('wordbank')
   const [aiConfig, setAiConfig] = useState<AIConfig>({
-    api_url: 'https://api.deepseek.com/v1',api_key: '',
+    api_url: 'https://api.deepseek.com/v1', api_key: '',
     model: 'deepseek-chat',
     temperature: 0.7,
     max_tokens: 2048
@@ -49,17 +50,13 @@ export function Settings() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
-  
+
   // 学期节点设置
   const [semesterConfig, setSemesterConfig] = useState({
-    spring_start: '',
-    spring_end: '',
-    summer_start: '',
-    summer_end: '',
-    autumn_start: '',
-    autumn_end: '',
-    winter_start: '',
-    winter_end: ''
+    spring_start: '', spring_end: '',
+    summer_start: '', summer_end: '',
+    autumn_start: '', autumn_end: '',
+    winter_start: '', winter_end: ''
   })
   const [savingSemester, setSavingSemester] = useState(false)
   const [syncingPhases, setSyncingPhases] = useState(false)
@@ -68,15 +65,17 @@ export function Settings() {
   const [taskDefaults, setTaskDefaults] = useState<Record<string, string>>({})
   const [savingDefaults, setSavingDefaults] = useState(false)
 
-  // 从 store 获取学期配置和加载方法
+  // 折叠面板状态
+  const [showPromptEditor, setShowPromptEditor] = useState(false)
+  const [showDatabaseCard, setShowDatabaseCard] = useState(false)
+
   const storeSemesterConfig = useAppStore(state => state.semesterConfig)
   const loadSemesterConfig = useAppStore(state => state.loadSemesterConfig)
 
   useEffect(() => {
     loadSettings()
   }, [])
-  
-  // 当 store 中的学期配置加载完成后，同步到本地状态
+
   useEffect(() => {
     if (storeSemesterConfig) {
       setSemesterConfig({
@@ -107,7 +106,6 @@ export function Settings() {
       max_tokens: parseInt(tokens || '2048')
     })
 
-    // 加载任务默认文本
     const defaults: Record<string, string> = {}
     for (const t of TASK_TYPES_FOR_DEFAULTS) {
       const val = await settingsDb.get(`task_default_${t.key}`)
@@ -129,7 +127,6 @@ export function Settings() {
     setSavingDefaults(false)
   }
 
-
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -149,7 +146,7 @@ export function Settings() {
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
-    
+    const { testAIConnection } = await import('@/ai/client')
     const result = await testAIConnection(aiConfig)
     setTestResult(result.message)
     setTesting(false)
@@ -166,10 +163,7 @@ export function Settings() {
       await settingsDb.set('semester_autumn_end', semesterConfig.autumn_end)
       await settingsDb.set('semester_winter_start', semesterConfig.winter_start)
       await settingsDb.set('semester_winter_end', semesterConfig.winter_end)
-      
-      // 更新 store 中的学期配置
       await loadSemesterConfig()
-      
       toast.success('学期节点设置已保存！')
     } catch (error) {
       toast.error('保存失败：' + (error as Error).message)
@@ -177,73 +171,54 @@ export function Settings() {
       setSavingSemester(false)
     }
   }
-  
-  // 同步学习阶段到所有学员
+
   const handleSyncPhases = async () => {
-    if (!semesterConfig.spring_start && !semesterConfig.summer_start && 
+    if (!semesterConfig.spring_start && !semesterConfig.summer_start &&
         !semesterConfig.autumn_start && !semesterConfig.winter_start) {
       toast.error('请先设置至少一个学期的起止日期')
       return
     }
-    
+
     const confirmed = await confirmDialog({
       title: '同步学习阶段',
       message: '确定要根据学期设置同步所有学员的学习阶段吗？\n\n这将为每个学员创建对应的学习阶段记录。',
       confirmText: '同步',
       variant: 'warning'
     })
-    
-    if (!confirmed) {
-      return
-    }
-    
+
+    if (!confirmed) return
+
     setSyncingPhases(true)
     try {
-      // 获取所有学员
       const allStudents = await studentDb.getAllWithBilling(
         { status: 'all', student_type: 'all', level: 'all', grade: 'all', search: '', day_of_week: 'all' },
         { field: 'student_no', direction: 'asc' }
       )
-      
+
       const currentYear = new Date().getFullYear()
       let createdCount = 0
-      
-      // 定义阶段类型映射
-      const phaseConfigs: Array<{
-        type: PhaseType
-        name: string
-        startKey: keyof typeof semesterConfig
-        endKey: keyof typeof semesterConfig
-      }> = [
+
+      const phaseConfigs: Array<{ type: PhaseType; name: string; startKey: keyof typeof semesterConfig; endKey: keyof typeof semesterConfig }> = [
         { type: 'semester', name: `${currentYear}年春季学期`, startKey: 'spring_start', endKey: 'spring_end' },
         { type: 'summer', name: `${currentYear}年暑假`, startKey: 'summer_start', endKey: 'summer_end' },
         { type: 'semester', name: `${currentYear}年秋季学期`, startKey: 'autumn_start', endKey: 'autumn_end' },
         { type: 'winter', name: `${currentYear}年寒假`, startKey: 'winter_start', endKey: 'winter_end' }
       ]
-      
+
       for (const student of allStudents) {
         for (const config of phaseConfigs) {
           const startDate = semesterConfig[config.startKey]
           const endDate = semesterConfig[config.endKey]
-          
           if (!startDate || !endDate) continue
-          
-          // 检查是否已存在相同学期类型的阶段
+
           const existingPhases = await learningPhaseDb.getByStudentId(student.id)
-          const exists = existingPhases.some(p => 
-            p.phase_type === config.type && 
+          const exists = existingPhases.some(p =>
+            p.phase_type === config.type &&
             p.start_date === startDate &&
             p.end_date === endDate
           )
-          
+
           if (!exists) {
-            // 获取该学员在这个阶段的起始词汇量（从课堂记录中获取）
-            const records = await classRecordDb.getByStudentId(student.id)
-            const phaseRecords = records.filter(r => 
-              r.class_date >= startDate && r.class_date <= endDate
-            )
-            
-            // 创建学习阶段
             await learningPhaseDb.create({
               student_id: student.id,
               phase_name: config.name,
@@ -256,7 +231,7 @@ export function Settings() {
           }
         }
       }
-      
+
       toast.success(`同步完成！共创建了 ${createdCount} 个学习阶段记录。`)
     } catch (error) {
       toast.error('同步失败：' + (error as Error).message)
@@ -295,7 +270,7 @@ export function Settings() {
 
       {/* 内容区域 */}
       <div className="flex-1 overflow-auto p-6">
-        {/* AI 配置 Tab */}
+        {/* AI 配置 Tab（合并系统提示词） */}
         {activeTab === 'ai' && (
           <div className="max-w-2xl space-y-4">
             <Card>
@@ -308,76 +283,62 @@ export function Settings() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">API 地址</label>
-                  <Input
-                    value={aiConfig.api_url}
-                    onChange={(e) => setAiConfig({ ...aiConfig, api_url: e.target.value })}
-                    placeholder="https://api.deepseek.com/v1"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    支持 OpenAI、DeepSeek 等兼容格式的 API 地址
-                  </p>
+                  <Input value={aiConfig.api_url} onChange={(e) => setAiConfig({ ...aiConfig, api_url: e.target.value })} placeholder="https://api.deepseek.com/v1" />
+                  <p className="text-xs text-muted-foreground">支持 OpenAI、DeepSeek 等兼容格式的 API 地址</p>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium">API Key</label>
-                  <Input
-                    type="password"
-                    value={aiConfig.api_key}
-                    onChange={(e) => setAiConfig({ ...aiConfig, api_key: e.target.value })}
-                    placeholder="sk-xxxxxxxxxxxxxxxx"
-                  />
+                  <Input type="password" value={aiConfig.api_key} onChange={(e) => setAiConfig({ ...aiConfig, api_key: e.target.value })} placeholder="sk-xxxxxxxxxxxxxxxx" />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-sm font-medium">模型名称</label>
-                  <Input
-                    value={aiConfig.model}
-                    onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
-                    placeholder="deepseek-chat"
-                  />
+                  <Input value={aiConfig.model} onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })} placeholder="deepseek-chat" />
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">温度参数</label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="2"
-                      value={aiConfig.temperature}
-                      onChange={(e) => setAiConfig({ ...aiConfig, temperature: parseFloat(e.target.value) })}
-                    />
+                    <Input type="number" step="0.1" min="0" max="2" value={aiConfig.temperature} onChange={(e) => setAiConfig({ ...aiConfig, temperature: parseFloat(e.target.value) })} />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">最大 Token</label>
-                    <Input
-                      type="number"
-                      value={aiConfig.max_tokens}
-                      onChange={(e) => setAiConfig({ ...aiConfig, max_tokens: parseInt(e.target.value) })}
-                    />
+                    <Input type="number" value={aiConfig.max_tokens} onChange={(e) => setAiConfig({ ...aiConfig, max_tokens: parseInt(e.target.value) })} />
                   </div>
                 </div>
-
                 {testResult && (
-                  <div className={`p-3 rounded-lg text-sm ${
-                    testResult.includes('成功') ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                  }`}>
+                  <div className={`p-3 rounded-lg text-sm ${testResult.includes('成功') ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                     {testResult}
                   </div>
                 )}
-
                 <div className="flex gap-3 pt-2">
                   <Button onClick={handleSave} disabled={saving}>
-                    <Save className="w-4 h-4 mr-2" />
-                    {saving ? '保存中...' : '保存配置'}
+                    <Save className="w-4 h-4 mr-2" />{saving ? '保存中...' : '保存配置'}
                   </Button>
                   <Button variant="outline" onClick={handleTest} disabled={testing}>
-                    <TestTube className="w-4 h-4 mr-2" />
-                    {testing ? '测试中...' : '测试连接'}
+                    <TestTube className="w-4 h-4 mr-2" />{testing ? '测试中...' : '测试连接'}
                   </Button>
                 </div>
               </CardContent>
+            </Card>
+
+            {/* 系统提示词 - 折叠面板 */}
+            <Card>
+              <CardHeader className="cursor-pointer" onClick={() => setShowPromptEditor(!showPromptEditor)}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" />
+                      AI 系统提示词
+                    </CardTitle>
+                    <CardDescription>自定义 AI 生成课程计划时使用的系统规则。留空则使用内置默认提示词。</CardDescription>
+                  </div>
+                  {showPromptEditor ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                </div>
+              </CardHeader>
+              {showPromptEditor && (
+                <CardContent>
+                  <SystemPromptEditor />
+                </CardContent>
+              )}
             </Card>
           </div>
         )}
@@ -387,9 +348,7 @@ export function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>词库管理</CardTitle>
-              <CardDescription>
-                管理学习词库配置，包括总关数和九宫格清理间隔
-              </CardDescription>
+              <CardDescription>管理学习词库配置，包括总关数和分类</CardDescription>
             </CardHeader>
             <CardContent>
               <WordbankManager />
@@ -399,139 +358,65 @@ export function Settings() {
 
         {/* 学期设置 Tab */}
         {activeTab === 'semester' && (
-          <div className="max-w-3xl">
+          <div className="max-w-3xl space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  学期节点设置
-                </CardTitle>
-                <CardDescription>
-                  设置各学期的起止日期，用于提醒和数据统计
-                </CardDescription>
+                <CardTitle className="flex items-center gap-2"><Calendar className="w-4 h-4" />学期节点设置</CardTitle>
+                <CardDescription>设置各学期的起止日期，用于提醒和数据统计</CardDescription>
               </CardHeader>
-          <CardContent className="space-y-4">
-                {/* 春季学期 */}
+              <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-green-600">春季学期</label>
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-muted-foreground">开始日期</label>
-                      <DateInput
-                        value={semesterConfig.spring_start}
-                        onChange={(val) => setSemesterConfig({ ...semesterConfig, spring_start: val })}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">结束日期</label>
-                      <DateInput
-                        value={semesterConfig.spring_end}
-                        onChange={(val) => setSemesterConfig({ ...semesterConfig, spring_end: val })}
-                      />
-                    </div>
+                    <div><label className="text-xs text-muted-foreground">开始日期</label><DateInput value={semesterConfig.spring_start} onChange={(val) => setSemesterConfig({ ...semesterConfig, spring_start: val })} /></div>
+                    <div><label className="text-xs text-muted-foreground">结束日期</label><DateInput value={semesterConfig.spring_end} onChange={(val) => setSemesterConfig({ ...semesterConfig, spring_end: val })} /></div>
                   </div>
                 </div>
-
-                {/* 暑假 */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-orange-600">暑假</label>
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-muted-foreground">开始日期</label>
-                      <DateInput
-                        value={semesterConfig.summer_start}
-                        onChange={(val) => setSemesterConfig({ ...semesterConfig, summer_start: val })}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">结束日期</label>
-                      <DateInput
-                        value={semesterConfig.summer_end}
-                        onChange={(val) => setSemesterConfig({ ...semesterConfig, summer_end: val })}
-                      />
-                    </div>
+                    <div><label className="text-xs text-muted-foreground">开始日期</label><DateInput value={semesterConfig.summer_start} onChange={(val) => setSemesterConfig({ ...semesterConfig, summer_start: val })} /></div>
+                    <div><label className="text-xs text-muted-foreground">结束日期</label><DateInput value={semesterConfig.summer_end} onChange={(val) => setSemesterConfig({ ...semesterConfig, summer_end: val })} /></div>
                   </div>
                 </div>
-
-                {/* 秋季学期 */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-blue-600">秋季学期</label>
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-muted-foreground">开始日期</label>
-                      <DateInput
-                        value={semesterConfig.autumn_start}
-                        onChange={(val) => setSemesterConfig({ ...semesterConfig, autumn_start: val })}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">结束日期</label>
-                      <DateInput
-                        value={semesterConfig.autumn_end}
-                        onChange={(val) => setSemesterConfig({ ...semesterConfig, autumn_end: val })}
-                      />
-                    </div>
+                    <div><label className="text-xs text-muted-foreground">开始日期</label><DateInput value={semesterConfig.autumn_start} onChange={(val) => setSemesterConfig({ ...semesterConfig, autumn_start: val })} /></div>
+                    <div><label className="text-xs text-muted-foreground">结束日期</label><DateInput value={semesterConfig.autumn_end} onChange={(val) => setSemesterConfig({ ...semesterConfig, autumn_end: val })} /></div>
                   </div>
                 </div>
-
-                {/* 寒假 */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-cyan-600">寒假</label>
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-muted-foreground">开始日期</label>
-                      <DateInput
-                        value={semesterConfig.winter_start}
-                        onChange={(val) => setSemesterConfig({ ...semesterConfig, winter_start: val })}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">结束日期</label>
-                      <DateInput
-                        value={semesterConfig.winter_end}
-                        onChange={(val) => setSemesterConfig({ ...semesterConfig, winter_end: val })}
-                      />
-                    </div>
+                    <div><label className="text-xs text-muted-foreground">开始日期</label><DateInput value={semesterConfig.winter_start} onChange={(val) => setSemesterConfig({ ...semesterConfig, winter_start: val })} /></div>
+                    <div><label className="text-xs text-muted-foreground">结束日期</label><DateInput value={semesterConfig.winter_end} onChange={(val) => setSemesterConfig({ ...semesterConfig, winter_end: val })} /></div>
                   </div>
                 </div>
-
                 <div className="flex gap-3">
                   <Button onClick={handleSaveSemester} disabled={savingSemester}>
-                    <Save className="w-4 h-4 mr-2" />
-                    {savingSemester ? '保存中...' : '保存学期设置'}
+                    <Save className="w-4 h-4 mr-2" />{savingSemester ? '保存中...' : '保存学期设置'}
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={handleSyncPhases} 
-                    disabled={syncingPhases}
-                  >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${syncingPhases ? 'animate-spin' : ''}`} />
-                    {syncingPhases ? '同步中...' : '同步到学员学习阶段'}
+                  <Button variant="outline" onClick={handleSyncPhases} disabled={syncingPhases}>
+                    <RefreshCw className={`w-4 h-4 mr-2 ${syncingPhases ? 'animate-spin' : ''}`} />{syncingPhases ? '同步中...' : '同步到学员学习阶段'}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  点击"同步到学员学习阶段"后，系统将根据上方设置的学期日期，自动为每位学员创建对应的学习阶段记录。
-                </p>
+                <p className="text-xs text-muted-foreground">点击"同步到学员学习阶段"后，系统将根据上方设置的学期日期，自动为每位学员创建对应的学习阶段记录。 <a href="#/settings/phases" className="text-primary hover:underline">查看学习阶段总览 →</a></p>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* 系统提示词 Tab */}
-        {activeTab === 'prompt' && (
+        {/* 排课时段 Tab */}
+        {activeTab === 'schedule_periods' && (
           <div className="max-w-3xl">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
-                  AI 系统提示词
-                </CardTitle>
-                <CardDescription>
-                  自定义 AI 生成课程计划时使用的系统规则。留空则使用内置默认提示词。
-                </CardDescription>
+                <CardTitle className="flex items-center gap-2"><Calendar className="w-4 h-4" />排课时段配置</CardTitle>
+                <CardDescription>定义假期/特殊排课时段。排课时系统会根据日期自动匹配对应的学员偏好，未配置时段的日子默认使用"平时"偏好。</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <SystemPromptEditor />
+              <CardContent>
+                <SchedulePeriodManager />
               </CardContent>
             </Card>
           </div>
@@ -543,9 +428,7 @@ export function Settings() {
             <Card>
               <CardHeader>
                 <CardTitle>任务默认文本模板</CardTitle>
-                <CardDescription>
-                  为每种任务类型设置默认文本内容。创建新任务时会自动填充对应模板。
-                </CardDescription>
+                <CardDescription>为每种任务类型设置默认文本内容。创建新任务时会自动填充对应模板。</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {TASK_TYPES_FOR_DEFAULTS.map(t => (
@@ -561,20 +444,43 @@ export function Settings() {
                   </div>
                 ))}
                 <Button onClick={handleSaveTaskDefaults} disabled={savingDefaults}>
-                  <Save className="w-4 h-4 mr-2" />
-                  {savingDefaults ? '保存中...' : '保存模板'}
+                  <Save className="w-4 h-4 mr-2" />{savingDefaults ? '保存中...' : '保存模板'}
                 </Button>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* 数据库 Tab */}
-        {activeTab === 'database' && (
-          <div className="max-w-2xl">
-            <DatabaseManagementCard />
+        {/* 课程模板 Tab */}
+        {activeTab === 'plan_templates' && (
+          <div className="max-w-3xl">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><BookOpen className="w-4 h-4" />课程设计模板</CardTitle>
+                <CardDescription>管理课程设计模板，创建新课程设计时可选。每个模板包含多个任务和助教提示。</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PlanTemplateManager />
+              </CardContent>
+            </Card>
           </div>
         )}
+
+        {/* 数据库管理 - 折叠卡片（始终显示在末尾） */}
+        <div className="mt-4">
+          <button
+            onClick={() => setShowDatabaseCard(!showDatabaseCard)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showDatabaseCard ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            数据库管理
+          </button>
+          {showDatabaseCard && (
+            <div className="mt-2 max-w-2xl">
+              <DatabaseManagementCard />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

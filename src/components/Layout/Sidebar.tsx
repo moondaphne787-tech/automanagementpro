@@ -1,8 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  Users, UserPlus, Calendar, BookOpen, GraduationCap, Settings,
-  Upload, Sparkles, FileDown, Zap, LayoutDashboard, Clock,
-  ChevronLeft, ChevronRight, BookText, History
+  Users, UserPlus, Calendar, GraduationCap, Settings,
+  LayoutDashboard, LayoutList, BookText,
+  ChevronLeft, ChevronRight, History
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
@@ -13,17 +13,13 @@ const navItems = [
   { to: '/students', icon: Users, label: '学员管理' },
   { to: '/trial', icon: UserPlus, label: '体验生' },
   { to: '/schedule', icon: Calendar, label: '排课' },
-  { to: '/preferences', icon: Clock, label: '时段偏好' },
-  { to: '/reading-checkin', icon: BookText, label: '朗读打卡' },
   { to: '/teachers', icon: GraduationCap, label: '助教' },
-  { to: '/phases', icon: BookOpen, label: '学习阶段' },
   { to: '/settings', icon: Settings, label: '设置' },
 ]
 
 const quickActions = [
-  { icon: Upload, label: '批量导入课堂记录', action: 'import', path: '/batch/import' },
-  { icon: Sparkles, label: '批量生成课程计划', action: 'generate', path: '/batch/generate' },
-  { icon: FileDown, label: '批量导出课程计划', action: 'print', path: '/batch/export' },
+  { icon: LayoutList, label: '批量操作', path: '/batch' },
+  { icon: BookText, label: '朗读打卡', path: '/reading-checkin' },
 ]
 
 interface SidebarProps {}
@@ -66,14 +62,12 @@ export function Sidebar(_props: SidebarProps) {
 
   const renderQuickAction = (action: typeof quickActions[0]) => {
     const handleClick = () => {
-      if ('path' in action && action.path) {
-        navigate(action.path)
-      }
+      navigate(action.path)
     }
 
     const btn = (
       <button
-        key={action.action}
+        key={action.path}
         onClick={handleClick}
         className={cn(
           "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors",
@@ -87,7 +81,7 @@ export function Sidebar(_props: SidebarProps) {
 
     if (sidebarCollapsed) {
       return (
-        <Tooltip key={action.action} content={action.label} side="right">
+        <Tooltip key={action.path} content={action.label} side="right">
           {btn}
         </Tooltip>
       )

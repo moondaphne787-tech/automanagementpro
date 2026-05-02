@@ -8,16 +8,13 @@ import { StudentNew } from '@/pages/StudentNew'
 import { StudentDetail } from '@/pages/StudentDetail'
 import { Settings } from '@/pages/Settings'
 import { TrialList } from '@/pages/TrialList'
-import { TrialConversions } from '@/pages/TrialConversions'
 import { TeacherList } from '@/pages/TeacherList'
 import { TeacherDetail } from '@/pages/TeacherDetail'
 import { Schedule } from '@/pages/Schedule'
+import { ReadingCheckin } from '@/pages/ReadingCheckin'
+import { BatchPage } from '@/pages/BatchPage'
 import { PhasesPage } from '@/pages/PhasesPage'
 import { PreferenceManage } from '@/pages/PreferenceManage'
-import { ReadingCheckin } from '@/pages/ReadingCheckin'
-import { BatchGenerate } from '@/pages/BatchGenerate'
-import { BatchImport } from '@/pages/BatchImport'
-import { BatchExport } from '@/pages/BatchExport'
 
 function App() {
   return (
@@ -29,18 +26,14 @@ function App() {
           <Route path="/students/new" element={<StudentNew />} />
           <Route path="/students/:id" element={<StudentDetail />} />
           <Route path="/trial" element={<TrialList />} />
-          <Route path="/trial/conversions" element={<TrialConversions />} />
           <Route path="/schedule" element={<Schedule />} />
-          <Route path="/preferences" element={<PreferenceManage />} />
+          <Route path="/schedule/preferences" element={<PreferenceManage />} />
           <Route path="/teachers" element={<TeacherList />} />
           <Route path="/teachers/:id" element={<TeacherDetail />} />
-          <Route path="/phases" element={<PhasesPage />} />
           <Route path="/reading-checkin" element={<ReadingCheckin />} />
           <Route path="/settings" element={<Settings />} />
-          {/* 批量操作全页面 */}
-          <Route path="/batch/generate" element={<BatchGenerate />} />
-          <Route path="/batch/import" element={<BatchImport />} />
-          <Route path="/batch/export" element={<BatchExport />} />
+          <Route path="/settings/phases" element={<PhasesPage />} />
+          <Route path="/batch" element={<BatchPage />} />
         </Route>
       </Routes>
 

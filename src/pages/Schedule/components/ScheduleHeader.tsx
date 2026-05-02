@@ -3,9 +3,11 @@ import {
   ChevronRight,
   Plus,
   CalendarPlus,
-  Users
+  Users,
+  Settings2
 } from 'lucide-react'
-import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
+import { useNavigate } from 'react-router-dom'
+import type { ScheduleDateConfig } from '../types'
 import { Button } from '@/components/ui/button'
 import { ViewMode, SchedulePreset, formatDisplayDate } from '../types'
 
@@ -36,6 +38,8 @@ export function ScheduleHeader({
   onOpenBatchPref,
   onCreateClass
 }: ScheduleHeaderProps) {
+  const navigate = useNavigate()
+
   return (
     <header className="h-16 border-b bg-card flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
@@ -115,7 +119,8 @@ export function ScheduleHeader({
             批量设置时段偏好
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={onOpenAddDate}>
+        <Button variant="ghost" size="sm" onClick={() => navigate("/schedule/preferences")}><Settings2 className="w-4 h-4 mr-1" />时段偏好</Button>
+          <Button variant="outline" size="sm" onClick={onOpenAddDate}>
           <CalendarPlus className="h-4 w-4 mr-2" />
           添加日期
         </Button>

@@ -22,9 +22,9 @@ function getYesterdayDate(): string {
 }
 
 export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) => ({
-  // 初始状态
-  selectedYear: new Date().getFullYear(),
-  selectedMonth: new Date().getMonth() + 1,
+  // 初始状态：与 targetDate（昨日）的月份对齐
+  selectedYear: parseInt(getYesterdayDate().split('-')[0]),
+  selectedMonth: parseInt(getYesterdayDate().split('-')[1]),
   checkinStudents: [],
   totalStudents: 0,
   yesterdayCheckedCount: 0,
@@ -37,24 +37,30 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
 
   // 每日打卡人数统计
   dailyCheckinCounts: [],
+  prevDailyCheckinCounts: [],
   showDailyView: false,
 
   searchQuery: '',
   showOnlyUnchecked: false,
   selectedStudentIds: new Set<string>(),
 
-  // 设置选中的月份（重置 targetDate 为昨日）
+  // 设置选中的月份（保留当前 targetDate）
   setSelectedMonth: (year, month) => {
-    set({ selectedYear: year, selectedMonth: month, targetDate: getYesterdayDate() })
+    set({ selectedYear: year, selectedMonth: month })
     get().fetchMonthSummary()
     if (get().showDailyView) {
       get().fetchDailyCheckinCounts()
     }
   },
 
-  // 设置目标日期（点击日历日期时调用）
+  // 设置目标日期（点击日历日期时调用，同步切换月份）
   setTargetDate: (date) => {
-    set({ targetDate: date })
+    const [y, m] = date.split('-').map(Number)
+    set({
+      targetDate: date,
+      selectedYear: y,
+      selectedMonth: m,
+    })
     get().fetchMonthSummary()
   },
 
@@ -82,8 +88,28 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
       const { selectedYear, selectedMonth, targetDate } = get()
       const result = await readingCheckinDb.getMonthSummary(selectedYear, selectedMonth, targetDate)
 
+      // 计算全勤
+      const today = new Date()
+      const todayYear = today.getFullYear()
+      const todayMonth = today.getMonth() + 1
+      const todayDay = today.getDate()
+      const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate()
+
+      let daysSoFar: number
+      if (selectedYear === todayYear && selectedMonth === todayMonth) {
+        daysSoFar = todayDay - 1 // 当前月：截止昨日
+      } else {
+        daysSoFar = daysInMonth  // 已完成月份
+      }
+
+      const studentsWithAttendance = result.students.map(student => ({
+        ...student,
+        fullAttendance: daysSoFar > 0 && student.monthlyCount >= daysSoFar,
+        daysInMonth,
+      }))
+
       set({
-        checkinStudents: result.students,
+        checkinStudents: studentsWithAttendance,
         totalStudents: result.totalStudents,
         yesterdayCheckedCount: result.yesterdayCheckedCount,
         yesterdayDate: result.yesterday,
@@ -284,12 +310,16 @@ export const useReadingCheckinStore = create<ReadingCheckinSlice>()((set, get) =
     }
   },
 
-  // 获取每日打卡人数统计
+  // 获取每日打卡人数统计（含上月对比）
   fetchDailyCheckinCounts: async () => {
     try {
       const { selectedYear, selectedMonth } = get()
       const counts = await readingCheckinDb.getDailyCheckinCounts(selectedYear, selectedMonth)
-      set({ dailyCheckinCounts: counts })
+      // 获取上月对比数据
+      const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1
+      const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear
+      const prevCounts = await readingCheckinDb.getDailyCheckinCounts(prevYear, prevMonth)
+      set({ dailyCheckinCounts: counts, prevDailyCheckinCounts: prevCounts })
     } catch (error) {
       console.error('Failed to fetch daily checkin counts:', error)
     }

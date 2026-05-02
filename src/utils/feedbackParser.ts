@@ -40,14 +40,6 @@ const TASK_TYPE_PATTERNS: Array<{
     priority: 2
   },
   {
-    type: 'nine_grid',
-    patterns: [
-      /九宫格/i,
-      /清理/i,
-    ],
-    priority: 3
-  },
-  {
     type: 'textbook',
     patterns: [
       /梳理/i,
@@ -333,10 +325,9 @@ export function batchParseFeedback(feedbacks: string[]): ParsedFeedback[] {
 export function formatTaskBlock(task: TaskBlock): string {
   if (task.wordbank_label && task.level_from && task.level_to) {
     const typeLabel = task.type === 'vocab_new' ? '学习' : 
-                      task.type === 'vocab_review' ? '复习' : 
-                      task.type === 'nine_grid' ? '清理九宫格' : ''
-    return `${task.wordbank_label}第${task.level_from}-${task.level_to}关${typeLabel ? ' - ' + typeLabel : ''}`
+                      task.type === 'vocab_review' ? '复习' : '' 
+    return `${task.wordbank_label}第${task.level_from}-${task.level_to}关${typeLabel ? " - " + typeLabel : ""}`
   }
-  
+
   return task.content || task.type
 }

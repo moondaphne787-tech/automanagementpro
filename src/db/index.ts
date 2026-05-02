@@ -40,12 +40,24 @@ export { teacherDb } from './teachers'
 // 排课相关操作
 export { teacherAvailabilityDb, studentSchedulePreferenceDb, scheduledClassDb } from './schedule'
 
+// 排课时段配置
+export { schedulePeriodDb } from './schedulePeriods'
+export type { SchedulePeriod, SchedulePeriodCreate } from './schedulePeriods'
+
 // 设置操作
 export { settingsDb } from './settings'
 
 // 朗读打卡操作
 export { readingCheckinDb } from './readingCheckins'
 export type { ReadingCheckinRow, MonthSummaryResult } from './readingCheckins'
+
+// 任务类型预设模板操作
+export { taskPresetDb } from './taskPresets'
+export type { TaskPreset, TaskPresetCreate } from './taskPresets'
+
+// 课程计划模板操作
+export { planTemplateDb } from './planTemplates'
+export type { PlanTemplate, PlanTemplateCreate } from './planTemplates'
 
 // 类型重导出（方便使用）
 export type { 

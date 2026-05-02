@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { X } from 'lucide-react'
 import type { ScheduledClass } from '@/types'
-import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
+import type { ScheduleDateConfig } from '../types'
 import { SchedulePreset, formatDisplayDate, getDateTypeIcon } from '../types'
 
 interface DateTagBarProps {

@@ -121,6 +121,7 @@ export const classRecordDb = {
           notes: record.plan_notes,
           ai_reason: record.plan_ai_reason,
           generated_by_ai: false,
+          plan_status_json: null,
           created_at: ''
         }
       }

@@ -175,6 +175,7 @@ export function ImportStudentsDrawer({ open, onClose }: ImportStudentsDrawerProp
             phonics_completed: studentRow.data.phonics_completed || false,
             ipa_completed: studentRow.data.ipa_completed || false,
             reading_progress: null,
+            learning_target: null,
             notes: studentRow.data.notes || null,
           })
           

@@ -1,4 +1,4 @@
-import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock } from '@/types'
+import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock, PlanStatus, PromptData } from '@/types'
 import { TASK_TYPE_LABELS } from '@/types'
 
 // 系统提示词 - 包含李教授教学大纲规则
@@ -19,12 +19,6 @@ export const DEFAULT_SYSTEM_PROMPT = `你是专业青少年英语教学顾问，
 **词库复习（vocab_review）**
 - 上次课有新学词库内容时，可安排复习上次所学关数范围
 - 字段与 vocab_new 相同，level_from/level_to 填上次课所学的范围
-
-**九宫格清理（nine_grid）**
-- 触发条件：current_level - last_nine_grid_level 达到以下间隔时安排
-  - 小学考纲、小学进阶：满 10 关
-  - 初中考纲、初中进阶、高中基础、高中考纲、高中进阶、大学四级：满 20 关
-- content 固定写："共清理30-50词/轮×____轮=____词，红色格子25词*____=____词，打印默写"
 
 **课文梳理（textbook）**
 - 三四年级：每节课梳理 2-3 个单元，含练习，如"梳理四下U1-U3Story time&Cartoon，完成练习"
@@ -65,7 +59,6 @@ export const DEFAULT_SYSTEM_PROMPT = `你是专业青少年英语教学顾问，
 
 各类型字段说明：
 - vocab_new / vocab_review：必须有 wordbank_label（字符串）、level_from（整数）、level_to（整数），同时必须有 content（一句话描述，如"学习初中考纲第16-18关"或"检测复习初中考纲第13-15关"）
-- nine_grid：必须有 wordbank_label（字符串）、content（一句话描述，如"清理初中考纲九宫格，共清理30-50词/轮×____轮=____词，红色格子25词*____=____词，打印默写"）
 - textbook / reading / phonics / picture_book / exercise：必须有 content（字符串）
 
 输出结构：
@@ -73,7 +66,6 @@ export const DEFAULT_SYSTEM_PROMPT = `你是专业青少年英语教学顾问，
   "tasks": [
     {"type": "vocab_new", "wordbank_label": "初中考纲", "level_from": 16, "level_to": 18, "content": "学习初中考纲第16-18关"},
     {"type": "vocab_review", "wordbank_label": "初中考纲", "level_from": 13, "level_to": 15, "content": "检测复习初中考纲第13-15关"},
-    {"type": "nine_grid", "wordbank_label": "初中考纲", "content": "清理初中考纲九宫格，共清理30-50词/轮×____轮=____词，红色格子25词*____=____词，打印默写"},
     {"type": "textbook", "content": "梳理七下U5 Reading，完成练习"},
     {"type": "exercise", "content": "完成自带练习"}
   ],
@@ -92,7 +84,7 @@ export async function getSystemPrompt(): Promise<string> {
   }
 }
 
-// 构建学员数据的用户输入
+// 构建学员数据的用户输入（支持注入大纲/里程碑数据）
 export function buildUserInput(params: {
   student: Student
   wordbankProgress: StudentWordbankProgress[]
@@ -100,23 +92,29 @@ export function buildUserInput(params: {
   recentRecords: ClassRecord[]
   lastPlanSummary: string | null
   extraInstruction?: string
+  promptData?: PromptData  // 如果传入，优先使用（包含大纲/里程碑）
 }): string {
-  const { student, wordbankProgress, wordbanks, recentRecords, lastPlanSummary, extraInstruction } = params
+  const { student, wordbankProgress, wordbanks, recentRecords, lastPlanSummary, extraInstruction, promptData } = params
 
-  // 构建词库进度数据
+  // 如果有完整的 promptData（含大纲/里程碑），直接使用新格式
+  if (promptData) {
+    const data = extraInstruction
+      ? { ...promptData, extra_instruction: extraInstruction }
+      : promptData
+    return JSON.stringify(data, null, 2)
+  }
+
+  // 兜底：使用旧格式（无大纲数据时）
   const wordbankData = wordbankProgress.map(progress => {
     const wordbank = wordbanks.find(w => w.id === progress.wordbank_id)
     return {
       name: progress.wordbank_label,
       current_level: progress.current_level,
       total_levels: progress.total_levels_override || wordbank?.total_levels || 60,
-      last_nine_grid_level: progress.last_nine_grid_level,
-      nine_grid_interval: wordbank?.nine_grid_interval || 10,
       status: progress.status
     }
   })
 
-  // 构建最近课堂记录摘要
   const recentRecordsSummary = recentRecords.slice(0, 3).map(record => ({
     date: record.class_date,
     tasks: record.tasks.map(t => ({
@@ -128,7 +126,6 @@ export function buildUserInput(params: {
     issues: record.issues
   }))
 
-  // 构建语音进度描述
   let phonicsProgressDesc = '未开始'
   if (student.phonics_completed) {
     phonicsProgressDesc = '已完成'
@@ -155,11 +152,12 @@ export function buildUserInput(params: {
   return JSON.stringify(studentData, null, 2)
 }
 
-// 解析 AI 返回的 JSON
+// 解析 AI 返回的 JSON（支持 plan_status 字段）
 export function parseAIResponse(response: string): {
   tasks: TaskBlock[]
   notes: string
   reason: string
+  planStatus: PlanStatus | null
 } | null {
   try {
     // 基本验证
@@ -243,7 +241,8 @@ export function parseAIResponse(response: string): {
     return {
       tasks: validTasks,
       notes: parsed.notes || '',
-      reason: parsed.reason || ''
+      reason: parsed.reason || '',
+      planStatus: parsed.plan_status ?? null,
     }
   } catch (error) {
     console.error('[parseAIResponse] 解析过程发生异常:', error)
@@ -261,7 +260,7 @@ export function formatTask(task: TaskBlock): string {
   }
 
   // 兜底：兼容旧数据，从 wordbank_label + levels 拼接
-  if ((task.type === 'vocab_new' || task.type === 'vocab_review' || task.type === 'nine_grid') && task.wordbank_label) {
+  if ((task.type === 'vocab_new' || task.type === 'vocab_review' ) && task.wordbank_label) {
     if (task.level_from && task.level_to) {
       return `${typeName}：${task.wordbank_label} 第${task.level_from}-${task.level_to}关`
     }
@@ -275,3 +274,4 @@ export function formatTask(task: TaskBlock): string {
 export function formatTasksSummary(tasks: TaskBlock[]): string {
   return tasks.map(formatTask).join('、')
 }
+

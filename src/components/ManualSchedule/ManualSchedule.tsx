@@ -4,23 +4,19 @@ import { useManualSchedule } from './hooks/useManualSchedule'
 import { DateNavigationBar } from './DateNavigationBar'
 import { StudentSchedulePanel } from './StudentSchedulePanel'
 import { TeacherSchedulePanel } from './TeacherSchedulePanel'
-import { AIPreviewSection } from './AIPreviewSection'
 import { TeacherDetailCard } from './TeacherDetailCard'
 import { ScheduleSidebar, type ScheduleSidebarProps } from './ScheduleSidebar'
 import type { TeacherCardData } from './types'
-import type { AIScheduleResult } from '@/ai/schedulePrompts'
 
 export interface ManualScheduleSidebarProps {
   sidebarProps?: Omit<ScheduleSidebarProps, 'collapsed' | 'onToggleCollapse'>
-  aiResults?: AIScheduleResult[]
-  selectedAiResults?: Set<string>
 }
 
 interface ManualScheduleProps extends ManualScheduleSidebarProps {
   initialDate?: string
 }
 
-export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedAiResults }: ManualScheduleProps) {
+export function ManualSchedule({ initialDate, sidebarProps }: ManualScheduleProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const {
@@ -28,6 +24,7 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
     students, teachers, scheduledClasses, loading, saving,
     localSchedules, studentRows, timeRange, teacherCards,
     goToPrevDay, goToNextDay, goToToday,
+    activePeriodName,
     handleAssign, handleRemove, handleClearDay, handleSave,
     getTeacherAssignStatuses, loadSchedulesForDate, handleAddPreference
   } = useManualSchedule({ initialDate })
@@ -43,7 +40,6 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
   const headerScrollRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // 分隔线拖动
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     setIsDragging(true)
@@ -57,7 +53,6 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
       setStudentPanelHeightPercent(Math.max(30, Math.min(85, newPercent)))
     }
     const handleMouseUp = () => setIsDragging(false)
-
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
@@ -68,12 +63,10 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
     }
   }, [isDragging])
 
-  // 滚动同步
   useEffect(() => {
     const headerEl = headerScrollRef.current
     const containerEl = containerRef.current
     if (!headerEl || !containerEl) return
-
     const handleScroll = () => {
       const scrollLeft = headerEl.scrollLeft
       const timelineElements = containerEl.querySelectorAll('[data-scroll-sync="timeline"]')
@@ -81,7 +74,6 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
         (el as HTMLElement).style.transform = `translateX(-${scrollLeft}px)`
       })
     }
-
     headerEl.addEventListener('scroll', handleScroll)
     return () => headerEl.removeEventListener('scroll', handleScroll)
   }, [loading, teacherPanelCollapsed])
@@ -103,18 +95,12 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
     return students.filter(s => !panelStudentIds.has(s.id))
   }, [students, studentRows])
 
-  const aiPreviewResults = useMemo(() => {
-    if (!aiResults || !selectedAiResults || aiResults.length === 0) return []
-    return aiResults.filter(r =>
-      !r.unmatched && r.date === selectedDate && selectedAiResults.has(r.student_id)
-    )
-  }, [aiResults, selectedAiResults, selectedDate])
-
   return (
     <div className="h-full flex">
       <div className="flex-1 flex flex-col min-w-0">
         <DateNavigationBar
           selectedDate={selectedDate}
+          activePeriodName={activePeriodName}
           saving={saving}
           localSchedulesCount={localSchedules.size}
           studentsNotInPanel={studentsNotInPanel}
@@ -138,7 +124,6 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
             </div>
           ) : (
             <>
-              {/* 学生排课区 */}
               <div
                 className="flex flex-col overflow-hidden flex-shrink-0"
                 style={{ height: `${studentPanelHeightPercent}%` }}
@@ -156,13 +141,11 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
                 />
               </div>
 
-              {/* 可拖动分隔栏 */}
               <div
                 className={`h-1.5 bg-border hover:bg-primary/50 cursor-row-resize flex-shrink-0 transition-colors ${isDragging ? 'bg-primary' : ''}`}
                 onMouseDown={handleDividerMouseDown}
               />
 
-              {/* 助教排课区 */}
               <TeacherSchedulePanel
                 teacherCards={teacherCards}
                 timeRange={timeRange}
@@ -176,15 +159,6 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
                 onSelectTeacher={setSelectedTeacherCard}
               />
 
-              {/* AI 排课预览 */}
-              <AIPreviewSection
-                aiResults={aiPreviewResults}
-                students={students}
-                teachers={teachers}
-                timeRange={timeRange}
-              />
-
-              {/* 助教详情浮层 */}
               {selectedTeacherCard && (
                 <TeacherDetailCard
                   open={selectedTeacherCard !== null}
@@ -211,3 +185,4 @@ export function ManualSchedule({ initialDate, sidebarProps, aiResults, selectedA
     </div>
   )
 }
+

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { studentDb, teacherDb, scheduledClassDb, studentSchedulePreferenceDb, teacherAvailabilityDb } from '@/db'
 import type { Student, Teacher, ScheduledClass, Billing, StudentSchedulePreference, TeacherAvailability } from '@/types'
-import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
+import type { ScheduleDateConfig } from '../types'
 
 export type StudentWithPrefs = Student & { billing: Billing | null; preferences: StudentSchedulePreference[] }
 export type TeacherWithAvail = Teacher & { availabilities: TeacherAvailability[] }

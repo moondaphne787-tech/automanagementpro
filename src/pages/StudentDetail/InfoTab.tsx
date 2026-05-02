@@ -6,19 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InlineField } from '@/components/ui/inline-field'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
-import { studentSchedulePreferenceDb } from '@/db'
+import { studentSchedulePreferenceDb, schedulePeriodDb } from '@/db'
 import { formatDateCN, formatHours, isHoursWarning, cn } from '@/lib/utils'
 import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS, DAY_LABELS, GRADE_OPTIONS } from '@/types'
 import type { StudentSchedulePreference, DayOfWeek } from '@/types'
+import type { SchedulePeriod } from '@/db'
 
 /** 偏好时段表单（添加/编辑共用） */
-function PreferenceForm({ form, onChange, onSubmit, onCancel, submitLabel, title }: {
-  form: { day_of_week: DayOfWeek; preferred_start: string; preferred_end: string; notes: string }
-  onChange: (form: { day_of_week: DayOfWeek; preferred_start: string; preferred_end: string; notes: string }) => void
+function PreferenceForm({ form, onChange, onSubmit, onCancel, submitLabel, title, periods }: {
+  form: { day_of_week: DayOfWeek; preferred_start: string; preferred_end: string; semester: string; notes: string }
+  onChange: (form: { day_of_week: DayOfWeek; preferred_start: string; preferred_end: string; semester: string; notes: string }) => void
   onSubmit: () => void
   onCancel: () => void
   submitLabel: string
   title?: string
+  periods?: { name: string }[]
 }) {
   return (
     <div className="border rounded-lg p-3 bg-blue-50/30 space-y-2">
@@ -59,6 +61,21 @@ function PreferenceForm({ form, onChange, onSubmit, onCancel, submitLabel, title
           />
         </div>
       </div>
+      {periods && periods.length > 0 && (
+        <div>
+          <label className="text-xs text-muted-foreground">所属时段</label>
+          <select
+            value={form.semester}
+            onChange={(e) => onChange({ ...form, semester: e.target.value })}
+            className="w-full h-8 px-2 rounded border text-sm"
+          >
+            <option value="">平时</option>
+            {periods.map(p => (
+              <option key={p.name} value={p.name}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div>
         <label className="text-xs text-muted-foreground">备注</label>
         <Input
@@ -91,7 +108,6 @@ export function InfoTab({ studentId }: InfoTabProps) {
     total_hours: '',
     warning_threshold: '3'
   })
-  const [readingProgress, setReadingProgress] = useState('')
   const [schedulePreferences, setSchedulePreferences] = useState<StudentSchedulePreference[]>([])
   const [showPreferenceForm, setShowPreferenceForm] = useState(false)
   const [editingPreference, setEditingPreference] = useState<StudentSchedulePreference | null>(null)
@@ -99,8 +115,10 @@ export function InfoTab({ studentId }: InfoTabProps) {
     day_of_week: 'monday' as DayOfWeek,
     preferred_start: '09:00',
     preferred_end: '11:00',
+    semester: '',
     notes: ''
   })
+  const [schedulePeriods, setSchedulePeriods] = useState<SchedulePeriod[]>([])
 
   // 同步 billing 数据到表单
   useEffect(() => {
@@ -112,17 +130,16 @@ export function InfoTab({ studentId }: InfoTabProps) {
     }
   }, [currentBilling])
 
-  // 同步阅读进度到表单
-  useEffect(() => {
-    if (currentStudent) {
-      setReadingProgress(currentStudent.reading_progress || '')
-    }
-  }, [currentStudent])
-
-  // 加载偏好时段
+  // 加载偏好时段 和 排课时段列表
   useEffect(() => {
     loadSchedulePreferences()
+    loadSchedulePeriods()
   }, [studentId])
+
+  const loadSchedulePeriods = async () => {
+    const periods = await schedulePeriodDb.getAll()
+    setSchedulePeriods(periods)
+  }
 
   const loadSchedulePreferences = async () => {
     const prefs = await studentSchedulePreferenceDb.getByStudentId(studentId)
@@ -132,7 +149,6 @@ export function InfoTab({ studentId }: InfoTabProps) {
   // 内联编辑保存：更新学员字段后刷新 store
   const handleFieldSave = async (field: string, value: string | number | boolean | null) => {
     await updateStudent(studentId, { [field]: value })
-    // 重新加载当前学员数据以确保 UI 同步
     await selectStudent(studentId)
   }
 
@@ -152,15 +168,8 @@ export function InfoTab({ studentId }: InfoTabProps) {
     setBillingForm(prev => ({ ...prev, total_hours: '' }))
   }
 
-  const handleUpdateReadingProgress = async () => {
-    if (!currentStudent) return
-    await updateStudent(studentId, {
-      reading_progress: readingProgress || null
-    })
-  }
-
   const resetPreferenceForm = () => {
-    setPreferenceForm({ day_of_week: 'monday', preferred_start: '09:00', preferred_end: '11:00', notes: '' })
+    setPreferenceForm({ day_of_week: 'monday', preferred_start: '09:00', preferred_end: '11:00', semester: '', notes: '' })
   }
 
   const handleCreatePreference = async () => {
@@ -169,6 +178,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
       day_of_week: preferenceForm.day_of_week,
       preferred_start: preferenceForm.preferred_start || undefined,
       preferred_end: preferenceForm.preferred_end || undefined,
+      semester: preferenceForm.semester || undefined,
       notes: preferenceForm.notes || undefined
     })
     await loadSchedulePreferences()
@@ -182,6 +192,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
       day_of_week: preferenceForm.day_of_week,
       preferred_start: preferenceForm.preferred_start || undefined,
       preferred_end: preferenceForm.preferred_end || undefined,
+      semester: preferenceForm.semester || undefined,
       notes: preferenceForm.notes || undefined
     })
     await loadSchedulePreferences()
@@ -207,6 +218,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
       day_of_week: pref.day_of_week,
       preferred_start: pref.preferred_start || '09:00',
       preferred_end: pref.preferred_end || '11:00',
+      semester: pref.semester || '',
       notes: pref.notes || ''
     })
   }
@@ -220,159 +232,199 @@ export function InfoTab({ studentId }: InfoTabProps) {
   const levelOptions = Object.entries(LEVEL_LABELS).map(([v, l]) => ({ value: v, label: l }))
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* 基本信息 — 内联编辑 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>基本信息</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <InlineField
-            label="学员类型"
-            value={currentStudent.student_type}
-            displayValue={STUDENT_TYPE_LABELS[currentStudent.student_type]}
-            type="select"
-            options={typeOptions}
-            onSave={(v) => handleFieldSave('student_type', v)}
-          />
-          <InlineField
-            label="状态"
-            value={currentStudent.status}
-            displayValue={STATUS_LABELS[currentStudent.status]}
-            type="select"
-            options={statusOptions}
-            onSave={(v) => handleFieldSave('status', v)}
-          />
-          <InlineField
-            label="年级"
-            value={currentStudent.grade}
-            type="select"
-            options={[{ value: '', label: '-' }, ...gradeOptions]}
-            onSave={(v) => handleFieldSave('grade', v)}
-          />
-          <InlineField
-            label="程度"
-            value={currentStudent.level}
-            displayValue={LEVEL_LABELS[currentStudent.level]}
-            type="select"
-            options={levelOptions}
-            onSave={(v) => handleFieldSave('level', v)}
-          />
-          <InlineField
-            label="学校"
-            value={currentStudent.school}
-            type="text"
-            onSave={(v) => handleFieldSave('school', v)}
-          />
-          <InlineField
-            label="入学日期"
-            value={currentStudent.enroll_date}
-            displayValue={formatDateCN(currentStudent.enroll_date)}
-            type="date"
-            onSave={(v) => handleFieldSave('enroll_date', v)}
-          />
-          <InlineField
-            label="入学成绩"
-            value={currentStudent.initial_score}
-            type="number"
-            onSave={(v) => handleFieldSave('initial_score', v)}
-          />
-          <InlineField
-            label="入学词汇量"
-            value={currentStudent.initial_vocab}
-            type="number"
-            onSave={(v) => handleFieldSave('initial_vocab', v)}
-          />
-          <InlineField
-            label="备注"
-            value={currentStudent.notes}
-            type="text"
-            onSave={(v) => handleFieldSave('notes', v)}
-          />
-        </CardContent>
-      </Card>
+    <div className="space-y-4 max-w-3xl">
+      {/* 基本信息 + 课时信息 — 两列并排 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* 基本信息 */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">基本信息</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            <InlineField
+              label="学员类型"
+              value={currentStudent.student_type}
+              displayValue={STUDENT_TYPE_LABELS[currentStudent.student_type]}
+              type="select"
+              options={typeOptions}
+              onSave={(v) => handleFieldSave('student_type', v)}
+            />
+            <InlineField
+              label="状态"
+              value={currentStudent.status}
+              displayValue={STATUS_LABELS[currentStudent.status]}
+              type="select"
+              options={statusOptions}
+              onSave={(v) => handleFieldSave('status', v)}
+            />
+            <InlineField
+              label="年级"
+              value={currentStudent.grade}
+              type="select"
+              options={[{ value: '', label: '-' }, ...gradeOptions]}
+              onSave={(v) => handleFieldSave('grade', v)}
+            />
+            <InlineField
+              label="程度"
+              value={currentStudent.level}
+              displayValue={LEVEL_LABELS[currentStudent.level]}
+              type="select"
+              options={levelOptions}
+              onSave={(v) => handleFieldSave('level', v)}
+            />
+            <InlineField
+              label="学校"
+              value={currentStudent.school}
+              type="text"
+              onSave={(v) => handleFieldSave('school', v)}
+            />
+            <InlineField
+              label="学习目标"
+              value={(currentStudent as any).learning_target}
+              placeholder="如：中考冲刺、KET备考"
+              type="text"
+              onSave={(v) => handleFieldSave('learning_target', v)}
+            />
+            <InlineField
+              label="入学日期"
+              value={currentStudent.enroll_date}
+              displayValue={formatDateCN(currentStudent.enroll_date)}
+              type="date"
+              onSave={(v) => handleFieldSave('enroll_date', v)}
+            />
+            <InlineField
+              label="入学成绩"
+              value={currentStudent.initial_score}
+              type="number"
+              onSave={(v) => handleFieldSave('initial_score', v)}
+            />
+            <InlineField
+              label="入学词汇量"
+              value={currentStudent.initial_vocab}
+              type="number"
+              onSave={(v) => handleFieldSave('initial_vocab', v)}
+            />
+            <InlineField
+              label="备注"
+              value={currentStudent.notes}
+              type="text"
+              onSave={(v) => handleFieldSave('notes', v)}
+            />
+          </CardContent>
+        </Card>
 
-      {/* 课时信息 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            课时信息
-            {currentBilling && isHoursWarning(currentBilling) && (
-              <span className="text-xs text-warning font-normal">（预警中）</span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {currentBilling && (
-            <>
-              <div className="grid grid-cols-3 gap-4 text-center py-4 bg-muted/50 rounded-lg">
-                <div>
-                  <div className="text-2xl font-semibold">{formatHours(currentBilling.total_hours)}</div>
-                  <div className="text-xs text-muted-foreground">购买课时</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-semibold">{formatHours(currentBilling.used_hours)}</div>
-                  <div className="text-xs text-muted-foreground">已用课时</div>
-                </div>
-                <div>
-                  <div className={cn(
-                    "text-2xl font-semibold",
-                    isHoursWarning(currentBilling) && "text-warning"
-                  )}>
-                    {formatHours(currentBilling.remaining_hours)}
+        {/* 右列：课时 + 语音进度 */}
+        <div className="space-y-4">
+          {/* 课时信息 */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5" />
+                课时信息
+                {currentBilling && isHoursWarning(currentBilling) && (
+                  <span className="text-xs text-warning font-normal">（预警中）</span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {currentBilling && (
+                <>
+                  <div className="grid grid-cols-3 gap-2 text-center py-3 bg-muted/50 rounded-lg">
+                    <div>
+                      <div className="text-xl font-semibold">{formatHours(currentBilling.total_hours)}</div>
+                      <div className="text-xs text-muted-foreground">购买</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-semibold">{formatHours(currentBilling.used_hours)}</div>
+                      <div className="text-xs text-muted-foreground">已用</div>
+                    </div>
+                    <div>
+                      <div className={cn(
+                        "text-xl font-semibold",
+                        isHoursWarning(currentBilling) && "text-warning"
+                      )}>
+                        {formatHours(currentBilling.remaining_hours)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">剩余</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">剩余课时</div>
-                </div>
-              </div>
 
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <label className="text-sm text-muted-foreground">增加课时</label>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={billingForm.total_hours}
-                    onChange={(e) => setBillingForm({ ...billingForm, total_hours: e.target.value })}
-                    placeholder="输入课时数"
-                  />
-                </div>
-                <Button onClick={handleAddHours}>增加</Button>
-              </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      step="0.5"
+                      value={billingForm.total_hours}
+                      onChange={(e) => setBillingForm({ ...billingForm, total_hours: e.target.value })}
+                      placeholder="增加课时数"
+                      className="h-8 text-sm"
+                    />
+                    <Button size="sm" onClick={handleAddHours} className="shrink-0">增加</Button>
+                  </div>
 
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <label className="text-sm text-muted-foreground">预警阈值（小时）</label>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={billingForm.warning_threshold}
-                    onChange={(e) => setBillingForm({ ...billingForm, warning_threshold: e.target.value })}
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => updateBilling(studentId, { warning_threshold: parseFloat(billingForm.warning_threshold) })}
-                >
-                  保存
-                </Button>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-muted-foreground shrink-0">预警阈值</label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      value={billingForm.warning_threshold}
+                      onChange={(e) => setBillingForm({ ...billingForm, warning_threshold: e.target.value })}
+                      className="h-8 text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => updateBilling(studentId, { warning_threshold: parseFloat(billingForm.warning_threshold) })}
+                    >
+                      保存
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
 
-      {/* 偏好时段 */}
+          {/* 语音训练进度 */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">语音训练进度</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1.5">
+              <InlineField
+                label="自然拼读进度"
+                value={currentStudent.phonics_progress}
+                placeholder="未开始"
+                type="text"
+                onSave={(v) => handleFieldSave('phonics_progress', v)}
+              />
+              <InlineField
+                label="自然拼读"
+                value={currentStudent.phonics_completed}
+                type="checkbox"
+                onSave={(v) => handleFieldSave('phonics_completed', v)}
+              />
+              <InlineField
+                label="国际音标"
+                value={currentStudent.ipa_completed}
+                type="checkbox"
+                onSave={(v) => handleFieldSave('ipa_completed', v)}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* 偏好时段 — 全宽 */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Calendar className="w-3.5 h-3.5" />
             偏好时段
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
           {schedulePreferences.length === 0 && !showPreferenceForm ? (
-            <div className="text-sm text-muted-foreground text-center py-4">
+            <div className="text-sm text-muted-foreground text-center py-3">
               暂无偏好时段设置
             </div>
           ) : (
@@ -387,6 +439,7 @@ export function InfoTab({ studentId }: InfoTabProps) {
                       onSubmit={handleUpdatePreference}
                       onCancel={() => { setEditingPreference(null); resetPreferenceForm() }}
                       submitLabel="保存"
+                      periods={schedulePeriods}
                     />
                   )
                 }
@@ -399,6 +452,9 @@ export function InfoTab({ studentId }: InfoTabProps) {
                     <span className="text-sm">
                       {pref.preferred_start?.slice(0,5) || '09:00'} - {pref.preferred_end?.slice(0,5) || '11:00'}
                     </span>
+                    {pref.semester ? (
+                      <span className="text-xs bg-primary/5 text-primary px-1.5 py-0.5 rounded">{pref.semester}</span>
+                    ) : null}
                     {pref.notes && (
                       <span className="text-xs text-muted-foreground truncate flex-1">({pref.notes})</span>
                     )}
@@ -433,75 +489,18 @@ export function InfoTab({ studentId }: InfoTabProps) {
                 onCancel={() => { setShowPreferenceForm(false); resetPreferenceForm() }}
                 submitLabel="添加"
                 title="添加新偏好时段"
+                periods={schedulePeriods}
               />
             </div>
           ) : (
             <button
               onClick={() => setShowPreferenceForm(true)}
-              className="w-full mt-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded flex items-center justify-center gap-1 transition-colors"
+              className="w-full mt-1 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded flex items-center justify-center gap-1 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               添加时段偏好
             </button>
           )}
-        </CardContent>
-      </Card>
-
-      {/* 语音进度 — 内联编辑 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>语音训练进度</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <InlineField
-            label="自然拼读进度"
-            value={currentStudent.phonics_progress}
-            placeholder="未开始"
-            type="text"
-            onSave={(v) => handleFieldSave('phonics_progress', v)}
-          />
-          <InlineField
-            label="自然拼读状态"
-            value={currentStudent.phonics_completed}
-            type="checkbox"
-            onSave={(v) => handleFieldSave('phonics_completed', v)}
-          />
-          <InlineField
-            label="国际音标状态"
-            value={currentStudent.ipa_completed}
-            type="checkbox"
-            onSave={(v) => handleFieldSave('ipa_completed', v)}
-          />
-        </CardContent>
-      </Card>
-
-      {/* 阅读训练进度 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>阅读训练进度</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
-              <label className="text-sm text-muted-foreground">当前进度</label>
-              <Input
-                value={readingProgress}
-                onChange={(e) => setReadingProgress(e.target.value)}
-                placeholder="如：初中B级,12（级别+已完成篇数）"
-                className="h-8"
-              />
-            </div>
-            <Button
-              size="sm"
-              onClick={handleUpdateReadingProgress}
-              disabled={readingProgress === (currentStudent.reading_progress || '')}
-            >
-              保存
-            </Button>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            格式说明：级别 + 已完成篇数，如 "初中B级,12" 表示初中B级已完成12篇
-          </div>
         </CardContent>
       </Card>
     </div>

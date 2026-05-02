@@ -1,6 +1,6 @@
 import { Plus, X } from 'lucide-react'
 import type { ScheduledClass, Student, Teacher, Billing, StudentSchedulePreference } from '@/types'
-import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
+import type { ScheduleDateConfig } from '../types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'

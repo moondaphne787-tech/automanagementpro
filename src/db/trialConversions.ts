@@ -152,6 +152,7 @@ export const trialConversionDb = {
         phonics_completed: !!row.phonics_completed,
         ipa_completed: !!row.ipa_completed,
         reading_progress: row.reading_progress,
+        learning_target: null,
         notes: row.notes,
         created_at: row.student_created_at,
         updated_at: row.updated_at

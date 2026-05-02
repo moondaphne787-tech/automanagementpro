@@ -10,7 +10,7 @@ import {
   CalendarDays
 } from 'lucide-react'
 import type { Student, Teacher, ScheduledClass } from '@/types'
-import type { ScheduleDateConfig } from '@/ai/schedulePrompts'
+import type { ScheduleDateConfig } from '../types'
 import { Button } from '@/components/ui/button'
 import { formatDateISO } from '@/lib/utils'
 import { formatDisplayDate, DAYTIME_SLOTS, EVENING_SLOTS, getDateTypeIcon } from '../types'

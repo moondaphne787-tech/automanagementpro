@@ -2,11 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { ScheduledClass, Student, Billing, StudentSchedulePreference } from '@/types'
 import { ManualSchedule } from '@/components/ManualSchedule'
 import { useScheduleData } from './hooks/useScheduleData'
-import { useAISchedule } from './hooks/useAISchedule'
-import { useClassDialog } from './hooks/useClassDialog'
-import { useRescheduleDialog } from './hooks/useRescheduleDialog'
-import { useCancelDialog } from './hooks/useCancelDialog'
-import { usePreferenceDialog } from './hooks/usePreferenceDialog'
+import { useClassDialog, useRescheduleDialog, useCancelDialog, usePreferenceDialog } from './hooks/useScheduleDialogs'
 import { useBatchPrefDialog } from '@/hooks/useBatchPrefDialog'
 import { useScheduleNavigation } from './hooks/useScheduleNavigation'
 import { ScheduleHeader } from './components/ScheduleHeader'
@@ -25,35 +21,20 @@ type StudentWithPrefs = Student & { billing: Billing | null; preferences: Studen
 export function Schedule() {
   const [viewMode, setViewMode] = useState<ViewMode>('week')
 
-  // 日期导航
   const nav = useScheduleNavigation()
 
-  // 数据加载
   const {
     students, teachers, classes, loading, loadData, unscheduledStudents
   } = useScheduleData({ scheduleDates: nav.scheduleDates })
 
-  // AI 排课
-  const [extraInstructions, setExtraInstructions] = useState('')
-  const ai = useAISchedule({
-    students, teachers,
-    scheduleDates: nav.scheduleDates,
-    extraInstructions,
-    onSuccess: loadData
-  })
-
-  // 各对话框
   const classDialog = useClassDialog(nav.scheduleDates, loadData)
   const rescheduleDialog = useRescheduleDialog(loadData)
   const cancelDialog = useCancelDialog(loadData)
   const preferenceDialog = usePreferenceDialog(loadData)
   const batchPrefDialog = useBatchPrefDialog(loadData)
 
-  // 课程卡片菜单
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
-
-  // 人工排课跳转日期
   const [manualScheduleDate, setManualScheduleDate] = useState<string | null>(null)
 
   const handleJumpToManualSchedule = useCallback((date: string) => {
@@ -61,7 +42,6 @@ export function Schedule() {
     setViewMode('manual')
   }, [])
 
-  // 课程操作
   const handleCreateClass = useCallback((date?: string, time?: string) => {
     classDialog.initForCreate(date, time)
     classDialog.setOpen(true)
@@ -90,7 +70,6 @@ export function Schedule() {
     preferenceDialog.setOpen(true)
   }, [preferenceDialog])
 
-  // 课程卡片点击（弹出操作菜单）
   const handleClassClick = useCallback((e: React.MouseEvent, classId: string) => {
     e.stopPropagation()
     if (activeMenu === classId) {
@@ -108,23 +87,12 @@ export function Schedule() {
     }
   }, [activeMenu])
 
-  // 点击其他地方关闭菜单
   useEffect(() => {
     if (!activeMenu) return
     const handleClickOutside = () => { setActiveMenu(null); setMenuPosition(null) }
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
   }, [activeMenu])
-
-  // AI 排课批量操作
-  const handleSelectAllAiResults = () => {
-    ai.aiResults.filter(r => !r.unmatched).forEach(r => {
-      if (!ai.selectedAiResults.has(r.student_id)) ai.toggleAiResultSelection(r.student_id)
-    })
-  }
-  const handleClearAiResultSelection = () => {
-    ai.selectedAiResults.forEach(id => ai.toggleAiResultSelection(id))
-  }
 
   return (
     <div className="h-full flex flex-col">
@@ -151,7 +119,6 @@ export function Schedule() {
         onRemoveDate={nav.handleRemoveDate}
       />
 
-      {/* 内容区 */}
       <div className="flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -160,8 +127,6 @@ export function Schedule() {
         ) : viewMode === 'manual' ? (
           <ManualSchedule
             initialDate={manualScheduleDate || undefined}
-            aiResults={ai.aiResults}
-            selectedAiResults={ai.selectedAiResults}
             sidebarProps={{
               students, teachers,
               scheduleDates: nav.scheduleDates,
@@ -173,19 +138,6 @@ export function Schedule() {
                 }))
                 classDialog.setOpen(true)
               },
-              aiScheduling: ai.aiScheduling,
-              aiResults: ai.aiResults,
-              aiConflicts: ai.aiConflicts,
-              aiError: ai.aiError,
-              selectedAiResults: ai.selectedAiResults,
-              extraInstructions,
-              setExtraInstructions,
-              onAISchedule: ai.handleAISchedule,
-              onSelectAllAiResults: handleSelectAllAiResults,
-              onClearAiResultSelection: handleClearAiResultSelection,
-              onToggleAiResult: ai.toggleAiResultSelection,
-              onConfirmAISchedule: ai.handleConfirmAISchedule,
-              saving: ai.saving
             }}
           />
         ) : (
@@ -208,7 +160,6 @@ export function Schedule() {
         )}
       </div>
 
-      {/* 对话框 */}
       <AddDateDialog
         open={nav.addDateDialog.open}
         onOpenChange={nav.addDateDialog.setOpen}

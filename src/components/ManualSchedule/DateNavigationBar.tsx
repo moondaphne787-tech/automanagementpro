@@ -9,6 +9,7 @@ import type { Student } from '@/types'
 
 interface DateNavigationBarProps {
   selectedDate: string
+  activePeriodName?: string | null
   saving: boolean
   localSchedulesCount: number
   studentsNotInPanel: Student[]
@@ -26,7 +27,7 @@ interface DateNavigationBarProps {
 }
 
 export function DateNavigationBar({
-  selectedDate, saving, localSchedulesCount, studentsNotInPanel,
+  selectedDate, activePeriodName, saving, localSchedulesCount, studentsNotInPanel,
   quickAddTime, quickAddTodayOnly,
   onDateChange, onPrevDay, onNextDay, onToday, onClearDay, onSave,
   onQuickAddTimeChange, onQuickAddTodayOnlyChange, onQuickAddStudent
@@ -52,6 +53,11 @@ export function DateNavigationBar({
         <span className="text-sm text-muted-foreground">
           {DAY_LABELS[getDayOfWeek(selectedDate)]}
         </span>
+        {activePeriodName && (
+          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-medium">
+            {activePeriodName}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-2">

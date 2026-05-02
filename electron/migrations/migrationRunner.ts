@@ -777,6 +777,84 @@ export const migrations: Migration[] = [
       console.log('Migration v20: Rebuilt class_records table, cleaned dangling references')
     }
   },
+
+  // ===== 版本 21: 学习规划功能 =====
+  // 新增 student_plans、student_milestones 表
+  // class_records 补充 plan_status_json 字段（必须在 v20 重建表之后）
+  // students 补充 learning_target 字段
+  {
+    version: 21,
+    description: '学习规划功能：新增 student_plans/student_milestones 表，class_records 加 plan_status_json，students 加 learning_target',
+    up: (db: Database.Database) => {
+      // 1. 新增 student_plans 表（学员大纲，一对一）
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS student_plans (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id  TEXT NOT NULL UNIQUE,
+          summary     TEXT,
+          phonics_plan  TEXT,
+          textbook_plan TEXT,
+          reading_plan  TEXT,
+          created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+          updated_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+          FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+        )
+      `)
+      console.log('Migration v21: Created student_plans table')
+
+      // 2. 新增 student_milestones 表（里程碑，一对多）
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS student_milestones (
+          id               INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id       TEXT NOT NULL,
+          label            TEXT NOT NULL,
+          target_wordbank  TEXT,
+          target_level     INTEGER,
+          target_date      TEXT,
+          note             TEXT,
+          is_completed     INTEGER NOT NULL DEFAULT 0,
+          completed_date   TEXT,
+          sort_order       INTEGER NOT NULL DEFAULT 0,
+          created_at       TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+          FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+        )
+      `)
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_milestones_student
+          ON student_milestones(student_id, sort_order)
+      `)
+      console.log('Migration v21: Created student_milestones table')
+
+      // 3. class_records 补充 plan_status_json 字段
+      const crInfo = db.prepare('PRAGMA table_info(class_records)').all() as Array<{ name: string }>
+      if (!crInfo.map(c => c.name).includes('plan_status_json')) {
+        db.exec(`ALTER TABLE class_records ADD COLUMN plan_status_json TEXT`)
+        console.log('Migration v21: Added plan_status_json to class_records')
+      }
+
+      // 4. students 补充 learning_target 字段
+      const stInfo = db.prepare('PRAGMA table_info(students)').all() as Array<{ name: string }>
+      if (!stInfo.map(c => c.name).includes('learning_target')) {
+        db.exec(`ALTER TABLE students ADD COLUMN learning_target TEXT`)
+        console.log('Migration v21: Added learning_target to students')
+      }
+
+      console.log('Migration v21: Learning plan feature schema complete')
+    }
+  },
+
+  // ===== 版本 22: lesson_plans 表加 plan_status_json 字段 =====
+  {
+    version: 22,
+    description: 'lesson_plans 表加 plan_status_json 字段，将 AI 进度评估从 class_records 迁移到 lesson_plans',
+    up: (db: Database.Database) => {
+      const info = db.prepare('PRAGMA table_info(lesson_plans)').all() as Array<{ name: string }>
+      if (!info.map(c => c.name).includes('plan_status_json')) {
+        db.exec(`ALTER TABLE lesson_plans ADD COLUMN plan_status_json TEXT`)
+        console.log('Migration v22: Added plan_status_json to lesson_plans')
+      }
+    }
+  },
 ]
 
 /**
