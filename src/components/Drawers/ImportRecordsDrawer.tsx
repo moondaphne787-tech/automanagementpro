@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Upload, FileSpreadsheet, Check, AlertCircle, Loader2 } from 'lucide-react'
+import { Upload, FileSpreadsheet, Check, AlertCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { DrawerShell } from '@/components/ui/drawer-shell'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 import { DateInput } from '@/components/ui/date-input'
@@ -260,34 +260,17 @@ export function ImportRecordsDrawer({ open, onClose, fullPage }: ImportRecordsDr
     </div>
   ) : null
 
-  // 全页模式
-  if (fullPage) {
-    if (!open) return null
-    return (
-      <div className="flex flex-col h-full">
-        {stepIndicator}
-        {contentArea}
-        {bottomBar}
-      </div>
-    )
-  }
-
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-40" onClick={handleClose} />
-          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="fixed right-0 top-0 h-full w-[600px] bg-background border-l shadow-xl z-50 flex flex-col">
-            <div className="h-16 border-b flex items-center justify-between px-6">
-              <h2 className="text-lg font-semibold">批量导入课堂记录</h2>
-              <Button variant="ghost" size="icon" onClick={handleClose}><X className="w-5 h-5" /></Button>
-            </div>
-            {stepIndicator}
-            {contentArea}
-            {bottomBar}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    <DrawerShell
+      open={open}
+      fullPage={fullPage}
+      title="批量导入课堂记录"
+      width="w-[600px]"
+      onClose={handleClose}
+    >
+      {stepIndicator}
+      {contentArea}
+      {bottomBar}
+    </DrawerShell>
   )
 }

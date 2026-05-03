@@ -8,6 +8,7 @@ import { DateInput } from '@/components/ui/date-input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TaskBlock, createEmptyTask } from '@/components/TaskBlock/TaskBlock'
 import { parseFeedback, extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
+import { normalizeTask } from '@/utils/normalizeTask'
 import { lessonPlanDb } from '@/db'
 import { teacherDb } from '@/db/teachers'
 import type { TaskBlock as TaskBlockType, AttendanceType, PerformanceType, TaskCompletedType, Wordbank, LessonPlan, ClassRecord, Teacher } from '@/types'
@@ -211,13 +212,8 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
       return
     }
     
-    // 过滤掉空任务
-    const validTasks = tasks.filter(t => {
-      if (['vocab_new', 'vocab_review'].includes(t.type)) {
-        return t.wordbank_label && t.level_from && t.level_to
-      }
-      return !!t.content
-    })
+    // 过滤掉空任务（先标准化，统一使用 content 字段判断）
+    const validTasks = tasks.filter(t => !!normalizeTask(t).content)
     
     if (validTasks.length === 0) {
       toast.error('请至少添加一个有效的任务')
@@ -337,7 +333,7 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
                 { value: '', label: '不关联计划' },
                 ...availablePlans.map(p => ({
                   value: p.id,
-                  label: p.tasks.map(t => t.wordbank_label || t.content || t.type).slice(0, 2).join(' + ') + (p.tasks.length > 2 ? '...' : '')
+                  label: p.tasks.map(t => normalizeTask(t).content || t.type).slice(0, 2).join(' + ') + (p.tasks.length > 2 ? '...' : '')
                 }))
               ]}
               placeholder="选择要关联的课程计划"
@@ -350,8 +346,7 @@ export function ClassRecordForm({ studentId, wordbanks = [], onSave, onCancel, i
                 <div className="flex flex-wrap gap-1.5">
                   {selectedPlan.tasks.map((task, idx) => (
                     <span key={idx} className="text-xs bg-white border border-blue-200 px-2 py-1 rounded">
-                      {task.wordbank_label || task.content || task.type}
-                      {task.level_from && task.level_to && ` 第${task.level_from}-${task.level_to}关`}
+                      {normalizeTask(task).content || task.type}
                     </span>
                   ))}
                 </div>

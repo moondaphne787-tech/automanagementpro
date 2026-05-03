@@ -23,6 +23,7 @@ describe('P0-2 修复验证：pdfExport.ts 程度等级映射', () => {
     phonics_completed: false,
     ipa_completed: false,
     reading_progress: null,
+    learning_target: null,
     notes: null,
     created_at: '2024-01-01',
     updated_at: '2024-01-01'
@@ -37,6 +38,7 @@ describe('P0-2 修复验证：pdfExport.ts 程度等级映射', () => {
     notes: null,
     ai_reason: null,
     generated_by_ai: false,
+    plan_status_json: null,
     created_at: '2024-01-01'
   })
 

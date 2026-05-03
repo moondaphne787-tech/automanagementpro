@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/appStore'
+import { DrawerShell } from '@/components/ui/drawer-shell'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb, scheduledClassDb } from '@/db'
 import { sendAIRequest } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
@@ -543,43 +542,17 @@ export function GeneratePlansDrawer({ open, onClose, fullPage }: GeneratePlansDr
     </div>
   )
 
-  // 全页模式：直接渲染内容，不带遮罩和动画壳
-  if (fullPage) {
-    return open ? contentArea : null
-  }
-
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={handleClose}
-          />
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed right-0 top-0 h-full w-[700px] bg-background border-l shadow-xl z-50 flex flex-col"
-          >
-            <div className="h-16 border-b flex items-center justify-between px-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-primary" />
-                批量生成课程计划
-              </h2>
-              <Button variant="ghost" size="icon" onClick={handleClose}>
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-            {contentArea}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    <DrawerShell
+      open={open}
+      fullPage={fullPage}
+      title="批量生成课程计划"
+      icon={<Sparkles className="w-5 h-5 text-primary" />}
+      width="w-[700px]"
+      onClose={handleClose}
+    >
+      {contentArea}
+    </DrawerShell>
   )
 }
 

@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, XCircle, Clock, Sparkles } from 'lucide-react'
-import { useAppStore } from '@/store/appStore'
 import type { PlanStatusItem } from '@/types'
 
 const issueConfig = {
@@ -12,11 +11,11 @@ const issueConfig = {
 interface WeeklyPlanStatusProps {
   items: PlanStatusItem[]
   loading: boolean
+  onBatchGenerate?: (studentIds: string[]) => void
 }
 
-export function WeeklyPlanStatus({ items, loading }: WeeklyPlanStatusProps) {
+export function WeeklyPlanStatus({ items, loading, onBatchGenerate }: WeeklyPlanStatusProps) {
   const navigate = useNavigate()
-  const openGenerateDrawer = useAppStore(s => s.openGenerateDrawer)
 
   return (
     <div className="rounded-xl border border-border bg-card">
@@ -25,7 +24,7 @@ export function WeeklyPlanStatus({ items, loading }: WeeklyPlanStatusProps) {
         <div className="flex items-center gap-2">
           {!loading && items.length > 0 && (
             <button
-              onClick={() => openGenerateDrawer(items.map(i => i.studentId))}
+              onClick={() => onBatchGenerate?.(items.map(i => i.studentId))}
               className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
             >
               <Sparkles className="w-3 h-3" />

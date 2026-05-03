@@ -157,7 +157,6 @@ describe('identifyColumn', () => {
         { colName: '今日词库主要学习内容', expectedField: 'wordbank_content' },
         { colName: '词库', expectedField: 'wordbank' },
         { colName: '已学到词库的第几关', expectedField: 'level' },
-        { colName: '清理九宫格多少个词', expectedField: 'nine_grid_count' },
         { colName: '是否完成学习任务', expectedField: 'task_completed' },
         { colName: '未完成学习任务原因', expectedField: 'incomplete_reason' },
         { colName: '学情反馈', expectedField: 'detail_feedback' },

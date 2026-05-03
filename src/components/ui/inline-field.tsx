@@ -69,13 +69,14 @@ export function InlineField({
     setEditing(true)
   }
 
-  const save = async () => {
+  const save = async (overrideValue?: string) => {
+    const raw = overrideValue ?? draft
     let newValue: string | number | null
     if (type === 'number') {
-      const num = parseFloat(draft)
+      const num = parseFloat(raw)
       newValue = isNaN(num) ? null : num
     } else {
-      newValue = draft.trim() || null
+      newValue = raw.trim() || null
     }
 
     // 跳过无变化的保存
@@ -127,18 +128,7 @@ export function InlineField({
         <select
           ref={inputRef as React.RefObject<HTMLSelectElement>}
           value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value)
-            // select 选择后立即保存
-            const newVal = e.target.value || null
-            const oldVal = value ?? null
-            if (newVal !== oldVal && String(newVal) !== String(oldVal)) {
-              setSaving(true)
-              onSave(newVal).finally(() => { setSaving(false); setEditing(false) })
-            } else {
-              setEditing(false)
-            }
-          }}
+          onChange={(e) => save(e.target.value)}
           onBlur={cancel}
           onKeyDown={handleKeyDown}
           className="h-7 px-2 rounded border border-primary/50 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
@@ -161,7 +151,7 @@ export function InlineField({
           type={type === 'date' ? 'date' : type === 'number' ? 'number' : 'text'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={save}
+          onBlur={() => save()}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="h-7 px-2 rounded border border-primary/50 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary text-right w-[140px]"

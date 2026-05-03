@@ -16,7 +16,8 @@ export function SchedulePeriodManager() {
   const [editName, setEditName] = useState('')
   const [editStart, setEditStart] = useState('')
   const [editEnd, setEditEnd] = useState('')
-  const [editErrors, setEditErrors] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const load = async () => {
@@ -38,7 +39,8 @@ export function SchedulePeriodManager() {
     setEditName('')
     setEditStart('')
     setEditEnd('')
-    setEditErrors(null)
+    setFormError(null)
+    setActionMessage(null)
   }
 
   const startEdit = (p: SchedulePeriod) => {
@@ -46,19 +48,20 @@ export function SchedulePeriodManager() {
     setEditName(p.name)
     setEditStart(p.start_date)
     setEditEnd(p.end_date)
-    setEditErrors(null)
+    setFormError(null)
   }
 
   const cancelEdit = () => {
     setEditingId(null)
+    setActionMessage(null)
   }
 
   const handleSave = async () => {
-    setEditErrors(null)
-    if (!editName.trim()) { setEditErrors('请输入时段名称'); return }
-    if (!editStart) { setEditErrors('请选择开始日期'); return }
-    if (!editEnd) { setEditErrors('请选择结束日期'); return }
-    if (editEnd < editStart) { setEditErrors('结束日期不能早于开始日期'); return }
+    setFormError(null)
+    if (!editName.trim()) { setFormError('请输入时段名称'); return }
+    if (!editStart) { setFormError('请选择开始日期'); return }
+    if (!editEnd) { setFormError('请选择结束日期'); return }
+    if (editEnd < editStart) { setFormError('结束日期不能早于开始日期'); return }
 
     // 检查日期重叠
     const overlap = periods.find(p => {
@@ -66,7 +69,7 @@ export function SchedulePeriodManager() {
       return !(editEnd < p.start_date || editStart > p.end_date)
     })
     if (overlap) {
-      setEditErrors(`与"${overlap.name}"( ${overlap.start_date} ~ ${overlap.end_date} )日期重叠`)
+      setFormError(`与"${overlap.name}"( ${overlap.start_date} ~ ${overlap.end_date} )日期重叠`)
       return
     }
 
@@ -80,7 +83,7 @@ export function SchedulePeriodManager() {
       setEditingId(null)
       await load()
     } catch {
-      setEditErrors('保存失败')
+      setFormError('保存失败')
     } finally {
       setSaving(false)
     }
@@ -110,12 +113,13 @@ export function SchedulePeriodManager() {
     if (!confirmed) return
 
     setCopying(periodName)
+    setActionMessage(null)
     try {
       // 获取所有平时偏好（semester IS NULL）
       const allPrefs = await studentSchedulePreferenceDb.getAllWithStudents()
       const regularPrefs = allPrefs.filter(p => !p.semester)
       if (regularPrefs.length === 0) {
-        setEditErrors('暂无平时偏好可复制')
+        setActionMessage('暂无平时偏好可复制')
         setCopying(null)
         return
       }
@@ -180,9 +184,9 @@ export function SchedulePeriodManager() {
             </div>
           </div>
 
-          {editErrors && (
+          {formError && (
             <p className="text-xs text-destructive flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />{editErrors}
+              <AlertCircle className="w-3 h-3" />{formError}
             </p>
           )}
 
@@ -201,6 +205,12 @@ export function SchedulePeriodManager() {
           <Plus className="w-3.5 h-3.5 mr-1" />新增时段
         </Button>
       </div>
+
+      {actionMessage && (
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <AlertCircle className="w-3 h-3" />{actionMessage}
+        </p>
+      )}
 
       {/* 时段列表 */}
       {loading ? (

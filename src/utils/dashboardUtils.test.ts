@@ -21,6 +21,7 @@ const createMockStudent = (id: string, name: string, status: 'active' | 'paused'
   phonics_completed: false,
   ipa_completed: false,
   reading_progress: null,
+  learning_target: null,
   notes: null,
   created_at: '2024-01-01',
   updated_at: '2024-01-01'
@@ -270,9 +271,10 @@ describe('P0-3 修复验证：buildStudentOverview 不再访问不存在的 tria
     phonics_completed: false,
     ipa_completed: false,
     reading_progress: null,
+    learning_target: null,
     notes: null,
     created_at: createdAt,
-    updated_at: '2024-01-01'
+    updated_at: createdAt
   })
 
   it('正确统计学员总数和各状态数量', () => {

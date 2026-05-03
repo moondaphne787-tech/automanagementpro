@@ -109,7 +109,7 @@ export function DashboardPage() {
       case 'todaySchedule':
         return <TodaySchedulePanel schedules={data?.todaySchedules ?? []} loading={loading} onQuickRecord={handleQuickRecord} />
       case 'weeklyPlan':
-        return <WeeklyPlanStatus items={data?.problemPlanStudents ?? []} loading={loading} />
+        return <WeeklyPlanStatus items={data?.problemPlanStudents ?? []} loading={loading} onBatchGenerate={openGenerateDrawer} />
       case 'alertStudents':
         return <AlertStudents students={data?.alertStudents ?? []} loading={loading} />
       case 'weeklySummary':

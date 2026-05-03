@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useId } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -72,8 +72,6 @@ interface SortableTaskListProps {
   onDeleteTask: (index: number) => void
 }
 
-let nextId = 0
-
 export function SortableTaskList({
   tasks,
   compact,
@@ -82,12 +80,18 @@ export function SortableTaskList({
   onUpdateTask,
   onDeleteTask,
 }: SortableTaskListProps) {
-  // 用 ref 维护稳定的 id 映射，避免拖拽时 key 变化导致闪烁
-  const idsRef = useRef<string[]>(tasks.map(() => `stask-${nextId++}`))
+  const idPrefix = useId()
+  const idCounter = useRef(0)
+  const idsRef = useRef<string[]>([])
 
-  // 确保 id 列表与 tasks 长度一致
+  // 初始化（仅在首次渲染时）
+  if (idsRef.current.length === 0) {
+    idsRef.current = tasks.map(() => `${idPrefix}-${idCounter.current++}`)
+  }
+
+  // 确保 id 数量与 tasks 长度一致
   while (idsRef.current.length < tasks.length) {
-    idsRef.current.push(`stask-${nextId++}`)
+    idsRef.current.push(`${idPrefix}-${idCounter.current++}`)
   }
   if (idsRef.current.length > tasks.length) {
     idsRef.current = idsRef.current.slice(0, tasks.length)

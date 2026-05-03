@@ -2,24 +2,8 @@ import { useState, useRef, useCallback, useMemo } from 'react'
 import { GripVertical, Grid3X3, RotateCcw, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { parseTasks } from '@/db/utils'
-import { TASK_TYPE_LABELS } from '@/types'
-import type { TaskBlock as TaskBlockType } from '@/types'
-import { StudentWithPlan } from './StudentSelectionGrid'
-
-export interface CardLayout {
-  id: string
-  studentName: string
-  grade: string
-  planDate: string
-  tasks: { label: string; content: string }[]
-  notes?: string
-  x: number      // 百分比 0-100
-  y: number
-  width: number   // 百分比
-  height: number
-  page: number
-}
+import { CardLayout, buildInitialCards } from './buildLayoutCards'
+import type { StudentWithPlan } from './StudentSelectionGrid'
 
 interface LayoutEditorProps {
   selectedStudents: StudentWithPlan[]
@@ -28,98 +12,6 @@ interface LayoutEditorProps {
   showAssistantTips: boolean
   onExport: (cards: CardLayout[]) => void
   onBack: () => void
-}
-
-// 根据任务数量估算卡片高度（百分比），紧凑排版
-function estimateCardHeight(taskCount: number, hasNotes: boolean): number {
-  // 头部约 2%，每个任务约 2.2%，notes 约 2%，底部留白 1%
-  const headerH = 2
-  const taskH = Math.max(taskCount, 1) * 2.2
-  const notesH = hasNotes ? 2 : 0
-  const padding = 1
-  return Math.max(8, Math.min(40, headerH + taskH + notesH + padding))
-}
-
-function buildInitialCards(
-  selectedStudents: StudentWithPlan[],
-  plansPerStudent: number,
-  cols: number
-): CardLayout[] {
-  const cards: CardLayout[] = []
-  const gapX = 1.2
-  const gapY = 0.8
-  const marginX = 0.5 // 窄页边距
-  const cardWidth = (100 - marginX * 2 - gapX * (cols - 1)) / cols
-
-  // 先构建所有卡片数据（不含位置）
-  const rawCards: Omit<CardLayout, 'x' | 'y' | 'page'>[] = []
-  selectedStudents.forEach(item => {
-    const plans = item.plans.length === 0 ? [null] : item.plans.slice(0, plansPerStudent)
-    plans.forEach((plan, pIdx) => {
-      const tasks = plan ? parseTasks(plan.tasks).map((t: TaskBlockType) => {
-        const label = TASK_TYPE_LABELS[t.type] || t.type
-        let content = ''
-        if (t.content) content = t.content
-        else if (t.wordbank_label) {
-          content = t.wordbank_label
-          if (t.level_from && t.level_to) content += ` 第${t.level_from}-${t.level_to}关`
-        }
-        return { label, content }
-      }) : []
-
-      rawCards.push({
-        id: `${item.student.id}_${pIdx}`,
-        studentName: item.student.name,
-        grade: item.student.grade || '',
-        planDate: plan?.plan_date || '未定',
-        tasks,
-        notes: plan?.notes || undefined,
-        width: cardWidth,
-        height: estimateCardHeight(tasks.length, !!(plan?.notes)),
-      })
-    })
-  })
-
-  // 按列流式排列，自适应高度，满页换页
-  const colTops: number[] = new Array(cols).fill(marginX) // 每列当前 y 位置
-  let page = 0
-  let colIdx = 0
-  const pageMaxY = 99 // 页面底部边界
-
-  rawCards.forEach(raw => {
-    // 找当前页中最短的列
-    let bestCol = colIdx % cols
-    let minTop = colTops[bestCol]
-    for (let c = 0; c < cols; c++) {
-      if (colTops[c] < minTop) {
-        minTop = colTops[c]
-        bestCol = c
-      }
-    }
-
-    // 如果最短列也放不下，换页
-    if (minTop + raw.height > pageMaxY) {
-      page++
-      colTops.fill(marginX)
-      bestCol = 0
-      minTop = marginX
-    }
-
-    const x = marginX + bestCol * (cardWidth + gapX)
-    const y = colTops[bestCol]
-
-    cards.push({
-      ...raw,
-      x,
-      y,
-      page,
-    })
-
-    colTops[bestCol] = y + raw.height + gapY
-    colIdx++
-  })
-
-  return cards
 }
 
 export function LayoutEditor({ selectedStudents, plansPerStudent, layout, showAssistantTips, onExport, onBack }: LayoutEditorProps) {
@@ -369,35 +261,4 @@ export function LayoutEditor({ selectedStudents, plansPerStudent, layout, showAs
   )
 }
 
-// 将 CardLayout 转换为打印 HTML（导出时过滤掉已删除的卡片）
-export function generateLayoutHTML(cards: CardLayout[], showAssistantTips: boolean): string {
-  const pages = new Map<number, CardLayout[]>()
-  cards.forEach(c => {
-    if (!pages.has(c.page)) pages.set(c.page, [])
-    pages.get(c.page)!.push(c)
-  })
 
-  const pagesHtml = Array.from(pages.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([_, pageCards]) => {
-      const cardsHtml = pageCards.map(card => {
-        const tasksHtml = card.tasks.map((t, i) =>
-          `<div style="display:flex;gap:3px;font-size:14px;line-height:1.5;margin-bottom:3px"><span style="min-width:16px;font-weight:500">${i + 1}.</span><span>${t.label}${t.content ? `：${t.content}` : ''}</span></div>`
-        ).join('')
-        const notesHtml = showAssistantTips && card.notes
-          ? `<div style="font-size:9px;color:#666;margin-top:4px;padding-top:4px;border-top:1px dashed #ddd">提示：${card.notes}</div>`
-          : ''
-        return `<div style="position:absolute;left:${card.x}%;top:${card.y}%;width:${card.width}%;height:${card.height}%;border:2px solid #333;border-radius:6px;padding:10px 12px;overflow:hidden;box-sizing:border-box;background:white">
-          <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:6px;border-bottom:1px solid #ddd;margin-bottom:6px">
-            <span style="font-size:13px;font-weight:600">${card.studentName} ${card.grade}</span>
-            <span style="font-size:16px;color:#666">Period ______: ${card.planDate}</span>
-          </div>
-          ${tasksHtml}${notesHtml}
-        </div>`
-      }).join('')
-
-      return `<div class="page" style="position:relative">${cardsHtml}</div>`
-    }).join('')
-
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>课程计划打印</title><style>*{margin:0;padding:0;box-sizing:border-box}@page{size:A4;margin:4mm}body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:white}.page{width:210mm;height:297mm;position:relative;page-break-after:always}.page:last-child{page-break-after:auto}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${pagesHtml}</body></html>`
-}

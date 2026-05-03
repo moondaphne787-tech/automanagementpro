@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Dialog } from './dialog'
+import { Dialog, DialogContent } from './dialog'
 import { Button } from './button'
 import { AlertTriangle, Info, CheckCircle, XCircle } from 'lucide-react'
 
@@ -118,7 +118,7 @@ export function ConfirmDialog() {
 
   return (
     <Dialog open={state.open} onOpenChange={(open) => !open && handleCancel()}>
-      <div className="p-6">
+      <DialogContent className="sm:max-w-sm">
         <div className="flex items-start gap-4">
           <div className="flex-shrink-0 mt-0.5">
             {getIcon()}
@@ -138,7 +138,7 @@ export function ConfirmDialog() {
             {state.confirmText}
           </Button>
         </div>
-      </div>
+      </DialogContent>
     </Dialog>
   )
 }

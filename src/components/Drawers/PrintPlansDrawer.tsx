@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, FileDown, Loader2, LayoutGrid } from 'lucide-react'
+import { FileDown, Loader2, LayoutGrid } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { DrawerShell } from '@/components/ui/drawer-shell'
 import { useAppStore } from '@/store/appStore'
 import { lessonPlanDb } from '@/db'
 import { parseTasks } from '@/db/utils'
@@ -11,7 +11,9 @@ import type { Student, LessonPlan, TaskBlock as TaskBlockType } from '@/types'
 import { StudentSelectionGrid, StudentWithPlan } from './PrintPlans/StudentSelectionGrid'
 import { PrintSettingsPanel } from './PrintPlans/PrintSettingsPanel'
 import { PrintPreview } from './PrintPlans/PrintPreview'
-import { LayoutEditor, generateLayoutHTML, type CardLayout } from './PrintPlans/LayoutEditor'
+import { LayoutEditor } from './PrintPlans/LayoutEditor'
+import { generateLayoutHTML } from '@/utils/printLayout'
+import type { CardLayout } from './PrintPlans/buildLayoutCards'
 
 interface PrintPlansDrawerProps {
   open: boolean
@@ -230,40 +232,16 @@ export function PrintPlansDrawer({ open, onClose, fullPage }: PrintPlansDrawerPr
     />
   )
 
-  // 全页模式
-  if (fullPage) {
-    if (!open) return null
-    return (
-      <div className="flex flex-col h-full">
-        {viewMode === 'settings' ? settingsContent : layoutContent}
-      </div>
-    )
-  }
-
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-40" onClick={handleClose}
-          />
-          <motion.div
-            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className={`fixed right-0 top-0 h-full bg-background border-l shadow-xl z-50 flex flex-col ${viewMode === 'layout' ? 'w-[95vw] max-w-[1400px]' : 'w-[700px]'}`}
-          >
-            <div className="h-16 border-b flex items-center justify-between px-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <FileDown className="w-5 h-5 text-primary" />
-                {viewMode === 'layout' ? '排版编辑' : '批量导出课程计划'}
-              </h2>
-              <Button variant="ghost" size="icon" onClick={handleClose}><X className="w-5 h-5" /></Button>
-            </div>
-            {viewMode === 'settings' ? settingsContent : layoutContent}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    <DrawerShell
+      open={open}
+      fullPage={fullPage}
+      title={viewMode === 'layout' ? '排版编辑' : '批量导出课程计划'}
+      icon={<FileDown className="w-5 h-5 text-primary" />}
+      width={viewMode === 'layout' ? 'w-[95vw] max-w-[1400px]' : 'w-[700px]'}
+      onClose={handleClose}
+    >
+      {viewMode === 'settings' ? settingsContent : layoutContent}
+    </DrawerShell>
   )
 }

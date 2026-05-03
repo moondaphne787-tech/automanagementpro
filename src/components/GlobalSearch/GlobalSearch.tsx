@@ -54,7 +54,7 @@ export function GlobalSearch(_props: GlobalSearchProps) {
     { id: 'cmd-print', type: 'command', label: '批量导出课程计划', sublabel: '导出为 PDF', icon: <FileDown className="w-4 h-4" />, path: '/batch/export' },
     { id: 'cmd-new-student', type: 'command', label: '新增学员', sublabel: '添加新学员', icon: <Plus className="w-4 h-4" />, path: '/students/new' },
     { id: 'cmd-theme', type: 'command', label: theme === 'light' ? '切换到深色模式' : '切换到浅色模式', sublabel: '外观设置', icon: theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />, action: () => setTheme(theme === 'light' ? 'dark' : 'light') },
-  ], [theme, setTheme])
+  ], [theme])
 
   // 全局快捷键
   useEffect(() => {

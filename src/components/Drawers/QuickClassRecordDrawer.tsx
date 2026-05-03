@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, Check, CheckCheck, Loader2, Users, Zap, Calendar } from 'lucide-react'
+import { Check, CheckCheck, Loader2, Users, Zap, Calendar } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { DrawerShell } from '@/components/ui/drawer-shell'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAppStore } from '@/store/appStore'
 import { scheduledClassDb } from '@/db/schedule'
@@ -239,37 +239,18 @@ export function QuickClassRecordDrawer({ open, onClose, fullPage }: QuickClassRe
     </div>
   ) : null
 
-  // 全页模式
-  if (fullPage) {
-    if (!open) return null
-    return (
-      <div className="flex flex-col h-full">
-        {dateBar}
-        {contentArea}
-        {bottomBar}
-      </div>
-    )
-  }
-
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="fixed right-0 top-0 h-full w-[600px] bg-background border-l shadow-xl z-50 flex flex-col">
-            <div className="h-16 border-b flex items-center justify-between px-6">
-              <div className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-primary" />
-                <h2 className="text-lg font-semibold">快速录入今日课堂</h2>
-              </div>
-              <Button variant="ghost" size="icon" onClick={onClose}><X className="w-5 h-5" /></Button>
-            </div>
-            {dateBar}
-            {contentArea}
-            {bottomBar}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    <DrawerShell
+      open={open}
+      fullPage={fullPage}
+      title="快速录入今日课堂"
+      icon={<Zap className="w-5 h-5 text-primary" />}
+      width="w-[600px]"
+      onClose={onClose}
+    >
+      {dateBar}
+      {contentArea}
+      {bottomBar}
+    </DrawerShell>
   )
 }

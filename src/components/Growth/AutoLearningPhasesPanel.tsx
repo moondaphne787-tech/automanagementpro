@@ -22,14 +22,12 @@ const PHASE_TYPE_LABELS: Record<PhaseType, string> = {
 }
 
 interface AutoLearningPhasesPanelProps {
-  studentId: string
   classRecords: ClassRecord[]
   examScores: ExamScore[]
   phases: AutoPhase[]
 }
 
 export function AutoLearningPhasesPanel({
-  studentId,
   classRecords,
   examScores,
   phases
