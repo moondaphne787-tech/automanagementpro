@@ -310,7 +310,7 @@ export function Settings() {
                     <Save className="w-4 h-4 mr-2" />{savingSemester ? '保存中...' : '保存学期设置'}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">学期设置完成后，可在 <a href="#/settings/phases" className="text-primary hover:underline">学习阶段总览</a> 查看实时计算的学习阶段。</p>
+                <p className="text-xs text-muted-foreground">配置各学期的起止日期后，系统将自动计算学员的学习阶段。</p>
               </CardContent>
             </Card>
           </div>

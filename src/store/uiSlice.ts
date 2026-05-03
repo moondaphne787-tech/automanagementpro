@@ -1,11 +1,5 @@
 import type { StateCreator } from 'zustand'
-import type { AppState, UISlice, DashboardConfig } from './types'
-
-const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
-  left: ['todaySchedule', 'weeklyPlan', 'alertStudents'],
-  right: ['todo', 'weeklySummary', 'studentOverview'],
-  hidden: []
-}
+import type { AppState, UISlice } from './types'
 
 // 从 localStorage 读取初始状态
 const getInitialSidebarCollapsed = (): boolean => {
@@ -27,22 +21,10 @@ const getInitialRecentStudents = (): Array<{ id: string; name: string }> => {
   } catch { return [] }
 }
 
-const getInitialDashboardConfig = (): DashboardConfig => {
-  try {
-    const stored = localStorage.getItem('dashboardConfig')
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      if (parsed.left && parsed.right) return parsed
-    }
-  } catch {}
-  return DEFAULT_DASHBOARD_CONFIG
-}
-
 export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => ({
   sidebarCollapsed: getInitialSidebarCollapsed(),
   theme: getInitialTheme(),
   recentStudents: getInitialRecentStudents(),
-  dashboardConfig: getInitialDashboardConfig(),
 
   toggleSidebar: () => {
     set(state => {
@@ -65,15 +47,5 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
       try { localStorage.setItem('recentStudents', JSON.stringify(updated)) } catch {}
       return { recentStudents: updated }
     })
-  },
-
-  setDashboardConfig: (config) => {
-    set({ dashboardConfig: config })
-    try { localStorage.setItem('dashboardConfig', JSON.stringify(config)) } catch {}
-  },
-
-  resetDashboardConfig: () => {
-    set({ dashboardConfig: DEFAULT_DASHBOARD_CONFIG })
-    try { localStorage.setItem('dashboardConfig', JSON.stringify(DEFAULT_DASHBOARD_CONFIG)) } catch {}
   },
 })

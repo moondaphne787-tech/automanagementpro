@@ -12,10 +12,8 @@ const ROUTE_LABELS: Record<string, string> = {
   '/preferences': '时段偏好',
   '/reading-checkin': '朗读打卡',
   '/teachers': '助教',
-  '/phases': '学习阶段',
   '/settings': '设置',
-  '/batch/quick-record': '快速录入今日课堂',
-  '/batch/generate': '批量生成课程计划',
+'/batch/generate': '批量生成课程计划',
   '/batch/import': '批量导入课堂记录',
   '/batch/export': '批量导出课程计划',
 }

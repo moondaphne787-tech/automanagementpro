@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Edit, Trash2, Clock, Calendar, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InlineField } from '@/components/ui/inline-field'
+import { PromptDialog } from '@/components/ui/dialog'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
 import { studentSchedulePreferenceDb, schedulePeriodDb } from '@/db'
@@ -29,6 +31,14 @@ export function InfoTab({ studentId }: InfoTabProps) {
     total_hours: '',
     warning_threshold: '3'
   })
+  const currentProgress = useAppStore(s => s.currentProgress)
+  const wordbanks = useAppStore(s => s.wordbanks)
+  const loadProgress = useAppStore(s => s.loadProgress)
+  const upsertProgress = useAppStore(s => s.upsertProgress)
+  const deleteProgress = useAppStore(s => s.deleteProgress)
+
+  const [promptState, setPromptState] = useState<{ open: boolean; title: string; defaultValue: string; onConfirm: ((v: string) => void) | null }>({ open: false, title: '', defaultValue: '', onConfirm: null })
+
   const [schedulePreferences, setSchedulePreferences] = useState<StudentSchedulePreference[]>([])
   const [showPreferenceForm, setShowPreferenceForm] = useState(false)
   const [editingPreference, setEditingPreference] = useState<StudentSchedulePreference | null>(null)
@@ -51,10 +61,11 @@ export function InfoTab({ studentId }: InfoTabProps) {
     }
   }, [currentBilling])
 
-  // 加载偏好时段 和 排课时段列表
+  // 加载偏好时段、排课时段列表、词库进度
   useEffect(() => {
     loadSchedulePreferences()
     loadSchedulePeriods()
+    loadProgress(studentId)
   }, [studentId])
 
   const loadSchedulePeriods = async () => {
@@ -335,6 +346,86 @@ export function InfoTab({ studentId }: InfoTabProps) {
         </div>
       </div>
 
+      {/* 词库进度 */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">📚 词库进度</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {currentProgress.length === 0 ? (
+            <p className="text-sm text-muted-foreground/60 italic py-1">暂无词库进度</p>
+          ) : (
+            <div className="space-y-3">
+              {currentProgress.map((progress) => {
+                const wordbank = wordbanks.find(w => w.id === progress.wordbank_id)
+                const totalLevels = progress.total_levels_override || wordbank?.total_levels || 60
+                const pct = Math.round((progress.current_level / totalLevels) * 100)
+                return (
+                  <div key={progress.id} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{progress.wordbank_label}</span>
+                        <span className={cn(
+                          'text-xs px-1.5 py-0.5 rounded',
+                          progress.status === 'completed' && 'bg-green-100 text-green-700',
+                          progress.status === 'active' && 'bg-blue-100 text-blue-700',
+                          progress.status === 'paused' && 'bg-muted text-muted-foreground',
+                        )}>
+                          {progress.status === 'completed' ? '已完成' : progress.status === 'active' ? '进行中' : '已暂停'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">第 {progress.current_level}/{totalLevels} 关</span>
+                        <button
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => setPromptState({
+                            open: true,
+                            title: `更新「${progress.wordbank_label}」关数（最大 ${totalLevels}）`,
+                            defaultValue: progress.current_level.toString(),
+                            onConfirm: (v) => {
+                              const level = Math.min(parseInt(v) || 0, totalLevels)
+                              if (!isNaN(level)) upsertProgress({ student_id: studentId, wordbank_id: progress.wordbank_id, current_level: level, status: level >= totalLevels ? 'completed' : 'active' })
+                            }
+                          })}
+                        >
+                          更新
+                        </button>
+                        <button
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          onClick={async () => {
+                            const confirmed = await confirmDialog({ title: '删除词库进度', message: `确定删除「${progress.wordbank_label}」的进度记录吗？`, confirmText: '删除', variant: 'danger' })
+                            if (confirmed) deleteProgress(studentId, progress.wordbank_id)
+                          }}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">已学至第 {progress.current_level} 关</p>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* 添加词库 */}
+          {wordbanks.length > currentProgress.length && (
+            <div className="pt-2 border-t">
+              <Select
+                placeholder="+ 添加词库"
+                options={wordbanks.filter(w => !currentProgress.some(p => p.wordbank_id === w.id)).map(w => ({ value: w.id, label: w.name }))}
+                onChange={(e) => {
+                  if (e.target.value) upsertProgress({ student_id: studentId, wordbank_id: e.target.value, current_level: 0, status: 'active' })
+                }}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* 偏好时段 — 全宽 */}
       <Card>
         <CardHeader className="pb-2">
@@ -424,6 +515,13 @@ export function InfoTab({ studentId }: InfoTabProps) {
           )}
         </CardContent>
       </Card>
+      <PromptDialog
+        open={promptState.open}
+        title={promptState.title}
+        defaultValue={promptState.defaultValue}
+        onConfirm={(v) => { promptState.onConfirm?.(v); setPromptState({ open: false, title: '', defaultValue: '', onConfirm: null }) }}
+        onCancel={() => setPromptState({ open: false, title: '', defaultValue: '', onConfirm: null })}
+      />
     </div>
   )
 }

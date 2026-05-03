@@ -7,24 +7,11 @@ import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import type { TaskBlock, StudentWordbankProgress, ClassRecord, Wordbank } from '@/types'
 import { autoFillWordbankContent } from '@/ai/autoFillWordbankContent'
 
-// 暂停控制标志（模块级别，不在 store 中以避免闭包问题）
-let pauseFlag = false
 let cancelFlag = false
-
-function waitForResume(): Promise<void> {
-  return new Promise(resolve => {
-    const check = () => {
-      if (!pauseFlag || cancelFlag) { resolve(); return }
-      setTimeout(check, 200)
-    }
-    check()
-  })
-}
 
 export const createGenerationSlice: StateCreator<AppState, [], [], GenerationSlice> = (set, get) => ({
   generationTasks: [],
   generationRunning: false,
-  generationPaused: false,
   generationProgress: { done: 0, total: 0 },
 
   startGeneration: async (tasks, extraInstruction) => {
@@ -51,12 +38,10 @@ export const createGenerationSlice: StateCreator<AppState, [], [], GenerationSli
     // 加载词库
     const wordbanks = get().wordbanks
 
-    pauseFlag = false
     cancelFlag = false
     set({
       generationTasks: tasks,
       generationRunning: true,
-      generationPaused: false,
       generationProgress: { done: 0, total: tasks.length }
     })
 
@@ -65,12 +50,6 @@ export const createGenerationSlice: StateCreator<AppState, [], [], GenerationSli
     for (let i = 0; i < tasks.length; i++) {
       // 检查取消
       if (cancelFlag) break
-
-      // 检查暂停
-      if (pauseFlag) {
-        await waitForResume()
-        if (cancelFlag) break
-      }
 
       const task = tasks[i]
       if (task.status === 'saved' || task.status === 'skipped') {
@@ -142,27 +121,16 @@ export const createGenerationSlice: StateCreator<AppState, [], [], GenerationSli
       }
     }
 
-    set({ generationRunning: false, generationPaused: false })
+    set({ generationRunning: false })
     if (!cancelFlag) {
       const successCount = get().generationTasks.filter(t => t.status === 'success').length
       toast.success(`批量生成完成：${successCount}/${tasks.length} 成功`)
     }
   },
 
-  pauseGeneration: () => {
-    pauseFlag = true
-    set({ generationPaused: true })
-  },
-
-  resumeGeneration: () => {
-    pauseFlag = false
-    set({ generationPaused: false })
-  },
-
   cancelGeneration: () => {
     cancelFlag = true
-    pauseFlag = false
-    set({ generationRunning: false, generationPaused: false })
+    set({ generationRunning: false })
   },
 
   updateGenerationTask: (studentId, updates) => {

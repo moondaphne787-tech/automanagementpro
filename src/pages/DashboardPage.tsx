@@ -1,95 +1,28 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
-  type DragEndEvent
-} from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import { Calendar, FileQuestion, BatteryLow, UserPlus, RefreshCw, Rocket, Users, Sparkles, Search, Settings2, GripVertical, EyeOff, Eye, RotateCcw } from 'lucide-react'
+import { Calendar, FileQuestion, BatteryLow, UserPlus, RefreshCw, Rocket, Users, Sparkles, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDashboard } from '../hooks/useDashboard'
 import { StatCard } from '../components/Dashboard/StatCard'
-import { TodaySchedulePanel } from '../components/Dashboard/TodaySchedulePanel'
-import { WeeklyPlanStatus } from '../components/Dashboard/WeeklyPlanStatus'
-import { AlertStudents } from '../components/Dashboard/AlertStudents'
-import { WeeklyClassSummary } from '../components/Dashboard/WeeklyClassSummary'
-import { StudentOverview } from '../components/Dashboard/StudentOverview'
+import { TodaySchedulePanel, WeeklyPlanStatus } from '../components/Dashboard/DashboardPanels'
+import { AlertStudents, StudentOverview, WeeklyClassSummary } from '../components/Dashboard/DashboardSidebar'
 import { Button } from '../components/ui/button'
 import { Dialog, DialogHeader, DialogTitle, DialogContent } from '../components/ui/dialog'
 import { ClassRecordForm } from '../components/ClassRecord/ClassRecordForm'
 import { useAppStore } from '../store/appStore'
-import { cn } from '../lib/utils'
 import type { TodayScheduleItem } from '../types'
-import type { DashboardConfig } from '../store/types'
-
-// 面板注册表
-const PANEL_REGISTRY: Record<string, { label: string }> = {
-  todaySchedule: { label: '今日排课' },
-  weeklyPlan: { label: '本周计划状态' },
-  alertStudents: { label: '需关注学员' },
-  weeklySummary: { label: '本周课堂总结' },
-  studentOverview: { label: '学员总览' },
-}
-
-// 可排序面板包装器
-function SortablePanel({ id, editing, onHide, children }: {
-  id: string; editing: boolean; onHide: (id: string) => void; children: React.ReactNode
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-
-  return (
-    <div ref={setNodeRef} style={style} className="relative">
-      {editing && (
-        <div className="absolute -top-2 -right-2 z-10 flex items-center gap-1">
-          <button
-            {...attributes}
-            {...listeners}
-            className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow cursor-grab active:cursor-grabbing"
-          >
-            <GripVertical className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => onHide(id)}
-            className="w-6 h-6 rounded-full bg-muted-foreground/80 text-background flex items-center justify-center shadow hover:bg-destructive transition-colors"
-          >
-            <EyeOff className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-      <div className={cn(editing && "ring-2 ring-primary/20 ring-dashed rounded-lg")}>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 export function DashboardPage() {
   const navigate = useNavigate()
   const { data, loading, error, refresh } = useDashboard()
   const wordbanks = useAppStore(s => s.wordbanks)
   const createClassRecord = useAppStore(s => s.createClassRecord)
-  // 跳转到批量生成页面（可带预选学员 ID）
+
   const goToGenerate = (preselectedIds?: string[]) => {
     navigate('/batch/generate', preselectedIds?.length ? { state: { preselectedIds } } : undefined)
   }
-  const dashboardConfig = useAppStore(s => s.dashboardConfig)
-  const setDashboardConfig = useAppStore(s => s.setDashboardConfig)
-  const resetDashboardConfig = useAppStore(s => s.resetDashboardConfig)
 
   const [quickRecordTarget, setQuickRecordTarget] = useState<TodayScheduleItem | null>(null)
-  const [editing, setEditing] = useState(false)
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor)
-  )
 
   const handleQuickRecord = useCallback((schedule: TodayScheduleItem) => {
     setQuickRecordTarget(schedule)
@@ -101,56 +34,6 @@ export function DashboardPage() {
     setQuickRecordTarget(null)
     refresh()
   }, [createClassRecord, refresh])
-
-  // 渲染单个面板
-  const renderPanel = (id: string) => {
-    switch (id) {
-      case 'todaySchedule':
-        return <TodaySchedulePanel schedules={data?.todaySchedules ?? []} loading={loading} onQuickRecord={handleQuickRecord} />
-      case 'weeklyPlan':
-        return <WeeklyPlanStatus items={data?.problemPlanStudents ?? []} loading={loading} onBatchGenerate={(ids) => goToGenerate(ids)} />
-      case 'alertStudents':
-        return <AlertStudents students={data?.alertStudents ?? []} loading={loading} />
-      case 'weeklySummary':
-        return <WeeklyClassSummary summary={data?.weeklySummary ?? null} loading={loading} />
-      case 'studentOverview':
-        return <StudentOverview data={data?.studentOverview ?? null} loading={loading} />
-      default:
-        return null
-    }
-  }
-
-  const handleHidePanel = (id: string) => {
-    const newConfig: DashboardConfig = {
-      left: dashboardConfig.left.filter(p => p !== id),
-      right: dashboardConfig.right.filter(p => p !== id),
-      hidden: [...dashboardConfig.hidden, id]
-    }
-    setDashboardConfig(newConfig)
-  }
-
-  const handleShowPanel = (id: string) => {
-    // 恢复到右列末尾
-    const newConfig: DashboardConfig = {
-      ...dashboardConfig,
-      right: [...dashboardConfig.right, id],
-      hidden: dashboardConfig.hidden.filter(h => h !== id)
-    }
-    setDashboardConfig(newConfig)
-  }
-
-  const handleDragEnd = (event: DragEndEvent, column: 'left' | 'right') => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-
-    const items = [...dashboardConfig[column]]
-    const oldIndex = items.indexOf(active.id as string)
-    const newIndex = items.indexOf(over.id as string)
-    if (oldIndex === -1 || newIndex === -1) return
-
-    const newItems = arrayMove(items, oldIndex, newIndex)
-    setDashboardConfig({ ...dashboardConfig, [column]: newItems })
-  }
 
   const isEmpty = !loading && data &&
     data.stats.todayScheduleCount === 0 &&
@@ -191,62 +74,12 @@ export function DashboardPage() {
             搜索
             <kbd className="ml-2 text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">⌘K</kbd>
           </Button>
-          <Button
-            variant={editing ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setEditing(!editing)}
-          >
-            <Settings2 className="w-4 h-4 mr-1.5" />
-            {editing ? '完成' : '自定义'}
-          </Button>
           <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
             刷新
           </Button>
         </div>
       </div>
-
-      {/* 编辑模式：隐藏面板恢复区 */}
-      {editing && dashboardConfig.hidden.length > 0 && (
-        <div className="mb-4 p-3 bg-muted/50 border border-dashed rounded-lg">
-          <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
-            <EyeOff className="w-3.5 h-3.5" />
-            已隐藏的面板（点击恢复）
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {dashboardConfig.hidden.map(id => (
-              <button
-                key={id}
-                onClick={() => handleShowPanel(id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-background border rounded-md hover:border-primary/50 transition-colors"
-              >
-                <Eye className="w-3 h-3" />
-                {PANEL_REGISTRY[id]?.label || id}
-              </button>
-            ))}
-            <button
-              onClick={() => { resetDashboardConfig(); toast.success('已恢复默认布局') }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <RotateCcw className="w-3 h-3" />
-              恢复默认
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 编辑模式：恢复默认按钮（无隐藏面板时也显示） */}
-      {editing && dashboardConfig.hidden.length === 0 && (
-        <div className="mb-4 flex justify-end">
-          <button
-            onClick={() => { resetDashboardConfig(); toast.success('已恢复默认布局') }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <RotateCcw className="w-3 h-3" />
-            恢复默认布局
-          </button>
-        </div>
-      )}
 
       {/* 空状态引导 */}
       {isEmpty && (
@@ -285,32 +118,16 @@ export function DashboardPage() {
         <StatCard label="体验生待跟进" value={data?.stats.trialStudentCount ?? 0} unit="人" icon={<UserPlus className="w-4 h-4" />} color="purple" loading={loading} onClick={() => navigate('/trial')} />
       </div>
 
-      {/* 主内容区 - 可自定义双列布局 */}
+      {/* 固定双列布局 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* 左列 */}
         <div className="lg:col-span-7 space-y-4">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, 'left')}>
-            <SortableContext items={dashboardConfig.left} strategy={verticalListSortingStrategy}>
-              {dashboardConfig.left.map(id => (
-                <SortablePanel key={id} id={id} editing={editing} onHide={handleHidePanel}>
-                  {renderPanel(id)}
-                </SortablePanel>
-              ))}
-            </SortableContext>
-          </DndContext>
+          <TodaySchedulePanel schedules={data?.todaySchedules ?? []} loading={loading} onQuickRecord={handleQuickRecord} />
+          <WeeklyPlanStatus items={data?.problemPlanStudents ?? []} loading={loading} onBatchGenerate={(ids) => goToGenerate(ids)} />
+          <AlertStudents students={data?.alertStudents ?? []} loading={loading} />
         </div>
-
-        {/* 右列 */}
         <div className="lg:col-span-5 space-y-4">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(e, 'right')}>
-            <SortableContext items={dashboardConfig.right} strategy={verticalListSortingStrategy}>
-              {dashboardConfig.right.map(id => (
-                <SortablePanel key={id} id={id} editing={editing} onHide={handleHidePanel}>
-                  {renderPanel(id)}
-                </SortablePanel>
-              ))}
-            </SortableContext>
-          </DndContext>
+          <WeeklyClassSummary summary={data?.weeklySummary ?? null} loading={loading} />
+          <StudentOverview data={data?.studentOverview ?? null} loading={loading} />
         </div>
       </div>
 

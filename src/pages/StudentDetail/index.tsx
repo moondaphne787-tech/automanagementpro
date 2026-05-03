@@ -1,16 +1,14 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Trash2, BarChart3, List } from 'lucide-react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { GrowthPanel } from '@/components/Growth/GrowthPanel'
 import { useAppStore } from '@/store/appStore'
 import { getLevelColor, cn } from '@/lib/utils'
-import { StudentTimeline } from '@/components/StudentTimeline/StudentTimeline'
 import { InfoTab } from './InfoTab'
 import { RecordsTab } from './RecordsTab'
 import { PlansTab } from './PlansTab'
-import { PlanningTab } from './PlanningTab'
 
 type TabType = 'info' | 'records' | 'plans' | 'growth'
 
@@ -24,8 +22,6 @@ export function StudentDetail() {
   const addRecentStudent = useAppStore(s => s.addRecentStudent)
 
   const [tab, setTab] = useState<TabType>('info')
-  const [growthView, setGrowthView] = useState<'dashboard' | 'timeline'>('dashboard')
-  const [plansView, setPlansView] = useState<'plans' | 'planning'>('plans')
 
   useEffect(() => {
     if (id) {
@@ -118,73 +114,9 @@ export function StudentDetail() {
         ) : tab === 'records' ? (
           <RecordsTab studentId={id!} />
         ) : tab === 'plans' ? (
-          <div className="space-y-4">
-            {/* 子导航 */}
-            <div className="flex gap-2 border-b pb-2">
-              <button
-                onClick={() => setPlansView('plans')}
-                className={cn(
-                  'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                  plansView === 'plans'
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-              >
-                课程计划
-              </button>
-              <button
-                onClick={() => setPlansView('planning')}
-                className={cn(
-                  'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                  plansView === 'planning'
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-              >
-                学习规划
-              </button>
-            </div>
-            {plansView === 'plans' ? (
-              <PlansTab studentId={id!} />
-            ) : (
-              <PlanningTab studentId={id!} />
-            )}
-          </div>
+          <PlansTab studentId={id!} />
         ) : tab === 'growth' ? (
-          <div className="space-y-4">
-            {/* 视图切换 */}
-            <div className="flex gap-2 border-b pb-2">
-              <button
-                onClick={() => setGrowthView('dashboard')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                  growthView === 'dashboard'
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-              >
-                <BarChart3 className="w-4 h-4" />
-                成长概览
-              </button>
-              <button
-                onClick={() => setGrowthView('timeline')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                  growthView === 'timeline'
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
-              >
-                <List className="w-4 h-4" />
-                时间线
-              </button>
-            </div>
-            {growthView === 'dashboard' ? (
-              <GrowthPanel studentId={id!} />
-            ) : (
-              <StudentTimeline studentId={id!} />
-            )}
-          </div>
+          <GrowthPanel studentId={id!} />
         ) : null}
       </div>
     </div>

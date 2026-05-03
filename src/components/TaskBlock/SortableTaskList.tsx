@@ -1,67 +1,6 @@
-import { useRef, useId } from 'react'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-  sortableKeyboardCoordinates,
-  arrayMove,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { TaskBlock } from './TaskBlock'
 import type { TaskBlock as TaskBlockType, Wordbank } from '@/types'
-
-interface SortableTaskItemProps {
-  id: string
-  task: TaskBlockType
-  index: number
-  compact?: boolean
-  wordbanks?: Wordbank[]
-  onChange: (task: TaskBlockType) => void
-  onDelete?: () => void
-}
-
-function SortableTaskItem({ id, task, index, compact, wordbanks, onChange, onDelete }: SortableTaskItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    position: 'relative' as const,
-    zIndex: isDragging ? 10 : 'auto' as const,
-  }
-
-  return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      <TaskBlock
-        task={task}
-        index={index}
-        editable
-        compact={compact}
-        wordbanks={wordbanks}
-        onChange={onChange}
-        onDelete={onDelete}
-        dragListeners={listeners}
-      />
-    </div>
-  )
-}
 
 interface SortableTaskListProps {
   tasks: TaskBlockType[]
@@ -80,70 +19,53 @@ export function SortableTaskList({
   onUpdateTask,
   onDeleteTask,
 }: SortableTaskListProps) {
-  const idPrefix = useId()
-  const idCounter = useRef(0)
-  const idsRef = useRef<string[]>([])
-
-  // 初始化（仅在首次渲染时）
-  if (idsRef.current.length === 0) {
-    idsRef.current = tasks.map(() => `${idPrefix}-${idCounter.current++}`)
+  const handleMoveUp = (index: number) => {
+    if (index <= 0) return
+    const newTasks = [...tasks]
+    ;[newTasks[index - 1], newTasks[index]] = [newTasks[index], newTasks[index - 1]]
+    onTasksChange(newTasks)
   }
 
-  // 确保 id 数量与 tasks 长度一致
-  while (idsRef.current.length < tasks.length) {
-    idsRef.current.push(`${idPrefix}-${idCounter.current++}`)
-  }
-  if (idsRef.current.length > tasks.length) {
-    idsRef.current = idsRef.current.slice(0, tasks.length)
-  }
-
-  const ids = idsRef.current
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-
-    const oldIndex = ids.indexOf(active.id as string)
-    const newIndex = ids.indexOf(over.id as string)
-
-    if (oldIndex !== -1 && newIndex !== -1) {
-      const newTasks = arrayMove(tasks, oldIndex, newIndex)
-      idsRef.current = arrayMove(ids, oldIndex, newIndex)
-      onTasksChange(newTasks)
-    }
+  const handleMoveDown = (index: number) => {
+    if (index >= tasks.length - 1) return
+    const newTasks = [...tasks]
+    ;[newTasks[index], newTasks[index + 1]] = [newTasks[index + 1], newTasks[index]]
+    onTasksChange(newTasks)
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        <div className={compact ? "space-y-2" : "space-y-3"}>
-          {tasks.map((task, idx) => (
-            <SortableTaskItem
-              key={ids[idx]}
-              id={ids[idx]}
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      {tasks.map((task, idx) => (
+        <div key={idx} className="flex items-start gap-1">
+          <div className="flex flex-col gap-0.5 pt-1 shrink-0">
+            <button
+              onClick={() => handleMoveUp(idx)}
+              disabled={idx === 0}
+              className="p-0.5 rounded hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronUp className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => handleMoveDown(idx)}
+              disabled={idx === tasks.length - 1}
+              className="p-0.5 rounded hover:bg-muted disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="flex-1 min-w-0">
+            <TaskBlock
               task={task}
               index={idx}
+              editable
               compact={compact}
               wordbanks={wordbanks}
               onChange={(updated) => onUpdateTask(idx, updated)}
               onDelete={tasks.length > 1 ? () => onDeleteTask(idx) : undefined}
             />
-          ))}
+          </div>
         </div>
-      </SortableContext>
-    </DndContext>
+      ))}
+    </div>
   )
 }

@@ -1,20 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, CheckCircle, Clock, TrendingUp, Users as UsersIcon } from 'lucide-react'
+import { Plus, CheckCircle, Clock, Users as UsersIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { DateInput } from '@/components/ui/date-input'
 import { trialConversionDb } from '@/db'
-import { TabNav } from '@/components/ui/tab-nav'
 import { TrialStudentList } from './TrialStudentList'
-import { ConversionStats } from './ConversionStats'
 import type { TrialStudent } from './TrialStudentList'
 
 export function TrialList() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<'list' | 'stats'>('list')
   const [students, setStudents] = useState<TrialStudent[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -75,25 +72,23 @@ export function TrialList() {
       <header className="h-16 border-b bg-card flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-semibold">体验生</h1>
-          {activeTab === 'list' && (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-muted rounded-lg text-sm">
-                <UsersIcon className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">{stats.total}</span>
-                <span className="text-muted-foreground">人</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 text-green-600 rounded-lg text-sm">
-                <CheckCircle className="w-4 h-4" />
-                <span className="font-medium">{stats.converted}</span>
-                <span className="text-green-600/70">已成交</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-600 rounded-lg text-sm">
-                <Clock className="w-4 h-4" />
-                <span className="font-medium">{stats.pending}</span>
-                <span className="text-amber-600/70">待跟进</span>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-muted rounded-lg text-sm">
+              <UsersIcon className="w-4 h-4 text-muted-foreground" />
+              <span className="font-medium">{stats.total}</span>
+              <span className="text-muted-foreground">人</span>
             </div>
-          )}
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-green-500/10 text-green-600 rounded-lg text-sm">
+              <CheckCircle className="w-4 h-4" />
+              <span className="font-medium">{stats.converted}</span>
+              <span className="text-green-600/70">已成交</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-600 rounded-lg text-sm">
+              <Clock className="w-4 h-4" />
+              <span className="font-medium">{stats.pending}</span>
+              <span className="text-amber-600/70">待跟进</span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Button onClick={() => navigate('/students/new?trial=true')}>
@@ -103,26 +98,11 @@ export function TrialList() {
         </div>
       </header>
 
-      <div className="border-b bg-card px-6">
-        <TabNav
-          tabs={[
-            { key: 'list', label: '体验生列表', icon: <UsersIcon className="w-4 h-4" /> },
-            { key: 'stats', label: '成交统计', icon: <TrendingUp className="w-4 h-4" /> },
-          ]}
-          activeTab={activeTab}
-          onChange={(key) => setActiveTab(key as 'list' | 'stats')}
-        />
-      </div>
-
-      {activeTab === 'list' ? (
-        <TrialStudentList
-          students={students}
-          loading={loading}
-          onOpenConvertDialog={handleOpenConvertDialog}
-        />
-      ) : (
-        <ConversionStats />
-      )}
+      <TrialStudentList
+        students={students}
+        loading={loading}
+        onOpenConvertDialog={handleOpenConvertDialog}
+      />
 
       {/* 成交对话框 */}
       <Dialog open={convertDialogOpen} onOpenChange={setConvertDialogOpen}>

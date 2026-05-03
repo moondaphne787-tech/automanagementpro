@@ -6,13 +6,11 @@ import {
   Sun, Moon, Plus
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
-import { teacherDb } from '@/db/teachers'
 import { cn } from '@/lib/utils'
-import type { Teacher } from '@/types'
 
 interface SearchResult {
   id: string
-  type: 'command' | 'student' | 'teacher' | 'page'
+  type: 'command' | 'student' | 'page'
   label: string
   sublabel?: string
   path?: string
@@ -43,7 +41,6 @@ export function GlobalSearch(_props: GlobalSearchProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [teachers, setTeachers] = useState<Teacher[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   // 命令列表（依赖 onAction 和 store）
@@ -74,7 +71,6 @@ export function GlobalSearch(_props: GlobalSearchProps) {
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 50)
-      teacherDb.getAll().then(setTeachers).catch(() => {})
       setQuery('')
       setSelectedIndex(0)
     }
@@ -106,24 +102,13 @@ export function GlobalSearch(_props: GlobalSearchProps) {
         })
       })
 
-    // 搜索助教
-    teachers
-      .filter(t => t.name.toLowerCase().includes(q))
-      .slice(0, 3)
-      .forEach(t => {
-        matched.push({
-          id: `t-${t.id}`, type: 'teacher', label: t.name,
-          sublabel: '助教', path: `/teachers/${t.id}`, icon: <GraduationCap className="w-4 h-4" />
-        })
-      })
-
     // 搜索页面
     PAGE_RESULTS
       .filter(p => p.label.toLowerCase().includes(q))
       .forEach(p => matched.push(p))
 
     return matched.slice(0, 12)
-  }, [query, students, teachers, COMMAND_RESULTS])
+  }, [query, students, COMMAND_RESULTS])
 
   useEffect(() => setSelectedIndex(0), [results])
 
@@ -151,7 +136,7 @@ export function GlobalSearch(_props: GlobalSearchProps) {
 
   if (!open) return null
 
-  const TYPE_LABELS: Record<string, string> = { command: '快捷操作', student: '学员', teacher: '助教', page: '页面' }
+  const TYPE_LABELS: Record<string, string> = { command: '快捷操作', student: '学员', page: '页面' }
 
   const grouped = results.reduce<Record<string, SearchResult[]>>((acc, r) => {
     ;(acc[r.type] ??= []).push(r)

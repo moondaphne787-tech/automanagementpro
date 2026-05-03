@@ -13,7 +13,6 @@ import { TeacherDetail } from '@/pages/TeacherDetail'
 import { Schedule } from '@/pages/Schedule'
 import { ReadingCheckin } from '@/pages/ReadingCheckin'
 import { BatchPage } from '@/pages/BatchPage'
-import { PhasesPage } from '@/pages/PhasesPage'
 import { PreferenceManage } from '@/pages/PreferenceManage'
 
 function App() {
@@ -32,7 +31,6 @@ function App() {
           <Route path="/teachers/:id" element={<TeacherDetail />} />
           <Route path="/reading-checkin" element={<ReadingCheckin />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/settings/phases" element={<PhasesPage />} />
           <Route path="/batch" element={<BatchPage />} />
         </Route>
       </Routes>

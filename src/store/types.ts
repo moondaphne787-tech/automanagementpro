@@ -204,24 +204,14 @@ export interface SemesterConfigSlice {
   loadSemesterConfig: () => Promise<void>
 }
 
-// ===== Dashboard 配置 =====
-export interface DashboardConfig {
-  left: string[]
-  right: string[]
-  hidden: string[]
-}
-
 // ===== UI Slice 类型 =====
 export interface UISlice {
   sidebarCollapsed: boolean
   theme: 'light' | 'dark'
   recentStudents: Array<{ id: string; name: string }>
-  dashboardConfig: DashboardConfig
   toggleSidebar: () => void
   setTheme: (theme: 'light' | 'dark') => void
   addRecentStudent: (id: string, name: string) => void
-  setDashboardConfig: (config: DashboardConfig) => void
-  resetDashboardConfig: () => void
 }
 
 // ===== Dashboard 缓存 Slice 类型 =====
@@ -307,11 +297,8 @@ export interface GenerationTask {
 export interface GenerationSlice {
   generationTasks: GenerationTask[]
   generationRunning: boolean
-  generationPaused: boolean
   generationProgress: { done: number; total: number }
   startGeneration: (tasks: GenerationTask[], extraInstruction?: string) => Promise<void>
-  pauseGeneration: () => void
-  resumeGeneration: () => void
   cancelGeneration: () => void
   updateGenerationTask: (studentId: string, updates: Partial<GenerationTask>) => void
   clearGenerationResults: () => void

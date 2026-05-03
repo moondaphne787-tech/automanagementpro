@@ -9,6 +9,7 @@ import { PlanEditor } from '@/components/PlanEditor/PlanEditor'
 import { AIPlanGenerator } from '@/components/PlanEditor/AIPlanGenerator'
 import { RefPanel } from '@/components/PlanEditor/RefPanel'
 import { TemplatePickerDialog } from '@/components/PlanEditor/TemplatePickerDialog'
+import { PlanningOverview } from './PlanningOverview'
 import { useAppStore } from '@/store/appStore'
 import { sendAIRequestStream } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
@@ -52,6 +53,9 @@ export function PlansTab({ studentId }: PlansTabProps) {
   // 参考面板状态
   const [showRefPanel, setShowRefPanel] = useState(true)
   const [mobileRefExpanded, setMobileRefExpanded] = useState(false)
+
+  // 学习规划折叠状态
+  const [planningOpen, setPlanningOpen] = useState(false)
 
   // PromptDialog 状态
   const [promptState, setPromptState] = useState<{
@@ -237,6 +241,25 @@ export function PlansTab({ studentId }: PlansTabProps) {
               </Button>
             </div>
             
+            {/* 学习规划（折叠卡片） */}
+            <div className="border rounded-lg bg-card">
+              <button
+                onClick={() => setPlanningOpen(!planningOpen)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-muted/50 transition-colors rounded-lg"
+              >
+                <span className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4" />
+                  学习规划
+                </span>
+                <ChevronDown className={cn("w-4 h-4 transition-transform", planningOpen && "rotate-180")} />
+              </button>
+              {planningOpen && (
+                <div className="px-4 pb-4">
+                  <PlanningOverview studentId={studentId} />
+                </div>
+              )}
+            </div>
+
             {/* 过期计划警告 */}
             {expiredPlans.length > 0 && (
               <Card className="border-orange-300 bg-orange-50/50">

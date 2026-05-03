@@ -1,24 +1,11 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/appStore'
 import { classRecordDb } from '@/db'
 import { GrowthOverviewTab } from './GrowthOverviewTab'
 import { GrowthExamsTab } from './GrowthExamsTab'
 import { GrowthVocabTab } from './GrowthVocabTab'
-import { AutoLearningPhasesPanel, AutoPhase } from './AutoLearningPhasesPanel'
 import type { ExamScore, VocabTest } from '@/types'
-
-// 学期配置接口
-interface SemesterConfig {
-  spring_start: string
-  spring_end: string
-  summer_start: string
-  summer_end: string
-  autumn_start: string
-  autumn_end: string
-  winter_start: string
-  winter_end: string
-}
 
 // 主组件
 export function GrowthPanel({ studentId }: { studentId: string }) {
@@ -35,25 +22,20 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
   const currentProgress = useAppStore(s => s.currentProgress)
   const classRecords = useAppStore(s => s.classRecords)
   const loadClassRecords = useAppStore(s => s.loadClassRecords)
-  const loadSemesterConfig = useAppStore(s => s.loadSemesterConfig)
 
   const [showExamForm, setShowExamForm] = useState(false)
   const [editingExam, setEditingExam] = useState<ExamScore | null>(null)
   const [showVocabForm, setShowVocabForm] = useState(false)
   const [editingVocab, setEditingVocab] = useState<VocabTest | null>(null)
-  const [activeSection, setActiveSection] = useState<'overview' | 'exams' | 'vocab' | 'phases'>('overview')
+  const [activeSection, setActiveSection] = useState<'overview' | 'exams' | 'vocab'>('overview')
 
   // 完成率趋势数据
   const [completionRateData, setCompletionRateData] = useState<{ date: string; total: number; completed: number; rate: number }[]>([])
-
-  // 从 store 获取学期配置
-  const semesterConfig = useAppStore(state => state.semesterConfig)
 
   useEffect(() => {
     loadClassRecords(studentId)
     loadExamScores(studentId)
     loadVocabTests(studentId)
-    loadSemesterConfig()
     loadCompletionRateData(studentId)
   }, [studentId])
 
@@ -61,81 +43,6 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
     const data = await classRecordDb.getCompletionRateStats(studentId, 12) // 最近12周
     setCompletionRateData(data)
   }
-
-  // 使用 useMemo 缓存自动计算的学习阶段列表
-  const autoPhases = useMemo(() => {
-    const phases: AutoPhase[] = []
-    const today = new Date().toISOString().split('T')[0]
-    const currentYear = new Date().getFullYear()
-
-    // 如果学期配置未加载，返回空数组
-    if (!semesterConfig) return []
-
-    // 辅助函数：判断阶段状态
-    const getPhaseStatus = (start: string, end: string) => {
-      const isActive = start <= today && (!end || end >= today)
-      const isCompleted = !!end && end < today
-      return { isActive, isCompleted }
-    }
-
-    // 春季学期
-    if (semesterConfig.spring_start && semesterConfig.spring_end) {
-      const { isActive, isCompleted } = getPhaseStatus(semesterConfig.spring_start, semesterConfig.spring_end)
-      phases.push({
-        id: 'spring',
-        name: `${currentYear}年春季学期`,
-        type: 'semester',
-        startDate: semesterConfig.spring_start,
-        endDate: semesterConfig.spring_end,
-        isActive,
-        isCompleted
-      })
-    }
-
-    // 暑假
-    if (semesterConfig.summer_start && semesterConfig.summer_end) {
-      const { isActive, isCompleted } = getPhaseStatus(semesterConfig.summer_start, semesterConfig.summer_end)
-      phases.push({
-        id: 'summer',
-        name: `${currentYear}年暑假`,
-        type: 'summer',
-        startDate: semesterConfig.summer_start,
-        endDate: semesterConfig.summer_end,
-        isActive,
-        isCompleted
-      })
-    }
-
-    // 秋季学期
-    if (semesterConfig.autumn_start && semesterConfig.autumn_end) {
-      const { isActive, isCompleted } = getPhaseStatus(semesterConfig.autumn_start, semesterConfig.autumn_end)
-      phases.push({
-        id: 'autumn',
-        name: `${currentYear}年秋季学期`,
-        type: 'semester',
-        startDate: semesterConfig.autumn_start,
-        endDate: semesterConfig.autumn_end,
-        isActive,
-        isCompleted
-      })
-    }
-
-    // 寒假
-    if (semesterConfig.winter_start && semesterConfig.winter_end) {
-      const { isActive, isCompleted } = getPhaseStatus(semesterConfig.winter_start, semesterConfig.winter_end)
-      phases.push({
-        id: 'winter',
-        name: `${currentYear}年寒假`,
-        type: 'winter',
-        startDate: semesterConfig.winter_start,
-        endDate: semesterConfig.winter_end,
-        isActive,
-        isCompleted
-      })
-    }
-
-    return phases
-  }, [semesterConfig])
 
   const handleSaveExam = async (data: any) => {
     if (editingExam) {
@@ -187,12 +94,6 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
         >
           词汇量
         </Button>
-        <Button
-          variant={activeSection === 'phases' ? 'default' : 'ghost'}
-          onClick={() => setActiveSection('phases')}
-        >
-          学习阶段
-        </Button>
       </div>
 
       {activeSection === 'overview' && (
@@ -235,14 +136,6 @@ export function GrowthPanel({ studentId }: { studentId: string }) {
           onSave={handleSaveVocab}
           onCancel={() => { setShowVocabForm(false); setEditingVocab(null) }}
           onDelete={(id) => deleteVocabTest(id)}
-        />
-      )}
-
-      {activeSection === 'phases' && (
-        <AutoLearningPhasesPanel
-          classRecords={classRecords}
-          examScores={examScores}
-          phases={autoPhases}
         />
       )}
     </div>

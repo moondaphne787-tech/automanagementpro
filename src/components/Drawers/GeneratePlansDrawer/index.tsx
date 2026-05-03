@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, AlertCircle, Save, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/appStore'
 import { DrawerShell } from '@/components/ui/drawer-shell'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { DateInput } from '@/components/ui/date-input'
+import { Card, CardContent } from '@/components/ui/card'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb, scheduledClassDb } from '@/db'
 import { sendAIRequest } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { autoFillWordbankContent } from '@/ai/autoFillWordbankContent'
-import { StudentSelector } from './StudentSelector'
-import { PlanResultCard, StudentPlanState, GenerationStatus, StudentContext } from './PlanResultCard'
-import { GenerationControls } from './GenerationControls'
+import { StudentSelector, PlanResultCard, StudentPlanState, GenerationStatus, StudentContext } from './StudentSelector'
 import type { Student, TaskBlock as TaskBlockType, AIConfig, Wordbank, ClassRecord, StudentWordbankProgress } from '@/types'
 import { TASK_TYPE_LABELS } from '@/types'
 
@@ -497,18 +499,47 @@ export function GeneratePlansDrawer(props: GeneratePlansDrawerProps) {
         smartFilterLoading={smartFilterLoading}
         studentContextMap={studentContextMap}
       />
-      <GenerationControls
-        planDate={planDate}
-        onPlanDateChange={setPlanDate}
-        extraInstruction={extraInstruction}
-        onExtraInstructionChange={setExtraInstruction}
-        aiConfig={aiConfig}
-        generating={generating}
-        selectedCount={selectedStudents.length}
-        successCount={successCount}
-        onStartGeneration={startGeneration}
-        onSaveAllConfirmed={saveAllConfirmed}
-      />
+      {/* 全局参数设置 */}
+      <div className="p-6 border-b space-y-4">
+        <h3 className="font-medium">全局参数</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm text-muted-foreground">计划日期</label>
+            <DateInput value={planDate} onChange={(val) => setPlanDate(val)} />
+          </div>
+          <div>
+            <label className="text-sm text-muted-foreground">大纲方向（可选）</label>
+            <Input value={extraInstruction} onChange={(e) => setExtraInstruction(e.target.value)}
+              placeholder="如：本周重点推进词库" />
+          </div>
+        </div>
+        {!aiConfig?.api_key && (
+          <Card className="border-yellow-300 bg-yellow-500/10">
+            <CardContent className="p-3 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-yellow-600" />
+              <span className="text-sm text-yellow-700">请先在「设置」页面配置 AI API Key</span>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* 底部操作栏 */}
+      <div className="h-16 border-t flex items-center justify-between px-6">
+        <div className="flex gap-3">
+          {successCount > 0 && (
+            <Button variant="outline" onClick={saveAllConfirmed} disabled={generating}>
+              <Save className="w-4 h-4 mr-2" />保存全部已确认 ({successCount})
+            </Button>
+          )}
+        </div>
+        <Button onClick={startGeneration} disabled={!aiConfig?.api_key || selectedStudents.length === 0 || generating}>
+          {generating ? (
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />生成中...</>
+          ) : (
+            <><Sparkles className="w-4 h-4 mr-2" />开始生成</>
+          )}
+        </Button>
+      </div>
       {selectedStudents.length > 0 && (
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
