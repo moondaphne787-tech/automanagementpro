@@ -75,7 +75,6 @@ export function DashboardPage() {
   const { data, loading, error, refresh } = useDashboard()
   const wordbanks = useAppStore(s => s.wordbanks)
   const createClassRecord = useAppStore(s => s.createClassRecord)
-  const openGenerateDrawer = useAppStore(s => s.openGenerateDrawer)
   // 跳转到批量生成页面（可带预选学员 ID）
   const goToGenerate = (preselectedIds?: string[]) => {
     navigate('/batch/generate', preselectedIds?.length ? { state: { preselectedIds } } : undefined)
@@ -109,7 +108,7 @@ export function DashboardPage() {
       case 'todaySchedule':
         return <TodaySchedulePanel schedules={data?.todaySchedules ?? []} loading={loading} onQuickRecord={handleQuickRecord} />
       case 'weeklyPlan':
-        return <WeeklyPlanStatus items={data?.problemPlanStudents ?? []} loading={loading} onBatchGenerate={openGenerateDrawer} />
+        return <WeeklyPlanStatus items={data?.problemPlanStudents ?? []} loading={loading} onBatchGenerate={(ids) => goToGenerate(ids)} />
       case 'alertStudents':
         return <AlertStudents students={data?.alertStudents ?? []} loading={loading} />
       case 'weeklySummary':

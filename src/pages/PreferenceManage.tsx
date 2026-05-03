@@ -8,23 +8,16 @@ import {
   Pencil,
   Trash2,
   Plus,
-  X,
-  Check,
   Search
 } from 'lucide-react'
 import { studentSchedulePreferenceDb, studentDb } from '@/db'
 import type { StudentSchedulePreference, Student, DayOfWeek } from '@/types'
 import { DAY_LABELS } from '@/types'
 import { Button } from '@/components/ui/button'
+import { PreferenceForm } from '@/components/Schedule/PreferenceForm'
 
 // 星期排序
 const DAY_ORDER: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-
-// 星期选项（用于下拉选择）
-const DAY_OPTIONS = DAY_ORDER.map(day => ({
-  value: day,
-  label: DAY_LABELS[day]
-}))
 
 interface PreferenceWithStudent extends StudentSchedulePreference {
   student: Student
@@ -401,51 +394,15 @@ export function PreferenceManage() {
                           className="px-4 py-1.5 hover:bg-muted/30"
                         >
                           {editingPrefId === pref.id ? (
-                            // 编辑模式
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <select
-                                value={editForm.day_of_week}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, day_of_week: e.target.value as DayOfWeek }))}
-                                className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              >
-                                {DAY_OPTIONS.map(opt => (
-                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                ))}
-                              </select>
-                              <input
-                                type="time"
-                                value={editForm.preferred_start}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, preferred_start: e.target.value }))}
-                                className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              />
-                              <span className="text-muted-foreground">-</span>
-                              <input
-                                type="time"
-                                value={editForm.preferred_end}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, preferred_end: e.target.value }))}
-                                className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              />
-                              <div className="flex items-center gap-1 ml-auto">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={handleSaveEdit}
-                                  disabled={operating}
-                                  className="h-7 w-7 p-0"
-                                >
-                                  <Check className="h-4 w-4 text-green-600" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={handleCancelEdit}
-                                  disabled={operating}
-                                  className="h-7 w-7 p-0"
-                                >
-                                  <X className="h-4 w-4 text-muted-foreground" />
-                                </Button>
-                              </div>
-                            </div>
+                            <PreferenceForm
+                              form={editForm}
+                              onChange={setEditForm}
+                              onSubmit={handleSaveEdit}
+                              onCancel={handleCancelEdit}
+                              inline
+                              compactButtons
+                              loading={operating}
+                            />
                           ) : (
                             // 显示模式
                             <div className="flex items-center justify-between">
@@ -484,48 +441,15 @@ export function PreferenceManage() {
                       {/* 新增偏好表单 */}
                       {addingForStudentId === student.id && (
                         <div className="px-4 py-3 bg-muted/30 border-t">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <select
-                              value={addForm.day_of_week}
-                              onChange={(e) => setAddForm(prev => ({ ...prev, day_of_week: e.target.value as DayOfWeek }))}
-                              className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                              {DAY_OPTIONS.map(opt => (
-                                <option key={opt.value} value={opt.value}>{opt.label}</option>
-                              ))}
-                            </select>
-                            <input
-                              type="time"
-                              value={addForm.preferred_start}
-                              onChange={(e) => setAddForm(prev => ({ ...prev, preferred_start: e.target.value }))}
-                              className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                            <span className="text-muted-foreground">-</span>
-                            <input
-                              type="time"
-                              value={addForm.preferred_end}
-                              onChange={(e) => setAddForm(prev => ({ ...prev, preferred_end: e.target.value }))}
-                              className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                            <div className="flex items-center gap-1 ml-auto">
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handleSaveAdd(student.id)}
-                                disabled={operating}
-                              >
-                                保存
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={handleCancelAdd}
-                                disabled={operating}
-                              >
-                                取消
-                              </Button>
-                            </div>
-                          </div>
+                          <PreferenceForm
+                            form={addForm}
+                            onChange={setAddForm}
+                            onSubmit={() => handleSaveAdd(student.id)}
+                            onCancel={handleCancelAdd}
+                            inline
+                            submitLabel="保存"
+                            loading={operating}
+                          />
                         </div>
                       )}
                       
@@ -587,48 +511,15 @@ export function PreferenceManage() {
                     <div className="text-sm font-medium mb-2">
                       为 {studentsWithoutPrefs.find(s => s.id === addingForStudentId)?.name} 添加时段偏好
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <select
-                        value={addForm.day_of_week}
-                        onChange={(e) => setAddForm(prev => ({ ...prev, day_of_week: e.target.value as DayOfWeek }))}
-                        className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        {DAY_OPTIONS.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="time"
-                        value={addForm.preferred_start}
-                        onChange={(e) => setAddForm(prev => ({ ...prev, preferred_start: e.target.value }))}
-                        className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                      <span className="text-muted-foreground">-</span>
-                      <input
-                        type="time"
-                        value={addForm.preferred_end}
-                        onChange={(e) => setAddForm(prev => ({ ...prev, preferred_end: e.target.value }))}
-                        className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                      <div className="flex items-center gap-1 ml-auto">
-                        <Button
-                          size="sm"
-                          variant="default"
-                          onClick={() => handleSaveAdd(addingForStudentId)}
-                          disabled={operating}
-                        >
-                          保存
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={handleCancelAdd}
-                          disabled={operating}
-                        >
-                          取消
-                        </Button>
-                      </div>
-                    </div>
+                    <PreferenceForm
+                      form={addForm}
+                      onChange={setAddForm}
+                      onSubmit={() => handleSaveAdd(addingForStudentId)}
+                      onCancel={handleCancelAdd}
+                      inline
+                      submitLabel="保存"
+                      loading={operating}
+                    />
                   </div>
                 )}
 

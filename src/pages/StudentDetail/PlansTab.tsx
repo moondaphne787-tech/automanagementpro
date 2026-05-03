@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
-import { Trash2, Calendar, Sparkles, Printer, Loader2, CalendarX, RefreshCw, Copy, PanelRightClose, PanelRightOpen, ChevronDown, ChevronUp, StickyNote, BookOpen, Plus, Library } from 'lucide-react'
+import { Trash2, Calendar, Sparkles, Printer, CalendarX, RefreshCw, Copy, PanelRightClose, PanelRightOpen, ChevronDown, ChevronUp, BookOpen, Plus, Library } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { PromptDialog } from '@/components/ui/dialog'
 import { PlanEditor } from '@/components/PlanEditor/PlanEditor'
+import { AIPlanGenerator } from '@/components/PlanEditor/AIPlanGenerator'
+import { RefPanel } from '@/components/PlanEditor/RefPanel'
 import { TemplatePickerDialog } from '@/components/PlanEditor/TemplatePickerDialog'
 import { useAppStore } from '@/store/appStore'
 import { sendAIRequestStream } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { printLessonPlan } from '@/utils/pdfExport'
 import { formatLocalDate, cn } from '@/lib/utils'
-import { LEVEL_LABELS, TASK_TYPE_LABELS } from '@/types'
+import type { PlanStatus } from '@/types'
 
 interface PlansTabProps {
   studentId: string
@@ -44,7 +45,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
   const [streamContent, setStreamContent] = useState('')
   const [extraInstruction, setExtraInstruction] = useState('')
   const [showPlanGenerator, setShowPlanGenerator] = useState(false)
-  const [planStatus, setPlanStatus] = useState<import('@/types').PlanStatus | null>(null)
+  const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null)
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
@@ -157,97 +158,6 @@ export function PlansTab({ studentId }: PlansTabProps) {
   }
 
 
-  // 参考面板内容渲染
-  const renderRefPanelContent = () => (
-    <div className="space-y-4">
-      {/* 学员备注 */}
-      <div>
-        <div className="flex items-center gap-1.5 mb-2">
-          <StickyNote className="w-3.5 h-3.5 text-amber-500" />
-          <span className="text-xs font-medium text-muted-foreground">学员备注</span>
-        </div>
-        {currentStudent!.notes ? (
-          <p className="text-sm bg-amber-500/5 border border-amber-200 rounded-lg p-2.5 leading-relaxed">
-            {currentStudent!.notes}
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground italic">暂无备注</p>
-        )}
-      </div>
-
-      {/* 词库进度 */}
-      <div>
-        <div className="flex items-center gap-1.5 mb-2">
-          <BookOpen className="w-3.5 h-3.5 text-blue-500" />
-          <span className="text-xs font-medium text-muted-foreground">词库进度</span>
-        </div>
-        {currentProgress.length > 0 ? (
-          <div className="space-y-2">
-            {currentProgress.map(p => {
-              const wb = wordbanks.find(w => w.id === p.wordbank_id)
-              const total = p.total_levels_override ?? wb?.total_levels ?? 0
-              const pct = total > 0 ? Math.round((p.current_level / total) * 100) : 0
-              return (
-                <div key={p.id}>
-                  <div className="flex justify-between text-xs mb-0.5">
-                    <span className="text-muted-foreground">{p.wordbank_label}</span>
-                    <span>{p.current_level}/{total}</span>
-                  </div>
-                  <div className="w-full bg-muted rounded-full h-1.5">
-                    <div
-                      className="bg-primary rounded-full h-1.5 transition-all"
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground italic">暂无词库进度</p>
-        )}
-      </div>
-
-      {/* 最近课堂记录 */}
-      <div>
-        <div className="flex items-center gap-1.5 mb-2">
-          <BookOpen className="w-3.5 h-3.5 text-blue-500" />
-          <span className="text-xs font-medium text-muted-foreground">最近 {recentRecords.length} 次课堂</span>
-        </div>
-        {recentRecords.length > 0 ? (
-          <div className="space-y-2">
-            {recentRecords.map(record => (
-              <div key={record.id} className="bg-muted/40 rounded-lg p-2.5 text-sm">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="font-medium text-xs">{record.class_date}</span>
-                  <span className={cn(
-                    "text-xs px-1.5 py-0.5 rounded",
-                    record.task_completed === 'completed' ? 'bg-green-500/10 text-green-600' :
-                    record.task_completed === 'partial' ? 'bg-yellow-500/10 text-yellow-600' :
-                    'bg-red-500/10 text-red-600'
-                  )}>
-                    {record.task_completed === 'completed' ? '全部完成' :
-                     record.task_completed === 'partial' ? '部分完成' : '未完成'}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {record.tasks.map((task, idx) => (
-                    <span key={idx} className="text-xs bg-background px-1.5 py-0.5 rounded border">
-                      {TASK_TYPE_LABELS[task.type]}
-                      {task.content ? `·${task.content.slice(0, 15)}${task.content.length > 15 ? '…' : ''}` : ''}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground italic">暂无课堂记录</p>
-        )}
-      </div>
-    </div>
-  )
-
   if (!currentStudent) return null
 
   return (
@@ -267,7 +177,12 @@ export function PlansTab({ studentId }: PlansTabProps) {
         </button>
         {mobileRefExpanded && (
           <div className="mt-2 p-4 bg-card border rounded-lg">
-            {renderRefPanelContent()}
+            <RefPanel
+              student={currentStudent}
+              progress={currentProgress}
+              wordbanks={wordbanks}
+              recentRecords={recentRecords}
+            />
           </div>
         )}
       </div>
@@ -277,121 +192,23 @@ export function PlansTab({ studentId }: PlansTabProps) {
         <div className={cn("flex-1 min-w-0 space-y-6", showRefPanel && "lg:mr-0")}>
         {/* AI 生成计划区域 */}
         {showPlanGenerator ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" />
-                AI 生成课程计划
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* 数据摘要 */}
-              <div className="bg-muted/50 rounded-lg p-4">
-                <h4 className="text-sm font-medium mb-2">学员数据摘要</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>年级: {currentStudent.grade || '-'}</div>
-                  <div>程度: {LEVEL_LABELS[currentStudent.level]}</div>
-                  <div>自然拼读: {currentStudent.phonics_completed ? '已完成' : currentStudent.phonics_progress || '未开始'}</div>
-                  <div>国际音标: {currentStudent.ipa_completed ? '已完成' : '未开始'}</div>
-                </div>
-                {currentProgress.length > 0 && (
-                  <div className="mt-3 pt-3 border-t">
-                    <div className="text-xs text-muted-foreground mb-2">词库进度:</div>
-                    {currentProgress.map(p => {
-                      const wb = wordbanks.find(w => w.id === p.wordbank_id)
-                      const total = p.total_levels_override ?? wb?.total_levels ?? 0
-                      const pct = total > 0 ? Math.round((p.current_level / total) * 100) : 0
-                      return (
-                        <div key={p.id} className="mb-2 last:mb-0">
-                          <div className="flex justify-between text-sm mb-0.5">
-                            <span>{p.wordbank_label}</span>
-                            <span className="text-xs text-muted-foreground">第 {p.current_level}/{total} 关 ({pct}%)</span>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div
-                              className="bg-primary rounded-full h-2 transition-all"
-                              style={{ width: `${Math.min(pct, 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-              
-              {/* 大纲方向 */}
-              <div>
-                <label className="text-sm text-muted-foreground">大纲方向（可选）</label>
-                <Input
-                  value={extraInstruction}
-                  onChange={(e) => setExtraInstruction(e.target.value)}
-                  placeholder="如：本周重点推进词库"
-                />
-              </div>
-              
-              {/* 流式输出内容 */}
-              {streamContent && (
-                <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-4">
-                  <div className="text-sm font-medium text-blue-700 mb-2">AI 正在生成...</div>
-                  <pre className="text-sm whitespace-pre-wrap font-mono">{streamContent}</pre>
-                </div>
-              )}
-
-              {/* 进度评估结果 */}
-              {planStatus && !generatingPlan && (
-                <div className="border rounded-lg p-4 space-y-2">
-                  <div className="text-sm font-medium flex items-center gap-2">
-                    📊 进度评估
-                    <span className={cn(
-                      'px-2 py-0.5 rounded text-xs font-medium',
-                      planStatus.status === '按计划' && 'bg-green-100 text-green-700',
-                      planStatus.status === '略超前' && 'bg-blue-100 text-blue-700',
-                      planStatus.status === '略落后' && 'bg-yellow-100 text-yellow-700',
-                      planStatus.status === '明显落后' && 'bg-red-100 text-red-700',
-                    )}>
-                      {planStatus.status}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{planStatus.current_vs_plan}</p>
-                  <p className="text-sm">{planStatus.suggestion}</p>
-                </div>
-              )}
-              
-              {/* 操作按钮 */}
-              <div className="flex gap-3">
-                <Button
-                  onClick={handleGeneratePlan}
-                  disabled={!aiConfig?.api_key || generatingPlan}
-                >
-                  {generatingPlan ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      生成中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      开始生成
-                    </>
-                  )}
-                </Button>
-                <Button variant="outline" onClick={() => {
-                  setShowPlanGenerator(false)
-                  setStreamContent('')
-                  setExtraInstruction('')
-                }}>
-                  取消
-                </Button>
-              </div>
-              
-              {!aiConfig?.api_key && (
-                <p className="text-sm text-yellow-600">
-                  请先在「设置」页面配置 AI API Key
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <AIPlanGenerator
+            student={currentStudent}
+            progress={currentProgress}
+            wordbanks={wordbanks}
+            aiConfig={aiConfig}
+            generating={generatingPlan}
+            streamContent={streamContent}
+            planStatus={planStatus}
+            extraInstruction={extraInstruction}
+            onExtraInstructionChange={setExtraInstruction}
+            onGenerate={handleGeneratePlan}
+            onCancel={() => {
+              setShowPlanGenerator(false)
+              setStreamContent('')
+              setExtraInstruction('')
+            }}
+          />
         ) : (
           <>
             {/* 新建按钮 */}
@@ -582,7 +399,12 @@ export function PlansTab({ studentId }: PlansTabProps) {
                 </Button>
               </div>
               <div className="border rounded-lg p-4 bg-card">
-                {renderRefPanelContent()}
+                <RefPanel
+                  student={currentStudent}
+                  progress={currentProgress}
+                  wordbanks={wordbanks}
+                  recentRecords={recentRecords}
+                />
               </div>
             </div>
           )}

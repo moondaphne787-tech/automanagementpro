@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Edit, Trash2, Plus, Calendar, FileText, Columns, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -230,9 +230,6 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
   const [recordFilter, setRecordFilter] = useState<{ startDate: string; endDate: string }>(getLast3MonthsRange())
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  // totalCount 只在 studentId 变化时查询一次，不随筛选条件变化
-  const [totalCount, setTotalCount] = useState<number | null>(null)
-  const totalCountLoadedRef = useRef(false)
 
   const loadRecords = useCallback(async (filter: { startDate: string; endDate: string }) => {
     setLoading(true)
@@ -248,30 +245,19 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
     }
   }, [studentId])
 
-  // 首次加载：同时获取总数（只查一次）
+  // 首次加载
   useEffect(() => {
-    totalCountLoadedRef.current = false
-    setTotalCount(null)
     loadRecords(recordFilter)
-    classRecordDb.getWithPlan(studentId).then(all => {
-      if (!totalCountLoadedRef.current) {
-        setTotalCount(all.length)
-        totalCountLoadedRef.current = true
-      }
-    })
   }, [studentId])
 
   // 筛选条件变化时重新加载
   useEffect(() => {
-    if (totalCountLoadedRef.current) {
-      loadRecords(recordFilter)
-    }
+    loadRecords(recordFilter)
   }, [recordFilter.startDate, recordFilter.endDate])
 
   const handleCreateRecord = async (data: any) => {
     await createClassRecord(data)
     setShowRecordForm(false)
-    setTotalCount(prev => (prev ?? 0) + 1)
     await loadRecords(recordFilter)
   }
 
@@ -284,7 +270,6 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
 
   const handleDeleteRecord = async (recordId: string) => {
     await deleteClassRecord(recordId)
-    setTotalCount(prev => (prev !== null ? prev - 1 : null))
     await loadRecords(recordFilter)
   }
 
@@ -308,8 +293,8 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
               <Button variant="outline" size="sm" onClick={() => setRecordFilter(getLast3MonthsRange())}>近3月</Button>
               <Button variant="ghost" size="sm" onClick={() => setRecordFilter({ startDate: '', endDate: '' })}>全部</Button>
             </div>
-            {totalCount !== null && totalCount > 50 && (
-              <span className="text-xs text-muted-foreground ml-auto">共 {totalCount} 条，当前显示 {recordsWithPlan.length} 条</span>
+            {recordsWithPlan.length > 0 && (
+              <span className="text-xs text-muted-foreground ml-auto">{recordsWithPlan.length} 条记录</span>
             )}
             <Button size="sm" className="ml-auto" onClick={() => setShowRecordForm(true)}>
               <Plus className="w-4 h-4 mr-1" />新建记录
@@ -324,7 +309,7 @@ export function RecordsTab({ studentId }: RecordsTabProps) {
           ) : recordsWithPlan.length === 0 ? (
             <div className="text-center text-muted-foreground py-12">
               <FileText className="w-10 h-10 mx-auto mb-2 opacity-40" />
-              {totalCount === 0 ? <p>暂无课堂记录</p> : <p>当前日期范围内无记录</p>}
+              <p>{recordFilter.startDate || recordFilter.endDate ? '当前日期范围内无记录' : '暂无课堂记录'}</p>
             </div>
           ) : (
             <div className="space-y-1.5">

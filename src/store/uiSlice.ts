@@ -76,13 +76,4 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set) => (
     set({ dashboardConfig: DEFAULT_DASHBOARD_CONFIG })
     try { localStorage.setItem('dashboardConfig', JSON.stringify(DEFAULT_DASHBOARD_CONFIG)) } catch {}
   },
-
-  generateDrawerOpen: false,
-  generateDrawerPreselectedIds: [],
-  openGenerateDrawer: (preselectedIds) => {
-    set({ generateDrawerOpen: true, generateDrawerPreselectedIds: preselectedIds ?? [] })
-  },
-  closeGenerateDrawer: () => {
-    set({ generateDrawerOpen: false, generateDrawerPreselectedIds: [] })
-  }
 })

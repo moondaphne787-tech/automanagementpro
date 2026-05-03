@@ -9,7 +9,7 @@ import { PromptDialog } from '@/components/ui/dialog'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
 import { cn } from '@/lib/utils'
-import type { StudentPlan, Milestone, PlanStatus } from '@/types'
+import type { Milestone } from '@/types'
 
 interface PlanningTabProps {
   studentId: string
@@ -89,9 +89,16 @@ function MilestoneDialog({ open, title, initial, onConfirm, onCancel }: {
 }
 
 export function PlanningTab({ studentId }: PlanningTabProps) {
-  const api = window.electronAPI
-  // 检查新 API 是否可用（旧 preload 可能没有这些方法）
-  const hasPlanApi = typeof api?.planGet === 'function'
+  const plan = useAppStore(s => s.plan)
+  const milestones = useAppStore(s => s.milestones)
+  const planStatus = useAppStore(s => s.planStatus)
+  const planStatusDate = useAppStore(s => s.planStatusDate)
+  const loadPlanningData = useAppStore(s => s.loadPlanningData)
+  const savePlan = useAppStore(s => s.savePlan)
+  const addMilestone = useAppStore(s => s.addMilestone)
+  const updateMilestone = useAppStore(s => s.updateMilestone)
+  const deleteMilestone = useAppStore(s => s.deleteMilestone)
+  const reorderMilestones = useAppStore(s => s.reorderMilestones)
 
   const currentStudent = useAppStore(s => s.currentStudent)
   const updateStudent = useAppStore(s => s.updateStudent)
@@ -102,7 +109,6 @@ export function PlanningTab({ studentId }: PlanningTabProps) {
   const deleteProgress = useAppStore(s => s.deleteProgress)
 
   // 大纲
-  const [plan, setPlan] = useState<StudentPlan | null>(null)
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ summary: '', phonicsPlan: '', textbookPlan: '', readingPlan: '' })
   const [savingPlan, setSavingPlan] = useState(false)
@@ -111,13 +117,8 @@ export function PlanningTab({ studentId }: PlanningTabProps) {
   const [readingProgress, setReadingProgress] = useState('')
 
   // 里程碑
-  const [milestones, setMilestones] = useState<Milestone[]>([])
   const [milestoneDialog, setMilestoneDialog] = useState<{ open: boolean; mode: 'add' | 'edit'; target?: Milestone }>({ open: false, mode: 'add' })
   const [openMenuId, setOpenMenuId] = useState<number | null>(null)
-
-  // 进度状态
-  const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null)
-  const [planStatusDate, setPlanStatusDate] = useState<string | null>(null)
 
   // 拖拽排序
   const [draggingId, setDraggingId] = useState<number | null>(null)
@@ -127,23 +128,8 @@ export function PlanningTab({ studentId }: PlanningTabProps) {
   const [promptState, setPromptState] = useState<{ open: boolean; title: string; defaultValue: string; onConfirm: ((v: string) => void) | null }>({ open: false, title: '', defaultValue: '', onConfirm: null })
 
   const loadAll = useCallback(async () => {
-    if (!hasPlanApi || !api) return
-    try {
-      const [p, ms] = await Promise.all([api.planGet(studentId), api.milestoneList(studentId)])
-      setPlan(p)
-      setMilestones(ms)
-    } catch (e) { console.error(e) }
-
-    try {
-      const rows = await api.dbQuery(
-        `SELECT plan_date, plan_status_json FROM lesson_plans WHERE student_id = ? AND plan_status_json IS NOT NULL ORDER BY created_at DESC LIMIT 1`,
-        [studentId]
-      ) as Array<{ plan_date: string | null; plan_status_json: string }>
-      if (rows.length > 0) {
-        try { setPlanStatus(JSON.parse(rows[0].plan_status_json)); setPlanStatusDate(rows[0].plan_date) } catch { /* ignore */ }
-      }
-    } catch (e) { console.error(e) }
-  }, [studentId, api, hasPlanApi])
+    await loadPlanningData(studentId)
+  }, [studentId, loadPlanningData])
 
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -158,61 +144,74 @@ export function PlanningTab({ studentId }: PlanningTabProps) {
   }
 
   const handleSavePlan = async () => {
-    if (!api) return
     setSavingPlan(true)
     try {
-      await api.planSave({ studentId, ...editForm })
-      toast.success('保存成功')
-      setEditing(false)
-      await loadAll()
-    } catch (e) {
-      toast.error('保存失败：' + (e as Error).message)
+      const ok = await savePlan({ studentId, ...editForm })
+      if (ok) {
+        toast.success('保存成功')
+        setEditing(false)
+        await loadAll()
+      } else {
+        toast.error('保存失败')
+      }
+    } catch {
+      toast.error('保存失败')
     } finally { setSavingPlan(false) }
   }
 
   const handleAddMilestone = async (form: MilestoneFormData) => {
-    if (!api) return
-    try {
-      await api.milestoneAdd({ studentId, label: form.label, targetWordbank: form.targetWordbank || undefined, targetLevel: form.targetLevel ? parseInt(form.targetLevel) : undefined, targetDate: form.targetDate || undefined, note: form.note || undefined })
+    const ok = await addMilestone({ studentId, label: form.label, targetWordbank: form.targetWordbank || undefined, targetLevel: form.targetLevel ? parseInt(form.targetLevel) : undefined, targetDate: form.targetDate || undefined, note: form.note || undefined })
+    if (ok) {
       toast.success('里程碑已添加')
       setMilestoneDialog({ open: false, mode: 'add' })
       await loadAll()
-    } catch (e) { toast.error('添加失败：' + (e as Error).message) }
+    } else {
+      toast.error('添加失败')
+    }
   }
 
   const handleEditMilestone = async (form: MilestoneFormData) => {
-    if (!api || !milestoneDialog.target) return
-    try {
-      await api.milestoneUpdate({ id: milestoneDialog.target.id, label: form.label, targetWordbank: form.targetWordbank || undefined, targetLevel: form.targetLevel ? parseInt(form.targetLevel) : undefined, targetDate: form.targetDate || undefined, note: form.note || undefined })
+    if (!milestoneDialog.target) return
+    const ok = await updateMilestone(milestoneDialog.target.id, {
+      label: form.label,
+      targetWordbank: form.targetWordbank || undefined,
+      targetLevel: form.targetLevel ? parseInt(form.targetLevel) : undefined,
+      targetDate: form.targetDate || undefined,
+      note: form.note || undefined,
+    })
+    if (ok) {
       toast.success('已更新')
       setMilestoneDialog({ open: false, mode: 'add' })
       await loadAll()
-    } catch (e) { toast.error('更新失败：' + (e as Error).message) }
+    } else {
+      toast.error('更新失败')
+    }
   }
 
   const handleToggleComplete = async (m: Milestone) => {
-    if (!api) return
-    try {
-      await api.milestoneUpdate({ id: m.id, isCompleted: !m.isCompleted, completedDate: !m.isCompleted ? new Date().toISOString().split('T')[0] : undefined })
+    const ok = await updateMilestone(m.id, {
+      isCompleted: !m.isCompleted,
+      completedDate: !m.isCompleted ? new Date().toISOString().split('T')[0] : undefined,
+    })
+    if (ok) {
       setOpenMenuId(null)
       await loadAll()
-    } catch { toast.error('操作失败') }
+    } else {
+      toast.error('操作失败')
+    }
   }
 
   const handleDeleteMilestone = async (m: Milestone) => {
-    if (!api) return
     const confirmed = await confirmDialog({ title: '删除里程碑', message: `确认删除「${m.label}」吗？`, confirmText: '删除', variant: 'danger' })
     if (!confirmed) return
-    try {
-      await api.milestoneDelete(m.id)
-      toast.success('已删除')
-      setOpenMenuId(null)
-      await loadAll()
-    } catch { toast.error('删除失败') }
+    await deleteMilestone(m.id)
+    toast.success('已删除')
+    setOpenMenuId(null)
+    await loadAll()
   }
 
   const handleDragEnd = async () => {
-    if (!api || draggingId === null || dragOverId === null || draggingId === dragOverId) {
+    if (draggingId === null || dragOverId === null || draggingId === dragOverId) {
       setDraggingId(null); setDragOverId(null); return
     }
     const fromIdx = milestones.findIndex(m => m.id === draggingId)
@@ -220,9 +219,8 @@ export function PlanningTab({ studentId }: PlanningTabProps) {
     const reordered = [...milestones]
     const [moved] = reordered.splice(fromIdx, 1)
     reordered.splice(toIdx, 0, moved)
-    setMilestones(reordered)
     setDraggingId(null); setDragOverId(null)
-    try { await api.milestoneReorder(reordered.map(m => m.id)) } catch { toast.error('排序保存失败'); await loadAll() }
+    await reorderMilestones(reordered)
   }
 
   const firstIncompleteIdx = milestones.findIndex(m => !m.isCompleted)

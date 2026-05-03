@@ -1,20 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Save, TestTube, Calendar, RefreshCw, Sparkles, BookOpen, Settings2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Save, TestTube, Calendar, Sparkles, BookOpen, Settings2, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
-import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { DateInput } from '@/components/ui/date-input'
 import { useAppStore } from '@/store/appStore'
-import { settingsDb, studentDb, learningPhaseDb, classRecordDb } from '@/db'
-import type { AIConfig, PhaseType } from '@/types'
+import { settingsDb } from '@/db'
+import type { AIConfig } from '@/types'
 import { DatabaseManagementCard } from '@/components/Settings/DatabaseManagementCard'
 import { SystemPromptEditor } from '@/components/Settings/SystemPromptEditor'
 import { WordbankManager } from '@/components/Settings/WordbankManager'
 import { PlanTemplateManager } from '@/components/Settings/PlanTemplateManager'
 import { SchedulePeriodManager } from '@/components/Settings/SchedulePeriodManager'
-import { cn } from '@/lib/utils'
+import { TabNav } from '@/components/ui/tab-nav'
 
 type SettingsTab = 'ai' | 'wordbank' | 'semester' | 'templates' | 'schedule_periods'
 
@@ -58,7 +57,6 @@ export function Settings() {
     winter_start: '', winter_end: ''
   })
   const [savingSemester, setSavingSemester] = useState(false)
-  const [syncingPhases, setSyncingPhases] = useState(false)
 
   // 任务默认文本
   const [taskDefaults, setTaskDefaults] = useState<Record<string, string>>({})
@@ -171,74 +169,6 @@ export function Settings() {
     }
   }
 
-  const handleSyncPhases = async () => {
-    if (!semesterConfig.spring_start && !semesterConfig.summer_start &&
-        !semesterConfig.autumn_start && !semesterConfig.winter_start) {
-      toast.error('请先设置至少一个学期的起止日期')
-      return
-    }
-
-    const confirmed = await confirmDialog({
-      title: '同步学习阶段',
-      message: '确定要根据学期设置同步所有学员的学习阶段吗？\n\n这将为每个学员创建对应的学习阶段记录。',
-      confirmText: '同步',
-      variant: 'warning'
-    })
-
-    if (!confirmed) return
-
-    setSyncingPhases(true)
-    try {
-      const allStudents = await studentDb.getAllWithBilling(
-        { status: 'all', student_type: 'all', level: 'all', grade: 'all', search: '', day_of_week: 'all' },
-        { field: 'student_no', direction: 'asc' }
-      )
-
-      const currentYear = new Date().getFullYear()
-      let createdCount = 0
-
-      const phaseConfigs: Array<{ type: PhaseType; name: string; startKey: keyof typeof semesterConfig; endKey: keyof typeof semesterConfig }> = [
-        { type: 'semester', name: `${currentYear}年春季学期`, startKey: 'spring_start', endKey: 'spring_end' },
-        { type: 'summer', name: `${currentYear}年暑假`, startKey: 'summer_start', endKey: 'summer_end' },
-        { type: 'semester', name: `${currentYear}年秋季学期`, startKey: 'autumn_start', endKey: 'autumn_end' },
-        { type: 'winter', name: `${currentYear}年寒假`, startKey: 'winter_start', endKey: 'winter_end' }
-      ]
-
-      for (const student of allStudents) {
-        for (const config of phaseConfigs) {
-          const startDate = semesterConfig[config.startKey]
-          const endDate = semesterConfig[config.endKey]
-          if (!startDate || !endDate) continue
-
-          const existingPhases = await learningPhaseDb.getByStudentId(student.id)
-          const exists = existingPhases.some(p =>
-            p.phase_type === config.type &&
-            p.start_date === startDate &&
-            p.end_date === endDate
-          )
-
-          if (!exists) {
-            await learningPhaseDb.create({
-              student_id: student.id,
-              phase_name: config.name,
-              phase_type: config.type,
-              start_date: startDate,
-              end_date: endDate,
-              vocab_start: student.initial_vocab || undefined
-            })
-            createdCount++
-          }
-        }
-      }
-
-      toast.success(`同步完成！共创建了 ${createdCount} 个学习阶段记录。`)
-    } catch (error) {
-      toast.error('同步失败：' + (error as Error).message)
-    } finally {
-      setSyncingPhases(false)
-    }
-  }
-
   return (
     <div className="h-full flex flex-col">
       {/* 顶部栏 */}
@@ -246,25 +176,8 @@ export function Settings() {
         <h1 className="text-lg font-semibold">设置</h1>
       </header>
 
-      {/* Tab 导航 */}
       <div className="border-b bg-card px-6">
-        <nav className="flex gap-1 -mb-px">
-          {TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={cn(
-                "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
-                activeTab === tab.key
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              )}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <TabNav tabs={TABS} activeTab={activeTab} onChange={(key) => setActiveTab(key as SettingsTab)} />
       </div>
 
       {/* 内容区域 */}
@@ -396,11 +309,8 @@ export function Settings() {
                   <Button onClick={handleSaveSemester} disabled={savingSemester}>
                     <Save className="w-4 h-4 mr-2" />{savingSemester ? '保存中...' : '保存学期设置'}
                   </Button>
-                  <Button variant="outline" onClick={handleSyncPhases} disabled={syncingPhases}>
-                    <RefreshCw className={`w-4 h-4 mr-2 ${syncingPhases ? 'animate-spin' : ''}`} />{syncingPhases ? '同步中...' : '同步到学员学习阶段'}
-                  </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">点击"同步到学员学习阶段"后，系统将根据上方设置的学期日期，自动为每位学员创建对应的学习阶段记录。 <a href="#/settings/phases" className="text-primary hover:underline">查看学习阶段总览 →</a></p>
+                <p className="text-xs text-muted-foreground">学期设置完成后，可在 <a href="#/settings/phases" className="text-primary hover:underline">学习阶段总览</a> 查看实时计算的学习阶段。</p>
               </CardContent>
             </Card>
           </div>

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { Pencil, Trash2, Phone, GraduationCap, Clock } from 'lucide-react'
 import type { Teacher, TrainingStage, OralLevel, TeacherType } from '@/types'
-import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS } from '@/types'
+import { TRAINING_STAGE_LABELS, TEACHER_TYPE_LABELS, TEACHER_UPGRADE_THRESHOLDS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
@@ -40,16 +40,16 @@ export function TeacherCard({ teacher, index, needsUpgrade, onEdit, onDelete }: 
   // 计算升级进度百分比
   const getUpgradeProgressPercent = (teacher: Teacher) => {
     const hours = teacher.total_teaching_hours || 0
-    const threshold = teacher.training_stage === 'probation' ? 2 : 10
+    if (teacher.training_stage === 'formal') return 100
+    const threshold = TEACHER_UPGRADE_THRESHOLDS[teacher.training_stage].hours
     return Math.min((hours / threshold) * 100, 100)
   }
   
   // 判断是否已达到升级条件
   const hasReachedUpgradeThreshold = (teacher: Teacher) => {
+    if (teacher.training_stage === 'formal') return false
     const hours = teacher.total_teaching_hours || 0
-    if (teacher.training_stage === 'probation') return hours >= 2
-    if (teacher.training_stage === 'intern') return hours >= 10
-    return false
+    return hours >= TEACHER_UPGRADE_THRESHOLDS[teacher.training_stage].hours
   }
   
   return (

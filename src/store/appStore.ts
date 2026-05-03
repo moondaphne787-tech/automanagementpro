@@ -11,6 +11,7 @@ import { createSemesterConfigSlice } from './semesterConfigSlice'
 import { createUISlice } from './uiSlice'
 import { createDashboardSlice } from './dashboardSlice'
 import { createGenerationSlice } from './generationSlice'
+import { createPlanningSlice } from './planningSlice'
 
 // 组合所有 slices 创建统一的 store
 // 注意：readingCheckinSlice 已拆分为独立的 useReadingCheckinStore，
@@ -28,6 +29,7 @@ export const useAppStore = create<AppState>()(
     ...createUISlice(...a),
     ...createDashboardSlice(...a),
     ...createGenerationSlice(...a),
+    ...createPlanningSlice(...a),
   })
 )
 

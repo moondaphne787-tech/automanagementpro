@@ -7,91 +7,12 @@ import { InlineField } from '@/components/ui/inline-field'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
 import { studentSchedulePreferenceDb, schedulePeriodDb } from '@/db'
+import { PreferenceForm } from '@/components/Schedule/PreferenceForm'
+import type { PreferenceFormData } from '@/components/Schedule/PreferenceForm'
 import { formatDateCN, formatHours, isHoursWarning, cn } from '@/lib/utils'
 import { LEVEL_LABELS, STATUS_LABELS, STUDENT_TYPE_LABELS, DAY_LABELS, GRADE_OPTIONS } from '@/types'
-import type { StudentSchedulePreference, DayOfWeek } from '@/types'
+import type { StudentSchedulePreference } from '@/types'
 import type { SchedulePeriod } from '@/db'
-
-/** 偏好时段表单（添加/编辑共用） */
-function PreferenceForm({ form, onChange, onSubmit, onCancel, submitLabel, title, periods }: {
-  form: { day_of_week: DayOfWeek; preferred_start: string; preferred_end: string; semester: string; notes: string }
-  onChange: (form: { day_of_week: DayOfWeek; preferred_start: string; preferred_end: string; semester: string; notes: string }) => void
-  onSubmit: () => void
-  onCancel: () => void
-  submitLabel: string
-  title?: string
-  periods?: { name: string }[]
-}) {
-  return (
-    <div className="border rounded-lg p-3 bg-blue-50/30 space-y-2">
-      {title && <div className="text-xs font-medium text-muted-foreground">{title}</div>}
-      <div className="grid grid-cols-3 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground">星期</label>
-          <select
-            value={form.day_of_week}
-            onChange={(e) => onChange({ ...form, day_of_week: e.target.value as DayOfWeek })}
-            className="w-full h-8 px-2 rounded border text-sm"
-          >
-            <option value="monday">周一</option>
-            <option value="tuesday">周二</option>
-            <option value="wednesday">周三</option>
-            <option value="thursday">周四</option>
-            <option value="friday">周五</option>
-            <option value="saturday">周六</option>
-            <option value="sunday">周日</option>
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground">开始</label>
-          <Input
-            type="time"
-            value={form.preferred_start}
-            onChange={(e) => onChange({ ...form, preferred_start: e.target.value })}
-            className="h-8 text-sm"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground">结束</label>
-          <Input
-            type="time"
-            value={form.preferred_end}
-            onChange={(e) => onChange({ ...form, preferred_end: e.target.value })}
-            className="h-8 text-sm"
-          />
-        </div>
-      </div>
-      {periods && periods.length > 0 && (
-        <div>
-          <label className="text-xs text-muted-foreground">所属时段</label>
-          <select
-            value={form.semester}
-            onChange={(e) => onChange({ ...form, semester: e.target.value })}
-            className="w-full h-8 px-2 rounded border text-sm"
-          >
-            <option value="">平时</option>
-            {periods.map(p => (
-              <option key={p.name} value={p.name}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-      )}
-      <div>
-        <label className="text-xs text-muted-foreground">备注</label>
-        <Input
-          value={form.notes}
-          onChange={(e) => onChange({ ...form, notes: e.target.value })}
-          placeholder="可选"
-          className="h-8 text-sm"
-        />
-      </div>
-      <div className="flex gap-2">
-        <Button size="sm" onClick={onSubmit}>{submitLabel}</Button>
-        <Button variant="outline" size="sm" onClick={onCancel}>取消</Button>
-      </div>
-    </div>
-  )
-}
 
 interface InfoTabProps {
   studentId: string
@@ -111,8 +32,8 @@ export function InfoTab({ studentId }: InfoTabProps) {
   const [schedulePreferences, setSchedulePreferences] = useState<StudentSchedulePreference[]>([])
   const [showPreferenceForm, setShowPreferenceForm] = useState(false)
   const [editingPreference, setEditingPreference] = useState<StudentSchedulePreference | null>(null)
-  const [preferenceForm, setPreferenceForm] = useState({
-    day_of_week: 'monday' as DayOfWeek,
+  const [preferenceForm, setPreferenceForm] = useState<PreferenceFormData>({
+    day_of_week: 'monday',
     preferred_start: '09:00',
     preferred_end: '11:00',
     semester: '',

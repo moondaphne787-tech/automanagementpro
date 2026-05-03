@@ -13,15 +13,16 @@ import { extractFeedbackBeforeNotes } from '@/utils/feedbackParser'
 import { cn } from '@/lib/utils'
 import type { TaskBlock as TaskBlockType } from '@/types'
 
-interface ImportRecordsDrawerProps {
-  open: boolean
-  onClose: () => void
-  fullPage?: boolean
-}
+type ImportRecordsDrawerProps =
+  | { fullPage: true }
+  | { fullPage?: false; open: boolean; onClose: () => void }
 
 type Step = 'upload' | 'preview' | 'result'
 
-export function ImportRecordsDrawer({ open, onClose, fullPage }: ImportRecordsDrawerProps) {
+export function ImportRecordsDrawer(props: ImportRecordsDrawerProps) {
+  const fullPage = 'fullPage' in props ? props.fullPage : false
+  const open = 'open' in props ? props.open : true
+  const onClose = 'onClose' in props ? props.onClose : () => {}
   const students = useAppStore(s => s.students)
   const batchImportClassRecords = useAppStore(s => s.batchImportClassRecords)
   const loadStudents = useAppStore(s => s.loadStudents)

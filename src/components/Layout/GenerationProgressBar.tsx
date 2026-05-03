@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { Pause, Play, X, ChevronRight, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/appStore'
@@ -12,7 +13,7 @@ export function GenerationProgressBar() {
   const resumeGeneration = useAppStore(s => s.resumeGeneration)
   const cancelGeneration = useAppStore(s => s.cancelGeneration)
   const clearGenerationResults = useAppStore(s => s.clearGenerationResults)
-  const openGenerateDrawer = useAppStore(s => s.openGenerateDrawer)
+  const navigate = useNavigate()
 
   // 不显示条件：没有任务或已清除
   if (tasks.length === 0) return null
@@ -69,7 +70,7 @@ export function GenerationProgressBar() {
           )
         )}
 
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => openGenerateDrawer()}>
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => navigate('/batch/generate')}>
           查看详情 <ChevronRight className="w-3 h-3 ml-0.5" />
         </Button>
 

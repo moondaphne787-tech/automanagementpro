@@ -202,22 +202,21 @@ export function PhasesPage() {
   const loadPhaseDetail = async (phase: AutoPhase) => {
     setSelectedPhase(phase)
     setDetailLoading(true)
-    
+
     try {
       if (!phase.student) return
-      
-      // 获取该阶段内的课堂记录
-      const allRecords = await classRecordDb.getByStudentId(phase.student.id)
-      const records = allRecords.filter(r => 
-        r.class_date >= phase.startDate && r.class_date <= phase.endDate
-      )
+
+      const [records, scores] = await Promise.all([
+        classRecordDb.getWithPlan(phase.student.id, {
+          startDate: phase.startDate,
+          endDate: phase.endDate,
+        }),
+        examScoreDb.getByStudentId(phase.student.id, {
+          startDate: phase.startDate,
+          endDate: phase.endDate,
+        }),
+      ])
       setPhaseRecords(records)
-      
-      // 获取考试成绩
-      const allScores = await examScoreDb.getByStudentId(phase.student.id)
-      const scores = allScores.filter(s =>
-        s.exam_date >= phase.startDate && s.exam_date <= phase.endDate
-      )
       setPhaseScores(scores)
     } catch (error) {
       console.error('Failed to load phase detail:', error)

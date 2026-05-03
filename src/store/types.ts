@@ -10,6 +10,9 @@ import type {
   ExamScore,
   VocabTest,
   LearningPhase,
+  StudentPlan,
+  Milestone,
+  PlanStatus,
   FilterOptions,
   SortOptions,
   TaskBlock,
@@ -219,11 +222,6 @@ export interface UISlice {
   addRecentStudent: (id: string, name: string) => void
   setDashboardConfig: (config: DashboardConfig) => void
   resetDashboardConfig: () => void
-  // Dashboard→批量生成计划联动
-  generateDrawerOpen: boolean
-  generateDrawerPreselectedIds: string[]
-  openGenerateDrawer: (preselectedIds?: string[]) => void
-  closeGenerateDrawer: () => void
 }
 
 // ===== Dashboard 缓存 Slice 类型 =====
@@ -319,6 +317,22 @@ export interface GenerationSlice {
   clearGenerationResults: () => void
 }
 
+// ===== 学习规划 Slice 类型 =====
+export interface PlanningSlice {
+  plan: StudentPlan | null
+  milestones: Milestone[]
+  planStatus: PlanStatus | null
+  planStatusDate: string | null
+  planLoading: boolean
+  milestonesLoading: boolean
+  loadPlanningData: (studentId: string) => Promise<void>
+  savePlan: (data: { studentId: string; summary: string; phonicsPlan: string; textbookPlan: string; readingPlan: string }) => Promise<boolean>
+  addMilestone: (data: { studentId: string; label: string; targetWordbank?: string; targetLevel?: number; targetDate?: string; note?: string }) => Promise<boolean>
+  updateMilestone: (id: number, data: Partial<Omit<Milestone, 'id'>>) => Promise<boolean>
+  deleteMilestone: (id: number) => Promise<void>
+  reorderMilestones: (milestones: Milestone[]) => Promise<void>
+}
+
 // ===== 完整 AppState 类型 =====
 // 注意：ReadingCheckinSlice 已拆分为独立的 useReadingCheckinStore
 export type AppState = StudentSlice &
@@ -331,4 +345,5 @@ export type AppState = StudentSlice &
   SemesterConfigSlice &
   UISlice &
   DashboardSlice &
-  GenerationSlice
+  GenerationSlice &
+  PlanningSlice

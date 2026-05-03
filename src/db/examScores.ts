@@ -29,11 +29,21 @@ export const examScoreDb = {
     return ipcQueryOne<ExamScore>(`SELECT * FROM exam_scores WHERE id = ?`, [id])
   },
   
-  async getByStudentId(studentId: string): Promise<ExamScore[]> {
-    return ipcQuery<ExamScore[]>(
-      `SELECT * FROM exam_scores WHERE student_id = ? ORDER BY exam_date DESC`,
-      [studentId]
-    )
+  async getByStudentId(studentId: string, options?: { startDate?: string; endDate?: string }): Promise<ExamScore[]> {
+    let sql = `SELECT * FROM exam_scores WHERE student_id = ?`
+    const params: unknown[] = [studentId]
+
+    if (options?.startDate) {
+      sql += ` AND exam_date >= ?`
+      params.push(options.startDate)
+    }
+    if (options?.endDate) {
+      sql += ` AND exam_date <= ?`
+      params.push(options.endDate)
+    }
+
+    sql += ` ORDER BY exam_date DESC`
+    return ipcQuery<ExamScore[]>(sql, params)
   },
   
   async update(id: string, data: Partial<ExamScore>): Promise<ExamScore | undefined> {

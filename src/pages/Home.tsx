@@ -80,8 +80,6 @@ export function Home() {
   const expiredPlansLoadedRef = useRef(false)
 
   // 处理从 Dashboard 跳转过来的筛选条件
-  const [dashboardFilter, setDashboardFilter] = useState<string | null>(null)
-  
   useEffect(() => {
     const state = location.state as { filter?: string } | null
     if (state?.filter === 'low_hours') {
@@ -89,7 +87,6 @@ export function Home() {
       setFilters({ status: 'active' })
       setSort({ field: 'remaining_hours', direction: 'asc' })
       setSortDirection('asc')
-      setDashboardFilter('low_hours')
       // 清除 state 避免刷新后重复触发
       navigate(location.pathname, { replace: true, state: null })
     }
@@ -134,12 +131,11 @@ export function Home() {
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">学员档案</h1>
           <CurrentSemesterBadge />
-          {dashboardFilter === 'low_hours' && (
+          {filters.status === 'active' && sort.field === 'remaining_hours' && (
             <span className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-full text-xs">
               ⚡ 课时预警筛选中
               <button
                 onClick={() => {
-                  setDashboardFilter(null)
                   setFilters({ status: 'all' })
                   setSort({ field: 'student_no', direction: 'asc' })
                   setSortDirection('asc')

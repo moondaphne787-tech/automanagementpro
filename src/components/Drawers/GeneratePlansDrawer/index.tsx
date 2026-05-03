@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/appStore'
@@ -13,19 +14,21 @@ import { GenerationControls } from './GenerationControls'
 import type { Student, TaskBlock as TaskBlockType, AIConfig, Wordbank, ClassRecord, StudentWordbankProgress } from '@/types'
 import { TASK_TYPE_LABELS } from '@/types'
 
-interface GeneratePlansDrawerProps {
-  open: boolean
-  onClose: () => void
-  fullPage?: boolean
-}
+type GeneratePlansDrawerProps =
+  | { fullPage: true }
+  | { fullPage?: false; open: boolean; onClose: () => void }
 
-export function GeneratePlansDrawer({ open, onClose, fullPage }: GeneratePlansDrawerProps) {
+export function GeneratePlansDrawer(props: GeneratePlansDrawerProps) {
+  const fullPage = 'fullPage' in props ? props.fullPage : false
+  const open = 'open' in props ? props.open : true
+  const onClose = 'onClose' in props ? props.onClose : () => {}
   const students = useAppStore(s => s.students)
   const wordbanks = useAppStore(s => s.wordbanks)
   const loadStudents = useAppStore(s => s.loadStudents)
   const loadWordbanks = useAppStore(s => s.loadWordbanks)
   const createLessonPlan = useAppStore(s => s.createLessonPlan)
-  const preselectedIds = useAppStore(s => s.generateDrawerPreselectedIds)
+  const location = useLocation()
+  const preselectedIds = (location.state as { preselectedIds?: string[] })?.preselectedIds ?? []
 
   const [selectedStudents, setSelectedStudents] = useState<StudentPlanState[]>([])
   const [extraInstruction, setExtraInstruction] = useState('')

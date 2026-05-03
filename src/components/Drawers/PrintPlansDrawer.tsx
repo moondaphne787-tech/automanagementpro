@@ -15,15 +15,16 @@ import { LayoutEditor } from './PrintPlans/LayoutEditor'
 import { generateLayoutHTML } from '@/utils/printLayout'
 import type { CardLayout } from './PrintPlans/buildLayoutCards'
 
-interface PrintPlansDrawerProps {
-  open: boolean
-  onClose: () => void
-  fullPage?: boolean
-}
+type PrintPlansDrawerProps =
+  | { fullPage: true }
+  | { fullPage?: false; open: boolean; onClose: () => void }
 
 type ViewMode = 'settings' | 'layout'
 
-export function PrintPlansDrawer({ open, onClose, fullPage }: PrintPlansDrawerProps) {
+export function PrintPlansDrawer(props: PrintPlansDrawerProps) {
+  const fullPage = 'fullPage' in props ? props.fullPage : false
+  const open = 'open' in props ? props.open : true
+  const onClose = 'onClose' in props ? props.onClose : () => {}
   const students = useAppStore(s => s.students)
   const loadStudents = useAppStore(s => s.loadStudents)
 
