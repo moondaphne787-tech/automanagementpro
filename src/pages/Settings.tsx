@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Save, TestTube, Calendar, Sparkles, BookOpen, Settings2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Save, TestTube, Calendar, Sparkles, BookOpen, Settings2, ChevronDown, ChevronUp, Route } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,14 +14,17 @@ import { WordbankManager } from '@/components/Settings/WordbankManager'
 import { PlanTemplateManager } from '@/components/Settings/PlanTemplateManager'
 import { SchedulePeriodManager } from '@/components/Settings/SchedulePeriodManager'
 import { TabNav } from '@/components/ui/tab-nav'
+import { DEFAULT_ROUTES, saveRoutes } from '@/ai/learningRoutes'
+import type { LearningRoute } from '@/ai/learningRoutes'
 
-type SettingsTab = 'ai' | 'wordbank' | 'semester' | 'templates' | 'schedule_periods'
+type SettingsTab = 'ai' | 'wordbank' | 'semester' | 'templates' | 'schedule_periods' | 'routes'
 
 
 const TABS: Array<{ key: SettingsTab; label: string; icon: React.ReactNode }> = [
   { key: 'wordbank', label: '词库管理', icon: <BookOpen className="w-4 h-4" /> },
   { key: 'templates', label: '模板管理', icon: <Save className="w-4 h-4" /> },
   { key: 'ai', label: 'AI 配置', icon: <Settings2 className="w-4 h-4" /> },
+  { key: 'routes', label: '学习路线', icon: <Route className="w-4 h-4" /> },
   { key: 'semester', label: '学期设置', icon: <Calendar className="w-4 h-4" /> },
   { key: 'schedule_periods', label: '排课时段', icon: <Calendar className="w-4 h-4" /> },
 ]
@@ -61,6 +64,10 @@ export function Settings() {
   // 任务默认文本
   const [taskDefaults, setTaskDefaults] = useState<Record<string, string>>({})
   const [savingDefaults, setSavingDefaults] = useState(false)
+
+  // 学习路线状态
+  const [routes, setRoutes] = useState<LearningRoute[]>(DEFAULT_ROUTES)
+  const [savingRoutes, setSavingRoutes] = useState(false)
 
   // 折叠面板状态
   const [showPromptEditor, setShowPromptEditor] = useState(false)
@@ -109,6 +116,25 @@ export function Settings() {
       defaults[t.key] = val || ''
     }
     setTaskDefaults(defaults)
+
+    // 加载学习路线
+    const savedRoutes = await settingsDb.get('learning_routes')
+    if (savedRoutes) {
+      try {
+        const overrides = JSON.parse(savedRoutes) as LearningRoute[]
+        setRoutes(DEFAULT_ROUTES.map(defaultRoute => {
+          const override = overrides.find(o => o.id === defaultRoute.id)
+          if (!override) return defaultRoute
+          return {
+            ...defaultRoute,
+            stages: defaultRoute.stages.map(stage => {
+              const overriddenStage = override.stages.find(s => s.order === stage.order)
+              return overriddenStage ? { ...stage, guideline: overriddenStage.guideline } : stage
+            }),
+          }
+        }))
+      } catch {}
+    }
   }
 
   const handleSaveTaskDefaults = async () => {
@@ -167,6 +193,17 @@ export function Settings() {
     } finally {
       setSavingSemester(false)
     }
+  }
+
+  const handleSaveRoutes = async () => {
+    setSavingRoutes(true)
+    try {
+      await saveRoutes(routes)
+      toast.success('学习路线已保存')
+    } catch (error) {
+      toast.error('保存失败：' + (error as Error).message)
+    }
+    setSavingRoutes(false)
   }
 
   return (
@@ -252,6 +289,67 @@ export function Settings() {
                 </CardContent>
               )}
             </Card>
+          </div>
+        )}
+
+        {/* 学习路线 Tab */}
+        {activeTab === 'routes' && (
+          <div className="max-w-3xl space-y-4">
+            {routes.map(route => (
+              <Card key={route.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Route className="w-4 h-4" />
+                    {route.name}
+                  </CardTitle>
+                  <CardDescription>
+                    适用年级：{route.targetGrades.join('、')} · 阶段数：{route.stages.length}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {route.stages.map(stage => {
+                    const stageIndex = route.stages.findIndex(s => s.order === stage.order)
+                    const focusLabels: Record<string, string> = {
+                      phonics: '语音训练', vocab_new: '词库新学', textbook: '课文梳理',
+                      reading: '阅读训练', picture_book: '绘本阅读', exercise: '专项练习',
+                    }
+                    return (
+                      <div key={stage.order} className="p-3 border rounded-lg space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">阶段{stage.order}</span>
+                          <span className="text-sm text-muted-foreground">{stage.name}</span>
+                          <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded ml-auto">
+                            {stage.focus.map(f => focusLabels[f] || f).join(' · ')}
+                          </span>
+                        </div>
+                        <textarea
+                          value={stage.guideline}
+                          onChange={e => {
+                            const newRoutes = routes.map(r => {
+                              if (r.id !== route.id) return r
+                              return {
+                                ...r,
+                                stages: r.stages.map(s =>
+                                  s.order === stage.order ? { ...s, guideline: e.target.value } : s
+                                ),
+                              }
+                            })
+                            setRoutes(newRoutes)
+                          }}
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs resize-y min-h-[48px] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          placeholder="输入本阶段的教学侧重点说明..."
+                        />
+                      </div>
+                    )
+                  })}
+                </CardContent>
+              </Card>
+            ))}
+            <div className="flex gap-3">
+              <Button onClick={handleSaveRoutes} disabled={savingRoutes}>
+                <Save className="w-4 h-4 mr-2" />{savingRoutes ? '保存中...' : '保存路线设置'}
+              </Button>
+            </div>
           </div>
         )}
 

@@ -513,58 +513,6 @@ export interface DashboardData {
   studentOverview: StudentOverviewData
 }
 
-// ===== 学习规划类型 =====
-
-export interface StudentPlan {
-  id: number
-  studentId: string
-  summary: string
-  phonicsPlan: string
-  textbookPlan: string
-  readingPlan: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface Milestone {
-  id: number
-  studentId: string
-  label: string
-  targetWordbank: string | null
-  targetLevel: number | null
-  targetDate: string | null
-  note: string | null
-  isCompleted: boolean
-  completedDate: string | null
-  sortOrder: number
-}
-
-export interface PlanStatus {
-  status: '按计划' | '略超前' | '略落后' | '明显落后'
-  current_vs_plan: string
-  suggestion: string
-}
-
-export interface PromptData {
-  student_profile: {
-    name: string; grade: string; type: string; join_date: string; target: string
-  }
-  student_plan: {
-    summary: string
-    milestones: Array<{
-      label: string; target_wordbank: string | null; target_level: number | null
-      target_date: string | null; note: string | null; is_completed: boolean
-    }>
-    phonics_plan: string; textbook_plan: string; reading_plan: string
-  }
-  current_status: {
-    vocab_current_bank: string; vocab_current_level: number
-    last_lesson_vocab_range: { level_from: number; level_to: number } | null
-    phonics_stage: string; phonics_page: number
-    textbook_current: string; reading_progress: string
-  }
-  recent_lessons: Array<{ date: string; tasks_done: unknown[]; teacher_note: string }>
-}
 
 // Electron API 类型声明
 export interface ElectronAPI {
@@ -615,16 +563,6 @@ export interface ElectronAPI {
   printLessonPlans: (htmlContent: string) => Promise<{ success: boolean; error?: string }>
   platform: string
   isElectron: boolean
-
-  // 学习规划
-  planGet: (studentId: string) => Promise<StudentPlan | null>
-  planSave: (data: { studentId: string; summary: string; phonicsPlan: string; textbookPlan: string; readingPlan: string }) => Promise<{ success: boolean; id: number }>
-  milestoneList: (studentId: string) => Promise<Milestone[]>
-  milestoneAdd: (data: { studentId: string; label: string; targetWordbank?: string; targetLevel?: number; targetDate?: string; note?: string }) => Promise<{ success: boolean; id: number }>
-  milestoneUpdate: (data: { id: number; label?: string; targetWordbank?: string; targetLevel?: number; targetDate?: string; note?: string; isCompleted?: boolean; completedDate?: string; sortOrder?: number }) => Promise<{ success: boolean }>
-  milestoneDelete: (id: number) => Promise<{ success: boolean }>
-  milestoneReorder: (orderedIds: number[]) => Promise<{ success: boolean }>
-  buildPromptData: (studentId: string) => Promise<PromptData>
 }
 
 declare global {

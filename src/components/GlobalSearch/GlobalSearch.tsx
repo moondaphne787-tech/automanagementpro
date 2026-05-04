@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, User, GraduationCap, LayoutDashboard, Calendar, Settings,
-  BookText, Clock, UserPlus, BookOpen, Zap, Upload, Sparkles, FileDown,
+  BookText, Clock, UserPlus, Zap, Upload, Sparkles, FileDown,
   Sun, Moon, Plus
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
@@ -26,7 +26,6 @@ const PAGE_RESULTS: SearchResult[] = [
   { id: 'p-preferences', type: 'page', label: '时段偏好', path: '/preferences', icon: <Clock className="w-4 h-4" /> },
   { id: 'p-reading', type: 'page', label: '朗读打卡', path: '/reading-checkin', icon: <BookText className="w-4 h-4" /> },
   { id: 'p-teachers', type: 'page', label: '助教', path: '/teachers', icon: <GraduationCap className="w-4 h-4" /> },
-  { id: 'p-phases', type: 'page', label: '学习阶段', path: '/phases', icon: <BookOpen className="w-4 h-4" /> },
   { id: 'p-settings', type: 'page', label: '设置', path: '/settings', icon: <Settings className="w-4 h-4" /> },
 ]
 

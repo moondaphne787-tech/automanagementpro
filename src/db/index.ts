@@ -22,15 +22,6 @@ export { classRecordDb } from './classRecords'
 // 课程计划操作
 export { lessonPlanDb } from './lessonPlans'
 
-// 考试成绩操作
-export { examScoreDb } from './examScores'
-
-// 词汇量测试操作
-export { vocabTestDb } from './vocabTests'
-
-// 学习阶段操作
-export { learningPhaseDb } from './phases'
-
 // 体验生成交记录操作
 export { trialConversionDb } from './trialConversions'
 
@@ -58,6 +49,10 @@ export type { TaskPreset, TaskPresetCreate } from './taskPresets'
 // 课程计划模板操作
 export { planTemplateDb } from './planTemplates'
 export type { PlanTemplate, PlanTemplateCreate } from './planTemplates'
+
+// 成长档案备注操作
+export { growthNoteDb } from './growthNotes'
+export type { GrowthNote } from './growthNotes'
 
 // 类型重导出（方便使用）
 export type { 

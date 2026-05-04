@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LEVEL_LABELS } from '@/types'
 import { cn } from '@/lib/utils'
-import type { Student, Wordbank, StudentWordbankProgress, AIConfig, PlanStatus } from '@/types'
+import type { Student, Wordbank, StudentWordbankProgress, AIConfig } from '@/types'
 
 interface AIPlanGeneratorProps {
   student: Student
@@ -13,7 +13,6 @@ interface AIPlanGeneratorProps {
   aiConfig: AIConfig | null
   generating: boolean
   streamContent: string
-  planStatus: PlanStatus | null
   extraInstruction: string
   onExtraInstructionChange: (value: string) => void
   onGenerate: () => void
@@ -27,7 +26,6 @@ export function AIPlanGenerator({
   aiConfig,
   generating,
   streamContent,
-  planStatus,
   extraInstruction,
   onExtraInstructionChange,
   onGenerate,
@@ -92,26 +90,6 @@ export function AIPlanGenerator({
           <div className="bg-blue-500/5 border border-blue-200 rounded-lg p-4">
             <div className="text-sm font-medium text-blue-700 mb-2">AI 正在生成...</div>
             <pre className="text-sm whitespace-pre-wrap font-mono">{streamContent}</pre>
-          </div>
-        )}
-
-        {/* 进度评估结果 */}
-        {planStatus && !generating && (
-          <div className="border rounded-lg p-4 space-y-2">
-            <div className="text-sm font-medium flex items-center gap-2">
-              📊 进度评估
-              <span className={cn(
-                'px-2 py-0.5 rounded text-xs font-medium',
-                planStatus.status === '按计划' && 'bg-green-100 text-green-700',
-                planStatus.status === '略超前' && 'bg-blue-100 text-blue-700',
-                planStatus.status === '略落后' && 'bg-yellow-100 text-yellow-700',
-                planStatus.status === '明显落后' && 'bg-red-100 text-red-700',
-              )}>
-                {planStatus.status}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground">{planStatus.current_vs_plan}</p>
-            <p className="text-sm">{planStatus.suggestion}</p>
           </div>
         )}
 

@@ -9,13 +9,11 @@ import { PlanEditor } from '@/components/PlanEditor/PlanEditor'
 import { AIPlanGenerator } from '@/components/PlanEditor/AIPlanGenerator'
 import { RefPanel } from '@/components/PlanEditor/RefPanel'
 import { TemplatePickerDialog } from '@/components/PlanEditor/TemplatePickerDialog'
-import { PlanningOverview } from './PlanningOverview'
 import { useAppStore } from '@/store/appStore'
 import { sendAIRequestStream } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { printLessonPlan } from '@/utils/pdfExport'
 import { formatLocalDate, cn } from '@/lib/utils'
-import type { PlanStatus } from '@/types'
 
 interface PlansTabProps {
   studentId: string
@@ -46,16 +44,12 @@ export function PlansTab({ studentId }: PlansTabProps) {
   const [streamContent, setStreamContent] = useState('')
   const [extraInstruction, setExtraInstruction] = useState('')
   const [showPlanGenerator, setShowPlanGenerator] = useState(false)
-  const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null)
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false)
 
   // 参考面板状态
   const [showRefPanel, setShowRefPanel] = useState(true)
   const [mobileRefExpanded, setMobileRefExpanded] = useState(false)
-
-  // 学习规划折叠状态
-  const [planningOpen, setPlanningOpen] = useState(false)
 
   // PromptDialog 状态
   const [promptState, setPromptState] = useState<{
@@ -93,14 +87,6 @@ export function PlansTab({ studentId }: PlansTabProps) {
     setStreamContent('')
 
     try {
-      // 尝试获取完整的大纲数据（含里程碑），注入到 AI 输入
-      let promptData = undefined
-      try {
-        if (window.electronAPI?.buildPromptData) {
-          promptData = await window.electronAPI.buildPromptData(studentId)
-        }
-      } catch { /* 无大纲数据时降级到旧格式 */ }
-
       const lastPlanSummary = await getLastPlanSummary(studentId)
 
       const userInput = buildUserInput({
@@ -110,7 +96,6 @@ export function PlansTab({ studentId }: PlansTabProps) {
         recentRecords,
         lastPlanSummary,
         extraInstruction,
-        promptData,
       })
 
       const systemPrompt = await getSystemPrompt()
@@ -125,7 +110,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
 
       if (parsed) {
         const today = new Date().toISOString().split('T')[0]
-        const newPlan = await createLessonPlan({
+        await createLessonPlan({
           student_id: studentId,
           plan_date: today,
           tasks: parsed.tasks,
@@ -134,19 +119,6 @@ export function PlansTab({ studentId }: PlansTabProps) {
           generated_by_ai: true
         })
 
-        // 将 plan_status 写入刚创建的 lesson_plans 记录（不再创建空 class_records）
-        if (parsed.planStatus && newPlan && window.electronAPI?.dbQuery) {
-          try {
-            await window.electronAPI.dbQuery(
-              `UPDATE lesson_plans SET plan_status_json = ? WHERE id = ?`,
-              [JSON.stringify(parsed.planStatus), newPlan.id]
-            )
-          } catch (e) {
-            console.warn('[PlansTab] 写入 plan_status 失败:', e)
-          }
-        }
-
-        setPlanStatus(parsed.planStatus)
         setShowPlanGenerator(false)
         setStreamContent('')
         setExtraInstruction('')
@@ -203,7 +175,6 @@ export function PlansTab({ studentId }: PlansTabProps) {
             aiConfig={aiConfig}
             generating={generatingPlan}
             streamContent={streamContent}
-            planStatus={planStatus}
             extraInstruction={extraInstruction}
             onExtraInstructionChange={setExtraInstruction}
             onGenerate={handleGeneratePlan}
@@ -239,25 +210,6 @@ export function PlansTab({ studentId }: PlansTabProps) {
                 <Sparkles className="w-4 h-4 mr-1" />
                 AI 生成计划
               </Button>
-            </div>
-            
-            {/* 学习规划（折叠卡片） */}
-            <div className="border rounded-lg bg-card">
-              <button
-                onClick={() => setPlanningOpen(!planningOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold hover:bg-muted/50 transition-colors rounded-lg"
-              >
-                <span className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4" />
-                  学习规划
-                </span>
-                <ChevronDown className={cn("w-4 h-4 transition-transform", planningOpen && "rotate-180")} />
-              </button>
-              {planningOpen && (
-                <div className="px-4 pb-4">
-                  <PlanningOverview studentId={studentId} />
-                </div>
-              )}
             </div>
 
             {/* 过期计划警告 */}

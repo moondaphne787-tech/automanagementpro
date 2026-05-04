@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Dialog, DialogContent } from './dialog'
+import { Dialog, DialogContent, DialogTitle } from './dialog'
 import { Button } from './button'
 import { AlertTriangle, Info, CheckCircle, XCircle } from 'lucide-react'
 
@@ -124,7 +124,7 @@ export function ConfirmDialog() {
             {getIcon()}
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold mb-2">{state.title}</h3>
+            <DialogTitle className="text-lg font-semibold mb-2">{state.title}</DialogTitle>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">
               {state.message}
             </p>

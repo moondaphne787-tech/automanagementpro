@@ -855,6 +855,29 @@ export const migrations: Migration[] = [
       }
     }
   },
+
+  // ===== 版本 23: 成长档案备注表 =====
+  {
+    version: 23,
+    description: '添加成长档案备注表 student_growth_notes',
+    up: (db: Database.Database) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS student_growth_notes (
+          id TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+          note_date TEXT NOT NULL,
+          category TEXT NOT NULL,
+          content TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )
+      `)
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_growth_notes_student_date
+          ON student_growth_notes(student_id, note_date DESC)
+      `)
+      console.log('Migration v23: Added student_growth_notes table')
+    }
+  },
 ]
 
 /**

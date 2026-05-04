@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { studentDb, classRecordDb, lessonPlanDb, teacherDb, examScoreDb, learningPhaseDb, progressDb, wordbankDb, billingDb } from '@/db'
+import { studentDb, classRecordDb, lessonPlanDb, teacherDb, progressDb, wordbankDb, billingDb } from '@/db'
 import { parseTasks } from '@/db/utils'
 import type { TaskBlock } from '@/types'
 
@@ -23,14 +23,8 @@ export async function exportToExcel(): Promise<void> {
     
     // 4. 导出助教信息
     await exportTeachers(workbook)
-    
-    // 5. 导出考试成绩
-    await exportExamScores(workbook)
-    
-    // 6. 导出学习阶段
-    await exportLearningPhases(workbook)
-    
-    // 7. 导出词库进度
+
+    // 5. 导出词库进度
     await exportProgress(workbook)
     
     // 8. 导出词库配置
@@ -207,51 +201,6 @@ async function exportTeachers(workbook: XLSX.WorkBook): Promise<void> {
   const worksheet = XLSX.utils.json_to_sheet(data)
   setColumnWidths(worksheet, data)
   XLSX.utils.book_append_sheet(workbook, worksheet, '助教信息')
-}
-
-/**
- * 导出考试成绩
- */
-async function exportExamScores(workbook: XLSX.WorkBook): Promise<void> {
-  const allScores = await examScoreDb.getAll()
-  
-  const data = allScores.map(e => ({
-    '学员ID': e.student_id,
-    '考试日期': e.exam_date,
-    '考试名称': e.exam_name || '',
-    '考试类型': e.exam_type === 'school_exam' ? '学校考试' : e.exam_type === 'placement' ? '分班考试' : '模拟考试',
-    '得分': e.score || '',
-    '满分': e.full_score,
-    '备注': e.notes || ''
-  }))
-  
-  const worksheet = XLSX.utils.json_to_sheet(data)
-  setColumnWidths(worksheet, data)
-  XLSX.utils.book_append_sheet(workbook, worksheet, '考试成绩')
-}
-
-/**
- * 导出学习阶段
- */
-async function exportLearningPhases(workbook: XLSX.WorkBook): Promise<void> {
-  const allPhases = await learningPhaseDb.getAll()
-  
-  const data = allPhases.map(p => ({
-    '学员ID': p.student_id,
-    '阶段名称': p.phase_name || '',
-    '阶段类型': p.phase_type === 'semester' ? '学期' : p.phase_type === 'summer' ? '暑假' : '寒假',
-    '开始日期': p.start_date || '',
-    '结束日期': p.end_date || '',
-    '目标': p.goal || '',
-    '起始词汇量': p.vocab_start || '',
-    '结束词汇量': p.vocab_end || '',
-    '总结': p.summary || '',
-    '创建时间': p.created_at
-  }))
-  
-  const worksheet = XLSX.utils.json_to_sheet(data)
-  setColumnWidths(worksheet, data)
-  XLSX.utils.book_append_sheet(workbook, worksheet, '学习阶段')
 }
 
 /**

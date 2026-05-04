@@ -13,7 +13,6 @@ import { TeacherDetail } from '@/pages/TeacherDetail'
 import { Schedule } from '@/pages/Schedule'
 import { ReadingCheckin } from '@/pages/ReadingCheckin'
 import { BatchPage } from '@/pages/BatchPage'
-import { PreferenceManage } from '@/pages/PreferenceManage'
 
 function App() {
   return (
@@ -26,7 +25,6 @@ function App() {
           <Route path="/students/:id" element={<StudentDetail />} />
           <Route path="/trial" element={<TrialList />} />
           <Route path="/schedule" element={<Schedule />} />
-          <Route path="/schedule/preferences" element={<PreferenceManage />} />
           <Route path="/teachers" element={<TeacherList />} />
           <Route path="/teachers/:id" element={<TeacherDetail />} />
           <Route path="/reading-checkin" element={<ReadingCheckin />} />

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Edit, Trash2, Clock, Calendar, Plus } from 'lucide-react'
+import { Edit, Trash2, Clock, Calendar, Plus, Route } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InlineField } from '@/components/ui/inline-field'
+import { DEFAULT_ROUTES } from '@/ai/learningRoutes'
+import type { LearningRoute } from '@/ai/learningRoutes'
 import { PromptDialog } from '@/components/ui/dialog'
 import { confirmDialog } from '@/components/ui/confirm-dialog'
 import { useAppStore } from '@/store/appStore'
@@ -51,6 +53,19 @@ export function InfoTab({ studentId }: InfoTabProps) {
   })
   const [schedulePeriods, setSchedulePeriods] = useState<SchedulePeriod[]>([])
 
+  // 学习路线绑定
+  const currentBinding = (() => {
+    if (!currentStudent?.learning_target) return null
+    try {
+      const b = JSON.parse(currentStudent.learning_target)
+      return b && typeof b === 'object' && b.routeId ? b as { routeId: string; stageOrder: number; customNote?: string } : null
+    } catch { return null }
+  })()
+  const [selectedRouteId, setSelectedRouteId] = useState(currentBinding?.routeId || '')
+  const [selectedStageOrder, setSelectedStageOrder] = useState(currentBinding?.stageOrder || 1)
+  const [customNote, setCustomNote] = useState(currentBinding?.customNote || '')
+  const [bindingRoutes, setBindingRoutes] = useState<LearningRoute[]>(DEFAULT_ROUTES)
+
   // 同步 billing 数据到表单
   useEffect(() => {
     if (currentBilling) {
@@ -61,10 +76,33 @@ export function InfoTab({ studentId }: InfoTabProps) {
     }
   }, [currentBilling])
 
-  // 加载偏好时段、排课时段列表、词库进度
+  // 同步 currentBinding 到表单状态
+  useEffect(() => {
+    if (currentBinding) {
+      setSelectedRouteId(currentBinding.routeId)
+      setSelectedStageOrder(currentBinding.stageOrder)
+      setCustomNote(currentBinding.customNote || '')
+    }
+  }, [currentStudent?.id])
+
+  // 加载已保存的学习路线 + 偏好时段、排课时段列表、词库进度
   useEffect(() => {
     loadSchedulePreferences()
     loadSchedulePeriods()
+    ;(async () => {
+      const { settingsDb } = await import('@/db')
+      const saved = await settingsDb.get('learning_routes')
+      if (saved) {
+        try {
+          const overrides = JSON.parse(saved) as LearningRoute[]
+          setBindingRoutes(DEFAULT_ROUTES.map(dr => {
+            const o = overrides.find((r: LearningRoute) => r.id === dr.id)
+            if (!o) return dr
+            return { ...dr, stages: dr.stages.map(s => { const os = o.stages.find((st: any) => st.order === s.order); return os ? { ...s, guideline: os.guideline } : s }) }
+          }))
+        } catch {}
+      }
+    })()
     loadProgress(studentId)
   }, [studentId])
 
@@ -210,13 +248,63 @@ export function InfoTab({ studentId }: InfoTabProps) {
               type="text"
               onSave={(v) => handleFieldSave('school', v)}
             />
-            <InlineField
-              label="学习目标"
-              value={(currentStudent as any).learning_target}
-              placeholder="如：中考冲刺、KET备考"
-              type="text"
-              onSave={(v) => handleFieldSave('learning_target', v)}
-            />
+            <div className="pt-2 border-t mt-2 space-y-2">
+              <label className="text-xs font-medium flex items-center gap-1"><Route className="w-3 h-3" />学习路线</label>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={selectedRouteId}
+                  onChange={e => { setSelectedRouteId(e.target.value); const route = bindingRoutes.find(r => r.id === e.target.value); setSelectedStageOrder(route?.stages[0]?.order || 1) }}
+                  className="h-8 text-xs rounded-md border border-input bg-transparent px-2"
+                >
+                  <option value="">未绑定</option>
+                  {bindingRoutes.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+                {selectedRouteId && (
+                  <select
+                    value={selectedStageOrder}
+                    onChange={e => setSelectedStageOrder(parseInt(e.target.value))}
+                    className="h-8 text-xs rounded-md border border-input bg-transparent px-2"
+                  >
+                    {bindingRoutes.find(r => r.id === selectedRouteId)?.stages.map(s => (
+                      <option key={s.order} value={s.order}>阶段{s.order} {s.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {selectedRouteId && (
+                <div className="flex gap-2">
+                  <Input
+                    value={customNote}
+                    onChange={e => setCustomNote(e.target.value)}
+                    placeholder="个性化补充说明（可选）"
+                    className="h-8 text-xs flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 shrink-0"
+                    onClick={async () => {
+                      const json = JSON.stringify({ routeId: selectedRouteId, stageOrder: selectedStageOrder, customNote: customNote || undefined })
+                      await handleFieldSave('learning_target', json)
+                    }}
+                  >
+                    保存路线
+                  </Button>
+                </div>
+              )}
+              {!selectedRouteId && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={async () => { await handleFieldSave('learning_target', ''); setSelectedRouteId(''); setSelectedStageOrder(1); setCustomNote('') }}
+                >
+                  清除目标（恢复纯文本模式）
+                </Button>
+              )}
+            </div>
             <InlineField
               label="入学日期"
               value={currentStudent.enroll_date}

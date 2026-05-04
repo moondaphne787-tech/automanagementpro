@@ -1,5 +1,6 @@
-import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock, PlanStatus, PromptData } from '@/types'
+import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock } from '@/types'
 import { TASK_TYPE_LABELS } from '@/types'
+import type { LearningRoute } from './learningRoutes'
 
 // 系统提示词 - 包含李教授教学大纲规则
 // 默认系统提示词 - 作为兜底值
@@ -71,7 +72,11 @@ export const DEFAULT_SYSTEM_PROMPT = `你是专业青少年英语教学顾问，
   ],
   "notes": "助教提示，如有特殊注意事项则填写，否则为空字符串",
   "reason": "本次计划的简要依据，供教务参考"
-}`
+}
+
+## 学习路线（如有）
+若 user message 中包含 learning_route 字段，任务安排必须符合该路线阶段的方向。
+guideline 是本阶段的侧重点说明，custom_note 是针对该学员的个性化补充。`
 
 // 异步获取当前生效的系统提示词（优先从数据库读取，否则用默认值）
 export async function getSystemPrompt(): Promise<string> {
@@ -92,19 +97,9 @@ export function buildUserInput(params: {
   recentRecords: ClassRecord[]
   lastPlanSummary: string | null
   extraInstruction?: string
-  promptData?: PromptData  // 如果传入，优先使用（包含大纲/里程碑）
+  routes?: LearningRoute[]
 }): string {
-  const { student, wordbankProgress, wordbanks, recentRecords, lastPlanSummary, extraInstruction, promptData } = params
-
-  // 如果有完整的 promptData（含大纲/里程碑），直接使用新格式
-  if (promptData) {
-    const data = extraInstruction
-      ? { ...promptData, extra_instruction: extraInstruction }
-      : promptData
-    return JSON.stringify(data, null, 2)
-  }
-
-  // 兜底：使用旧格式（无大纲数据时）
+  const { student, wordbankProgress, wordbanks, recentRecords, lastPlanSummary, extraInstruction, routes } = params
   const wordbankData = wordbankProgress.map(progress => {
     const wordbank = wordbanks.find(w => w.id === progress.wordbank_id)
     return {
@@ -149,6 +144,23 @@ export function buildUserInput(params: {
     extra_instruction: extraInstruction
   }
 
+  // 注入学习路线信息
+  if (student.learning_target && routes) {
+    try {
+      const binding = JSON.parse(student.learning_target) as { routeId: string; stageOrder: number; customNote?: string }
+      const route = routes.find(r => r.id === binding.routeId)
+      const stage = route?.stages.find(s => s.order === binding.stageOrder)
+      if (route && stage) {
+        ;(studentData as any).learning_route = {
+          route_name: route.name,
+          current_stage: stage.name,
+          guideline: stage.guideline,
+          custom_note: binding.customNote || '',
+        }
+      }
+    } catch { /* learning_target 不是 JSON 格式（旧版纯文本）时忽略 */ }
+  }
+
   return JSON.stringify(studentData, null, 2)
 }
 
@@ -157,7 +169,6 @@ export function parseAIResponse(response: string): {
   tasks: TaskBlock[]
   notes: string
   reason: string
-  planStatus: PlanStatus | null
 } | null {
   try {
     // 基本验证
@@ -242,7 +253,6 @@ export function parseAIResponse(response: string): {
       tasks: validTasks,
       notes: parsed.notes || '',
       reason: parsed.reason || '',
-      planStatus: parsed.plan_status ?? null,
     }
   } catch (error) {
     console.error('[parseAIResponse] 解析过程发生异常:', error)

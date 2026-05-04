@@ -7,12 +7,6 @@ import type {
   StudentWordbankProgress,
   ClassRecord,
   LessonPlan,
-  ExamScore,
-  VocabTest,
-  LearningPhase,
-  StudentPlan,
-  Milestone,
-  PlanStatus,
   FilterOptions,
   SortOptions,
   TaskBlock,
@@ -135,59 +129,6 @@ export interface LessonPlanSlice {
   deleteLessonPlan: (id: string) => Promise<void>
 }
 
-// ===== 考试成绩 Slice 类型 =====
-export interface ExamScoreSlice {
-  examScores: ExamScore[]
-  examScoresLoading: boolean
-  loadExamScores: (studentId: string) => Promise<void>
-  createExamScore: (data: {
-    student_id: string
-    exam_date: string
-    exam_name?: string
-    exam_type?: 'school_exam' | 'placement' | 'mock'
-    score?: number
-    full_score?: number
-    notes?: string
-  }) => Promise<ExamScore | undefined>
-  updateExamScore: (id: string, data: Partial<ExamScore>) => Promise<ExamScore | undefined>
-  deleteExamScore: (id: string) => Promise<void>
-}
-
-// ===== 词汇量测试 Slice 类型 =====
-export interface VocabTestSlice {
-  vocabTests: VocabTest[]
-  vocabTestsLoading: boolean
-  loadVocabTests: (studentId: string) => Promise<void>
-  createVocabTest: (data: {
-    student_id: string
-    test_date: string
-    vocab_count: number
-    test_source?: string
-    notes?: string
-  }) => Promise<VocabTest | undefined>
-  updateVocabTest: (id: string, data: Partial<VocabTest>) => Promise<VocabTest | undefined>
-  deleteVocabTest: (id: string) => Promise<void>
-}
-
-// ===== 学习阶段 Slice 类型 =====
-export interface LearningPhaseSlice {
-  learningPhases: LearningPhase[]
-  learningPhasesLoading: boolean
-  loadLearningPhases: (studentId: string) => Promise<void>
-  createLearningPhase: (data: {
-    student_id: string
-    phase_name?: string
-    phase_type?: 'semester' | 'summer' | 'winter'
-    start_date?: string
-    end_date?: string
-    goal?: string
-    vocab_start?: number
-    vocab_end?: number
-    summary?: string
-  }) => Promise<LearningPhase | undefined>
-  updateLearningPhase: (id: string, data: Partial<LearningPhase>) => Promise<LearningPhase | undefined>
-  deleteLearningPhase: (id: string) => Promise<void>
-}
 
 // ===== 学期配置 Slice 类型 =====
 export interface SemesterConfigSlice {
@@ -284,41 +225,6 @@ export interface ReadingCheckinSlice {
   toggleShowOnlyUnchecked: () => void
 }
 
-// ===== 批量生成 Slice 类型 =====
-export interface GenerationTask {
-  studentId: string
-  studentName: string
-  status: 'pending' | 'generating' | 'success' | 'failed' | 'saved' | 'skipped'
-  plan?: { tasks: TaskBlock[]; notes: string; reason: string }
-  error?: string
-  extraNote?: string
-}
-
-export interface GenerationSlice {
-  generationTasks: GenerationTask[]
-  generationRunning: boolean
-  generationProgress: { done: number; total: number }
-  startGeneration: (tasks: GenerationTask[], extraInstruction?: string) => Promise<void>
-  cancelGeneration: () => void
-  updateGenerationTask: (studentId: string, updates: Partial<GenerationTask>) => void
-  clearGenerationResults: () => void
-}
-
-// ===== 学习规划 Slice 类型 =====
-export interface PlanningSlice {
-  plan: StudentPlan | null
-  milestones: Milestone[]
-  planStatus: PlanStatus | null
-  planStatusDate: string | null
-  planLoading: boolean
-  milestonesLoading: boolean
-  loadPlanningData: (studentId: string) => Promise<void>
-  savePlan: (data: { studentId: string; summary: string; phonicsPlan: string; textbookPlan: string; readingPlan: string }) => Promise<boolean>
-  addMilestone: (data: { studentId: string; label: string; targetWordbank?: string; targetLevel?: number; targetDate?: string; note?: string }) => Promise<boolean>
-  updateMilestone: (id: number, data: Partial<Omit<Milestone, 'id'>>) => Promise<boolean>
-  deleteMilestone: (id: number) => Promise<void>
-  reorderMilestones: (milestones: Milestone[]) => Promise<void>
-}
 
 // ===== 完整 AppState 类型 =====
 // 注意：ReadingCheckinSlice 已拆分为独立的 useReadingCheckinStore
@@ -326,11 +232,6 @@ export type AppState = StudentSlice &
   WordbankSlice &
   ClassRecordSlice &
   LessonPlanSlice &
-  ExamScoreSlice &
-  VocabTestSlice &
-  LearningPhaseSlice &
   SemesterConfigSlice &
   UISlice &
-  DashboardSlice &
-  GenerationSlice &
-  PlanningSlice
+  DashboardSlice

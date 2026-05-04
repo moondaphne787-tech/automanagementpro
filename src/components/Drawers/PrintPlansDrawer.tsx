@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { FileDown, Loader2, LayoutGrid } from 'lucide-react'
+import { FileDown, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { DrawerShell } from '@/components/ui/drawer-shell'
@@ -11,15 +11,10 @@ import type { Student, LessonPlan, TaskBlock as TaskBlockType } from '@/types'
 import { StudentSelectionGrid, StudentWithPlan } from './PrintPlans/StudentSelectionGrid'
 import { PrintSettingsPanel } from './PrintPlans/PrintSettingsPanel'
 import { PrintPreview } from './PrintPlans/PrintPreview'
-import { LayoutEditor } from './PrintPlans/LayoutEditor'
-import { generateLayoutHTML } from '@/utils/printLayout'
-import type { CardLayout } from './PrintPlans/buildLayoutCards'
 
 type PrintPlansDrawerProps =
   | { fullPage: true }
   | { fullPage?: false; open: boolean; onClose: () => void }
-
-type ViewMode = 'settings' | 'layout'
 
 export function PrintPlansDrawer(props: PrintPlansDrawerProps) {
   const fullPage = 'fullPage' in props ? props.fullPage : false
@@ -36,12 +31,10 @@ export function PrintPlansDrawer(props: PrintPlansDrawerProps) {
   const [showAssistantTips, setShowAssistantTips] = useState(false)
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>('settings')
 
   useEffect(() => {
     if (open) {
       loadStudents()
-      setViewMode('settings')
     }
   }, [open])
 
@@ -117,19 +110,6 @@ export function PrintPlansDrawer(props: PrintPlansDrawerProps) {
     }
   }
 
-  // 排版编辑器导出
-  const handleLayoutExport = (cardLayouts: CardLayout[]) => {
-    setExporting(true)
-    try {
-      const html = generateLayoutHTML(cardLayouts, showAssistantTips)
-      openPrintWindow(html)
-    } catch (error) {
-      toast.error('导出失败：' + (error as Error).message)
-    } finally {
-      setExporting(false)
-    }
-  }
-
   const openPrintWindow = (html: string) => {
     const printWindow = window.open('', '_blank')
     if (printWindow) {
@@ -173,7 +153,6 @@ export function PrintPlansDrawer(props: PrintPlansDrawerProps) {
     setStudentsWithPlans(prev => prev.map(item => ({ ...item, selected: false })))
     setSearchName('')
     setFilterGrade('all')
-    setViewMode('settings')
     onClose()
   }
 
@@ -211,9 +190,6 @@ export function PrintPlansDrawer(props: PrintPlansDrawerProps) {
       <div className="h-16 border-t flex items-center justify-between px-6 shrink-0">
         <Button variant="outline" onClick={handleClose}>取消</Button>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setViewMode('layout')} disabled={selectedStudents.length === 0}>
-            <LayoutGrid className="w-4 h-4 mr-2" />排版编辑
-          </Button>
           <Button onClick={handleQuickExport} disabled={selectedStudents.length === 0 || exporting}>
             {exporting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />导出中...</> : <><FileDown className="w-4 h-4 mr-2" />快速导出 ({selectedStudents.filter(s => s.plans.length > 0).length} 份)</>}
           </Button>
@@ -222,27 +198,16 @@ export function PrintPlansDrawer(props: PrintPlansDrawerProps) {
     </>
   )
 
-  const layoutContent = (
-    <LayoutEditor
-      selectedStudents={selectedStudents}
-      plansPerStudent={plansPerStudent}
-      layout={layout}
-      showAssistantTips={showAssistantTips}
-      onExport={handleLayoutExport}
-      onBack={() => setViewMode('settings')}
-    />
-  )
-
   return (
     <DrawerShell
       open={open}
       fullPage={fullPage}
-      title={viewMode === 'layout' ? '排版编辑' : '批量导出课程计划'}
+      title="批量导出课程计划"
       icon={<FileDown className="w-5 h-5 text-primary" />}
-      width={viewMode === 'layout' ? 'w-[95vw] max-w-[1400px]' : 'w-[700px]'}
+      width="w-[700px]"
       onClose={handleClose}
     >
-      {viewMode === 'settings' ? settingsContent : layoutContent}
+      {settingsContent}
     </DrawerShell>
   )
 }
