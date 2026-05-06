@@ -1,6 +1,6 @@
 import type { Student, StudentWordbankProgress, ClassRecord, Wordbank, TaskBlock } from '@/types'
-import { TASK_TYPE_LABELS } from '@/types'
 import type { LearningRoute } from './learningRoutes'
+import { formatTask, formatTasksSummary } from '@/utils/formatTask'
 
 // 系统提示词 - 包含李教授教学大纲规则
 // 默认系统提示词 - 作为兜底值
@@ -258,30 +258,5 @@ export function parseAIResponse(response: string): {
     console.error('[parseAIResponse] 解析过程发生异常:', error)
     return null
   }
-}
-
-// 格式化任务为可读文本
-export function formatTask(task: TaskBlock): string {
-  const typeName = TASK_TYPE_LABELS[task.type] || task.type
-
-  // 优先使用 content 字段
-  if (task.content) {
-    return `${typeName}：${task.content}`
-  }
-
-  // 兜底：兼容旧数据，从 wordbank_label + levels 拼接
-  if ((task.type === 'vocab_new' || task.type === 'vocab_review' ) && task.wordbank_label) {
-    if (task.level_from && task.level_to) {
-      return `${typeName}：${task.wordbank_label} 第${task.level_from}-${task.level_to}关`
-    }
-    return `${typeName}：${task.wordbank_label}`
-  }
-
-  return typeName
-}
-
-// 格式化任务列表为摘要文本
-export function formatTasksSummary(tasks: TaskBlock[]): string {
-  return tasks.map(formatTask).join('、')
 }
 

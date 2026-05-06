@@ -29,7 +29,7 @@ function App() {
           <Route path="/teachers/:id" element={<TeacherDetail />} />
           <Route path="/reading-checkin" element={<ReadingCheckin />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/batch" element={<BatchPage />} />
+          <Route path="/batch/*" element={<BatchPage />} />
         </Route>
       </Routes>
 

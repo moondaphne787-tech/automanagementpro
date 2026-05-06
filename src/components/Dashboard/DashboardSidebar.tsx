@@ -98,7 +98,6 @@ export function AlertStudents({ students, loading }: AlertStudentsProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          sessionStorage.setItem('studentDetailTab', action.tab)
                           navigate(`/students/${s.studentId}`)
                         }}
                         className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"

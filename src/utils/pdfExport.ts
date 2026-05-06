@@ -1,25 +1,5 @@
 import type { LessonPlan, Student, TaskBlock } from '@/types'
-import { TASK_TYPE_LABELS } from '@/types'
-
-// 格式化任务为文本
-function formatTaskText(task: TaskBlock): string {
-  const typeName = TASK_TYPE_LABELS[task.type] || task.type
-
-  // 优先使用 content 字段（AI 生成和手动编辑都会填充此字段）
-  if (task.content) {
-    return `${typeName}：${task.content}`
-  }
-
-  // 兜底：兼容旧数据，从 wordbank_label + levels 拼接
-  if ((task.type === 'vocab_new' || task.type === 'vocab_review' ) && task.wordbank_label) {
-    if (task.level_from && task.level_to) {
-      return `${typeName}：${task.wordbank_label} 第${task.level_from}-${task.level_to}关`
-    }
-    return `${typeName}：${task.wordbank_label}`
-  }
-
-  return typeName
-}
+import { formatTask } from './formatTask'
 
 // 获取学员程度显示文本
 function getLevelText(level?: string): string {
@@ -130,7 +110,7 @@ const PLAN_PRINT_CSS = `
 // 单个计划的 HTML 内容（不含外层结构）
 function createSinglePlanContent(student: Student, plan: LessonPlan): string {
   const tasksHtml = plan.tasks.map((task, index) => {
-    const taskText = formatTaskText(task)
+    const taskText = formatTask(task)
     return `<div class="task-item">
       <span class="task-number">${index + 1}.</span>
       <span class="task-text">${taskText}</span>

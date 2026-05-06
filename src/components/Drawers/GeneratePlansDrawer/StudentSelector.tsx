@@ -36,12 +36,6 @@ export interface StudentPlanState {
 
 // ===== StudentSelector =====
 
-/** 智能筛选结果：有排课但无计划的学员 ID 集合 */
-export interface SmartFilterResult {
-  scheduledWithoutPlan: Set<string>
-  loading: boolean
-}
-
 interface StudentSelectorProps {
   students: Student[]
   selectedStudents: StudentPlanState[]

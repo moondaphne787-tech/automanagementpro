@@ -274,7 +274,6 @@ function formatTasks(tasks: TaskBlock[]): string {
       'phonics': '语音训练',
       'vocab_new': '词库学习（新词）',
       'vocab_review': '词库复习',
-      'nine_grid': '九宫格清理',
       'textbook': '课文梳理',
       'reading': '阅读训练',
       'picture_book': '绘本阅读',
@@ -284,7 +283,7 @@ function formatTasks(tasks: TaskBlock[]): string {
     
     let content = `${index + 1}. ${typeLabels[task.type] || task.type}`
     
-    if (['vocab_new', 'vocab_review', 'nine_grid'].includes(task.type)) {
+    if (['vocab_new', 'vocab_review'].includes(task.type)) {
       if (task.wordbank_label) {
         content += ` - ${task.wordbank_label}`
       }

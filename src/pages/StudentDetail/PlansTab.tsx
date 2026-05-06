@@ -13,6 +13,7 @@ import { useAppStore } from '@/store/appStore'
 import { sendAIRequestStream } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
 import { printLessonPlan } from '@/utils/pdfExport'
+import { resolveRoutes } from '@/ai/learningRoutes'
 import { formatLocalDate, cn } from '@/lib/utils'
 
 interface PlansTabProps {
@@ -88,6 +89,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
 
     try {
       const lastPlanSummary = await getLastPlanSummary(studentId)
+      const routes = await resolveRoutes()
 
       const userInput = buildUserInput({
         student: currentStudent,
@@ -95,6 +97,7 @@ export function PlansTab({ studentId }: PlansTabProps) {
         wordbanks,
         recentRecords,
         lastPlanSummary,
+        routes,
         extraInstruction,
       })
 

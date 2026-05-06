@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Upload, Sparkles, FileDown, LayoutList } from 'lucide-react'
 import { GeneratePlansDrawer } from '@/components/Drawers/GeneratePlansDrawer'
 import { ImportRecordsDrawer } from '@/components/Drawers/ImportRecordsDrawer'
@@ -13,8 +14,22 @@ const TABS = [
   { key: 'export' as const, label: '导出数据', icon: <FileDown className="w-4 h-4" /> },
 ]
 
+const TAB_BY_PATH: Record<string, BatchTab> = {
+  '/batch/generate': 'generate',
+  '/batch/import': 'import',
+  '/batch/export': 'export',
+}
+
 export function BatchPage() {
-  const [activeTab, setActiveTab] = useState<BatchTab>('generate')
+  const location = useLocation()
+  const [activeTab, setActiveTab] = useState<BatchTab>(
+    TAB_BY_PATH[location.pathname] || 'generate'
+  )
+
+  useEffect(() => {
+    const tab = TAB_BY_PATH[location.pathname]
+    if (tab) setActiveTab(tab)
+  }, [location.pathname])
 
   return (
     <div className="h-full flex flex-col">

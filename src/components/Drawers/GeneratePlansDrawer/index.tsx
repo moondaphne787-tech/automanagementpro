@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { settingsDb, progressDb, classRecordDb, lessonPlanDb, scheduledClassDb } from '@/db'
 import { sendAIRequest } from '@/ai/client'
 import { buildUserInput, parseAIResponse, getSystemPrompt } from '@/ai/prompts'
+import { resolveRoutes } from '@/ai/learningRoutes'
 import { autoFillWordbankContent } from '@/ai/autoFillWordbankContent'
 import { StudentSelector, PlanResultCard, StudentPlanState, GenerationStatus, StudentContext } from './StudentSelector'
 import type { Student, TaskBlock as TaskBlockType, AIConfig, Wordbank, ClassRecord, StudentWordbankProgress } from '@/types'
@@ -224,6 +225,7 @@ export function GeneratePlansDrawer(props: GeneratePlansDrawerProps) {
     if (!aiConfig || selectedStudents.length === 0) return
 
     setGenerating(true)
+    const routes = await resolveRoutes()
 
     for (let i = 0; i < selectedStudents.length; i++) {
       const item = selectedStudents[i]
@@ -249,6 +251,7 @@ export function GeneratePlansDrawer(props: GeneratePlansDrawerProps) {
           wordbanks,
           recentRecords,
           lastPlanSummary,
+          routes,
           extraInstruction: [extraInstruction, item.extraNote].filter(Boolean).join('；') || undefined
         })
 
@@ -311,6 +314,7 @@ export function GeneratePlansDrawer(props: GeneratePlansDrawerProps) {
       const progress = await progressDb.getByStudentId(studentId)
       const recentRecords = await classRecordDb.getByStudentId(studentId, 3)
       const lastPlanSummary = await lessonPlanDb.getLastPlanSummary(studentId)
+      const routes = await resolveRoutes()
 
       const userInput = buildUserInput({
         student: item.student,
@@ -318,6 +322,7 @@ export function GeneratePlansDrawer(props: GeneratePlansDrawerProps) {
         wordbanks,
         recentRecords,
         lastPlanSummary,
+        routes,
         extraInstruction: [extraInstruction, item.extraNote].filter(Boolean).join('；') || undefined
       })
 

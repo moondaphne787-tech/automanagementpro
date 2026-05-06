@@ -230,10 +230,6 @@ export const EXAM_SCORE_UPDATABLE_FIELDS = new Set([
   'score', 'full_score', 'notes'
 ])
 
-export const VOCAB_TEST_UPDATABLE_FIELDS = new Set([
-  'student_id', 'test_date', 'vocab_count', 'test_source', 'notes'
-])
-
 export const LEARNING_PHASE_UPDATABLE_FIELDS = new Set([
   'student_id', 'phase_name', 'phase_type', 'start_date', 'end_date',
   'goal', 'vocab_start', 'vocab_end', 'summary'

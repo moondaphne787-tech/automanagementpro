@@ -19,7 +19,7 @@ export function DashboardPage() {
   const createClassRecord = useAppStore(s => s.createClassRecord)
 
   const goToGenerate = (preselectedIds?: string[]) => {
-    navigate('/batch/generate', preselectedIds?.length ? { state: { preselectedIds } } : undefined)
+    navigate('/batch', preselectedIds?.length ? { state: { preselectedIds } } : undefined)
   }
 
   const [quickRecordTarget, setQuickRecordTarget] = useState<TodayScheduleItem | null>(null)
@@ -134,19 +134,17 @@ export function DashboardPage() {
       {/* 快速录入课堂记录 Dialog */}
       <Dialog open={!!quickRecordTarget} onOpenChange={(open) => { if (!open) setQuickRecordTarget(null) }}>
         {quickRecordTarget && (
-          <>
+          <DialogContent>
             <DialogHeader><DialogTitle>快速录入 - {quickRecordTarget.studentName}</DialogTitle></DialogHeader>
-            <DialogContent>
-              <ClassRecordForm
-                studentId={quickRecordTarget.studentId}
-                wordbanks={wordbanks}
-                initialDate={new Date().toISOString().split('T')[0]}
-                initialTeacherName={quickRecordTarget.teacherName}
-                onSave={handleQuickRecordSave}
-                onCancel={() => setQuickRecordTarget(null)}
-              />
-            </DialogContent>
-          </>
+            <ClassRecordForm
+              studentId={quickRecordTarget.studentId}
+              wordbanks={wordbanks}
+              initialDate={new Date().toISOString().split('T')[0]}
+              initialTeacherName={quickRecordTarget.teacherName}
+              onSave={handleQuickRecordSave}
+              onCancel={() => setQuickRecordTarget(null)}
+            />
+          </DialogContent>
         )}
       </Dialog>
     </div>
